@@ -1,4 +1,4 @@
-import {AppBar, Toolbar, IconButton, Typography, Box, useTheme} from '@mui/material';
+import { AppBar, Toolbar, IconButton, Typography, Box, useTheme } from '@mui/material';
 import {
     Menu as MenuIcon,
     Brightness4 as DarkModeIcon,
@@ -6,29 +6,24 @@ import {
 } from '@mui/icons-material';
 
 export default function AdminHeader({
-    title,
-    drawerWidth,
-    handleDrawerToggle,
-    open,
-    isMobile,
-    darkMode,
-    toggleTheme
-}) {
+                                        title,
+                                        drawerWidth,
+                                        handleDrawerToggle,
+                                        open,
+                                        isMobile,
+                                        darkMode,
+                                        toggleTheme
+                                    }) {
     const theme = useTheme();
+    const isDrawerOpen = open && !isMobile;
 
     return (
         <AppBar
             position="fixed"
             elevation={1}
             sx={{
-                width: {
-                    xs: '100%',
-                    md: open && !isMobile ? `calc(100% - ${drawerWidth}px)` : '100%'
-                },
-                ml: {
-                    xs: 0,
-                    md: open && !isMobile ? `${drawerWidth}px` : 0
-                },
+                width: { md: isDrawerOpen ? `calc(100% - ${drawerWidth}px)` : '100%' },
+                ml: { md: isDrawerOpen ? `${drawerWidth}px` : 0 },
                 transition: theme.transitions.create(['width', 'margin'], {
                     easing: theme.transitions.easing.sharp,
                     duration: theme.transitions.duration.leavingScreen,
@@ -42,7 +37,7 @@ export default function AdminHeader({
             <Toolbar>
                 <IconButton
                     color="inherit"
-                    aria-label="open drawer123"
+                    aria-label="open drawer"
                     edge="start"
                     onClick={handleDrawerToggle}
                     sx={{ mr: 2 }}

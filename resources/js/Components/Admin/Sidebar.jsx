@@ -119,7 +119,7 @@ export default function AdminSidebar({
     );
 
     return (
-        <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+        <Box component="nav" sx={{ width: { md: desktopOpen ? drawerWidth : 0 }, flexShrink: 0 }}>
             {/* Mobile drawer */}
             <Drawer
                 variant="temporary"

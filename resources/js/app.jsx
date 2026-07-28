@@ -85,21 +85,20 @@ function App({ children }) {
     );
 }
 
-// Ключевой момент: сохраняем root между вызовами
-let root = null;
-
 createInertiaApp({
-    title: (title) => title ? `${title} - App` : 'App',
-    resolve: (name) => resolvePageComponent(
-        `./Pages/${name}.jsx`,
-        import.meta.glob('./Pages/**/*.jsx'),
-    ),
+    title: (title) => (title ? `${title} - ${appName}` : appName),
+    resolve: (name) =>
+        resolvePageComponent(
+            `./Pages/${name}.jsx`,
+            import.meta.glob('./Pages/**/*.jsx'),
+        ),
     setup({ el, App: InertiaApp, props }) {
-        if (!root) {
-            root = createRoot(el);
+        // Создаём root только один раз
+        if (!el._root) {
+            el._root = createRoot(el);
         }
 
-        root.render(
+        el._root.render(
             <App>
                 <InertiaApp {...props} />
             </App>
