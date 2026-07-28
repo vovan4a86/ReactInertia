@@ -154,7 +154,7 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
                         onClick={handleThemePopperClick}
                         sx={{
                             position: 'fixed',
-                            bottom: 16,
+                            bottom: 50,
                             right: 16,
                             zIndex: 2000,
                         }}

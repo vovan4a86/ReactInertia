@@ -63,9 +63,9 @@ export default function UsersIndex({ users }) {
                                 <TableCell>{user.email}</TableCell>
                                 <TableCell>
                                     <Chip
-                                        label={user.role}
+                                        label={user.is_admin ? 'Admin' : 'User'}
                                         size="small"
-                                        color={user.role === 'admin' ? 'primary' : 'default'}
+                                        color={user.is_admin ? 'primary' : 'default'}
                                     />
                                 </TableCell>
                                 <TableCell>
