@@ -1,48 +1,44 @@
 import {defineConfig} from 'vite';
 import laravel from 'laravel-vite-plugin';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.jsx'],
-            refresh: true,
+            // Отключаем авто-обновление для Inertia страниц
+            refresh: false,
         }),
-        react({
-            // Явно указываем расширения для обработки JSX
-            include: /\.(js|jsx)$/,
-            babel: {
-                plugins: [
-                    ['@babel/plugin-transform-react-jsx', {
-                        runtime: 'automatic',
-                        throwIfNamespace: false,
-                    }]
-                ],
-            },
-        }),
+        react(),
     ],
     resolve: {
         alias: {
-            '@': '/resources/js',
-            '@components': '/resources/js/Components',
-            '@admin-components': '/resources/js/Components/Admin',
-            '@layouts': '/resources/js/Layouts',
-            '@admin-layouts': '/resources/js/Layouts/Admin',
-            '@pages': '/resources/js/Pages',
-            '@admin-pages': '/resources/js/Pages/Admin',
+            '@': path.resolve(__dirname, 'resources/js'),
+            '@components': path.resolve(__dirname, 'resources/js/Components'),
+            '@admin-components': path.resolve(__dirname, 'resources/js/Components/Admin'),
+            '@layouts': path.resolve(__dirname, 'resources/js/Layouts'),
+            '@admin-layouts': path.resolve(__dirname, 'resources/js/Layouts/Admin'),
+            '@pages': path.resolve(__dirname, 'resources/js/Pages'),
+            '@admin-pages': path.resolve(__dirname, 'resources/js/Pages/Admin'),
         },
         extensions: ['.js', '.jsx', '.json'],
     },
+// Добавляем оптимизацию для MUI
     optimizeDeps: {
-        esbuild: {
-            loader: {
-                '.js': 'jsx',
-            },
-        },
+        include: [
+            '@mui/material',
+            '@mui/icons-material',
+            '@emotion/react',
+            '@emotion/styled',
+        ],
     },
-    esbuild: {
-        loader: 'jsx',
-        include: /\.js$/,
-        exclude: [],
+    server: {
+        hmr: {
+            overlay: false,
+        },
+        watch: {
+            ignored: ['**/vendor/**', '**/storage/**', '**/node_modules/**'],
+        },
     },
 });

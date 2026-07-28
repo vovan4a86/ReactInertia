@@ -10,11 +10,14 @@ import {
     Typography,
     Box,
     useTheme,
+    Divider,
+    IconButton,
 } from '@mui/material';
 import {
     Dashboard as DashboardIcon,
     People as PeopleIcon,
     Settings as SettingsIcon,
+    ChevronLeft as ChevronLeftIcon,
 } from '@mui/icons-material';
 
 const menuItems = [
@@ -39,47 +42,74 @@ const menuItems = [
 ];
 
 export default function AdminSidebar({
-                                         drawerWidth,
-                                         mobileOpen,
-                                         desktopOpen,
-                                         handleDrawerToggle,
-                                         isMobile
-                                     }) {
+     drawerWidth,
+     mobileOpen,
+     desktopOpen,
+     handleDrawerToggle,
+     isMobile
+ }) {
     const theme = useTheme();
     const { component: currentRoute } = usePage();
 
     const drawer = (
-        <Box>
-            <Toolbar>
-                <Typography variant="h6" noWrap component="div">
+        <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Toolbar sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: [1],
+            }}>
+                <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 700 }}>
                     Admin Panel
                 </Typography>
+                {!isMobile && (
+                    <IconButton onClick={handleDrawerToggle}>
+                        <ChevronLeftIcon />
+                    </IconButton>
+                )}
             </Toolbar>
-            <List>
+
+            <Divider />
+
+            <List sx={{ flex: 1 }}>
                 {menuItems.map((item) => {
                     const isActive = currentRoute?.startsWith(item.match);
 
                     return (
-                        <ListItem key={item.text} disablePadding>
+                        <ListItem key={item.text} disablePadding sx={{ px: 1, py: 0.5 }}>
                             <ListItemButton
                                 component={Link}
                                 href={item.href}
                                 onClick={isMobile ? handleDrawerToggle : undefined}
                                 selected={isActive}
                                 sx={{
+                                    borderRadius: 1,
                                     '&.Mui-selected': {
-                                        backgroundColor: theme.palette.action.selected,
+                                        backgroundColor: theme.palette.mode === 'dark'
+                                            ? 'rgba(255, 255, 255, 0.08)'
+                                            : theme.palette.action.selected,
                                         borderRight: `3px solid ${theme.palette.primary.main}`,
-                                    },
-                                    '&.Mui-selected:hover': {
-                                        backgroundColor: theme.palette.action.selected,
+                                        '&:hover': {
+                                            backgroundColor: theme.palette.mode === 'dark'
+                                                ? 'rgba(255, 255, 255, 0.12)'
+                                                : theme.palette.action.selected,
+                                        },
                                     },
                                 }}
                             >
-                                <ListItemIcon>
+                                <ListItemIcon sx={{
+                                    minWidth: 40,
+                                    color: isActive ? theme.palette.primary.main : 'inherit'
+                                }}>
                                     {item.icon}
                                 </ListItemIcon>
-                                <ListItemText primary={item.text} />
+                                <ListItemText
+                                    primary={item.text}
+                                    primaryTypographyProps={{
+                                        fontSize: 14,
+                                        fontWeight: isActive ? 600 : 400,
+                                    }}
+                                />
                             </ListItemButton>
                         </ListItem>
                     );
@@ -100,7 +130,8 @@ export default function AdminSidebar({
                     display: { xs: 'block', md: 'none' },
                     '& .MuiDrawer-paper': {
                         boxSizing: 'border-box',
-                        width: drawerWidth
+                        width: drawerWidth,
+                        backgroundColor: theme.palette.background.default,
                     },
                 }}
             >
@@ -115,7 +146,9 @@ export default function AdminSidebar({
                     display: { xs: 'none', md: 'block' },
                     '& .MuiDrawer-paper': {
                         boxSizing: 'border-box',
-                        width: drawerWidth
+                        width: drawerWidth,
+                        backgroundColor: theme.palette.background.default,
+                        borderRight: `1px solid ${theme.palette.divider}`,
                     },
                 }}
             >
