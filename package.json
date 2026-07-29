@@ -28,6 +28,7 @@
     },
     "dependencies": {
         "@babel/plugin-transform-react-jsx": "^8.0.1",
+        "tinycolor2": "^1.6.0",
         "tss-react": "^4.9.21"
     }
 }

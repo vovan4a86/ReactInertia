@@ -1,8 +1,5 @@
 import { useState, createContext, useContext } from 'react';
 import {
-    Box,
-    CssBaseline,
-    Toolbar,
     useMediaQuery,
     useTheme,
     Fab,
@@ -14,13 +11,21 @@ import GithubIcon from '@mui/icons-material/GitHub';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import TwitterIcon from '@mui/icons-material/Twitter';
 
+import classnames from 'classnames';
+
 // Компоненты вашего шаблона
-import AdminHeader from '@admin-components/Header';
-import AdminSidebar from '@admin-components/Sidebar';
-import AdminFooter from '@admin-components/Footer'; // Предполагаем, что вы его создадите
-import Breadcrumbs from '@admin-components/Breadcrumbs'; // Предполагаем, что вы его создадите
-import ColorChangeThemePopper from '@admin-components/ColorChangeThemePopper'; // Предполагаем, что вы его создадите
-import { Link } from '@admin-components/Wrappers'; // Если используете
+import Header from '@admin-components/Header/Header';
+import Sidebar from '@admin-components/Sidebar/Sidebar';
+import BreadCrumbs from '@admin-components/BreadCrumbs';
+import Footer from '@admin-components/Footer/Footer';
+import ColorChangeThemePopper from '@admin-layouts/components/ColorChangeThemePopper.jsx';
+import { Link } from '@admin-components/Wrappers/Wrappers.jsx';
+
+import useStyles from './styles';
+import structure from './structure.jsx';
+
+// context
+import { useLayoutState } from './context/LayoutContext';
 
 const drawerWidth = 260;
 
@@ -80,6 +85,8 @@ export const SidebarContext = createContext({
 export const useSidebar = () => useContext(SidebarContext);
 
 export default function AdminLayout({ children, title = 'Admin Panel' }) {
+    const classes = useStyles();
+
     const theme = useTheme();
     // Хук useMediaQuery подписывается на изменение размера экрана.
     // down('md') означает "все разрешения меньше десктопного (md)".
@@ -118,90 +125,49 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
         toggleSidebar: handleDrawerToggle,
     };
 
+    let layoutState = useLayoutState();
+
+    const id = open ? 'add-section-popover' : undefined;
+    const handleClick = (event) => {
+        setAnchorEl(open ? null : event.currentTarget);
+    };
+
     return (
         <SidebarContext.Provider value={sidebarContextValue}>
             {/* Основная обертка страницы */}
-            <Box component="div"
-                 sx={{
-                     flexGrow: 1,
-                     p: 3,
-                     minHeight: '100vh',
-                     backgroundColor: 'background.default',
-                     transition: theme.transitions.create(['margin', 'width'], {
-                         easing: theme.transitions.easing.sharp,
-                         duration: theme.transitions.duration.leavingScreen,
-                     }),
-                     // По умолчанию — без отступа
-                     width: '100%',
-                     ml: 0,
-                     // На десктопе с открытым сайдбаром — с отступом
-                     ...(isSidebarOpen && {
-                         width: { md: `calc(100% - ${drawerWidth}px)` },
-                         ml: { md: `${drawerWidth}px` },
-                         transition: theme.transitions.create(['margin', 'width'], {
-                             easing: theme.transitions.easing.easeOut,
-                             duration: theme.transitions.duration.enteringScreen,
-                         }),
-                     }),
-                 }}
-            >
+            <div className={classes.root}>
                 {/* Шапка: передаем пропсы для управления */}
-                <AdminHeader
-                    title={title}
-                    drawerWidth={drawerWidth}
-                    handleDrawerToggle={handleDrawerToggle}
-                    open={desktopOpen}
-                    isMobile={isMobile}
-                />
+                <Header />
 
-                {/* Сайдбар: отдельно управляется для мобилки и десктопа */}
-                <AdminSidebar
-                    drawerWidth={drawerWidth}
-                    mobileOpen={mobileOpen}
-                    desktopOpen={desktopOpen}
-                    handleDrawerToggle={handleDrawerToggle}
-                    isMobile={isMobile}
-                />
+                <Sidebar structure={structure}/>
 
-                {/* Main — здесь находится основной контент страницы */}
-                <Main>
-                    {/* Передаем вычисленное состояние "открытости" */}
-                    <Toolbar />
+                <div
+                    className={classnames(classes.content, {
+                        [classes.contentShift]: layoutState.isSidebarOpened,
+                    })}
+                >
+                    <div className={classes.fakeToolbar} />
+                    <BreadCrumbs />
 
-                    {/* Хлебные крошки (можно передавать через props или глобальный стор) */}
-                    <Breadcrumbs />
-
-                    {/* СЮДА INERTIA ВСТАВЛЯЕТ СОДЕРЖИМОЕ СТРАНИЦЫ */}
                     {children}
 
-                    {/* Кнопка и поппер для смены темы */}
                     <Fab
-                        color="primary"
-                        aria-label="settings"
-                        onClick={handleThemePopperClick}
-                        sx={{
-                            position: 'fixed',
-                            bottom: 50,
-                            right: 16,
-                            zIndex: 2000,
-                        }}
+                        color='primary'
+                        aria-label='settings'
+                        onClick={(e) => handleClick(e)}
+                        className={classes.changeThemeFab}
+                        style={{ zIndex: 2000 }}
                     >
-                        <SettingsIcon />
+                        <SettingsIcon style={{ color: '#fff' }} />
                     </Fab>
-                    <ColorChangeThemePopper
-                        id={popperId}
-                        open={openPopper}
-                        anchorEl={anchorEl}
-                    />
-
-                    {/* Футер */}
-                    <AdminFooter>
+                    <ColorChangeThemePopper id={id} open={open} anchorEl={anchorEl} />
+                    <Footer>
                         <div>
                             <Link
                                 color={'primary'}
                                 href={'https://flatlogic.com/'}
                                 target={'_blank'}
-                                sx={{ textDecoration: 'none', mx: 1 }}
+                                className={classes.link}
                             >
                                 Flatlogic
                             </Link>
@@ -209,7 +175,7 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
                                 color={'primary'}
                                 href={'https://flatlogic.com/about'}
                                 target={'_blank'}
-                                sx={{ textDecoration: 'none', mx: 1 }}
+                                className={classes.link}
                             >
                                 About Us
                             </Link>
@@ -217,31 +183,34 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
                                 color={'primary'}
                                 href={'https://flatlogic.com/blog'}
                                 target={'_blank'}
-                                sx={{ textDecoration: 'none', mx: 1 }}
+                                className={classes.link}
                             >
                                 Blog
                             </Link>
                         </div>
                         <div>
                             <Link href={'https://www.facebook.com/flatlogic'} target={'_blank'}>
-                                <IconButton aria-label="facebook">
+                                <IconButton aria-label='facebook'>
                                     <FacebookIcon style={{ color: '#6E6E6E99' }} />
                                 </IconButton>
                             </Link>
                             <Link href={'https://twitter.com/flatlogic'} target={'_blank'}>
-                                <IconButton aria-label="twitter">
+                                <IconButton aria-label='twitter'>
                                     <TwitterIcon style={{ color: '#6E6E6E99' }} />
                                 </IconButton>
                             </Link>
                             <Link href={'https://github.com/flatlogic'} target={'_blank'}>
-                                <IconButton aria-label="github">
+                                <IconButton
+                                    aria-label='github'
+                                    style={{ padding: '12px 0 12px 12px' }}
+                                >
                                     <GithubIcon style={{ color: '#6E6E6E99' }} />
                                 </IconButton>
                             </Link>
                         </div>
-                    </AdminFooter>
-                </Main>
-            </Box>
+                    </Footer>
+                </div>
+            </div>
         </SidebarContext.Provider>
     );
 }
