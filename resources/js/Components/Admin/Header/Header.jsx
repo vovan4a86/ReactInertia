@@ -25,7 +25,7 @@ import {
 } from '@admin-layouts/context/LayoutContext';
 import {router} from "@inertiajs/react";
 
-export default function Header() {
+export default function Header({ title, user }) {
   let classes = useStyles();
   let theme = useTheme();
 
@@ -35,7 +35,7 @@ export default function Header() {
 
   // local
   const [profileMenu, setProfileMenu] = useState(null);
-  const [currentUser, setCurrentUser] = useState();
+  const [currentUser, setCurrentUser] = useState(user);
   const [isSmall, setSmall] = useState(false);
 
   useEffect(function () {
@@ -86,7 +86,7 @@ export default function Header() {
           )}
         </IconButton>
         <Typography variant='h6' weight='medium' className={classes.logotype}>
-          React Material Admin Full
+            { title }
         </Typography>
         <div className={classes.grow} />
         <IconButton
@@ -97,7 +97,7 @@ export default function Header() {
           onClick={(e) => setProfileMenu(e.currentTarget)}
         >
           <Avatar
-            alt={currentUser?.firstName}
+            alt={currentUser?.name}
 
             src={
               (currentUser?.avatar?.length >= 1 &&
@@ -105,16 +105,16 @@ export default function Header() {
             }
             classes={{ root: classes.headerIcon }}
           >
-            {currentUser?.firstName?.[0]}
+            {currentUser?.name?.[0]}
           </Avatar>
         </IconButton>
         <Typography
           block
           style={{ display: 'flex', alignItems: 'center', marginLeft: 8 }}
         >
-          <div className={classes.profileLabel}>Hi,&nbsp;</div>
+          <div className={classes.profileLabel}>Привет,&nbsp;</div>
           <Typography weight={'bold'} className={classes.profileLabel}>
-            {currentUser?.firstName}
+            {currentUser?.name}
           </Typography>
         </Typography>
         <Menu
@@ -128,7 +128,7 @@ export default function Header() {
         >
           <div className={classes.profileMenuUser}>
             <Typography variant='h4' weight='medium'>
-              {currentUser?.firstName}
+              {currentUser?.name}
             </Typography>
             <Typography
               className={classes.profileMenuLink}

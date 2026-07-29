@@ -8,7 +8,8 @@ use Inertia\Middleware;
 class HandleInertiaRequests extends Middleware
 {
     /**
-     * The root template that is loaded on the first page visit.
+     * Корневой шаблон, который загружается при первом посещении страницы.
+     * Обычно это ваш app.blade.php, где монтируется React.
      *
      * @var string
      */
@@ -23,22 +24,72 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * Define the props that are shared by default.
+     * КЛЮЧЕВОЙ МЕТОД: share()
      *
-     * @return array<string, mixed>
+     * Данные, возвращаемые этим методом, будут ДОСТУПНЫ В КАЖДОМ Inertia-ответе.
+     * Они автоматически передаются на фронтенд и доступны через usePage().props
      */
     public function share(Request $request): array
     {
         return [
             ...parent::share($request),
+            // ================================================
+            // 1. Пользователь (auth.user)
+            // ================================================
             'auth' => [
-                'user' => $request->user()?->only(['id', 'name', 'email', 'avatar']),
+                'user' => $this->getUserData($request),
             ],
+            // ================================================
+            // 2. Flash-сообщения (успех/ошибка после действий)
+            // ================================================
             'flash' => [
                 'message' => fn () => $request->session()->get('message'),
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
+
+            // ================================================
+            // 3. Дополнительные глобальные данные (опционально)
+            // ================================================
+            'appName' => config('app.name'),
+            'currentYear' => now()->year,
+
+            // Пример: разрешения пользователя
+            'can' => [
+                'manage_users' => $request->user()?->can('manage_users'),
+                'manage_settings' => $request->user()?->can('manage_settings'),
+            ],
+        ];
+    }
+
+    /**
+     * Формируем данные пользователя для фронтенда
+     *
+     * ВАЖНО: Не передавайте чувствительные данные (пароли, токены и т.д.)
+     * Передаем только то, что нужно для отображения в интерфейсе
+     */
+    private function getUserData(Request $request): ?array
+    {
+        $user = $request->user();
+
+        // Если пользователь не авторизован — возвращаем null
+        if (!$user) {
+            return null;
+        }
+
+        // Возвращаем только нужные поля
+        return [
+            'id' => $user->id,
+            'name' => $user->name,
+            'email' => $user->email,
+            'avatar' => $user->avatar_url, // Если есть аватар (например, через медиа-библиотеку)
+            'is_admin' => $user->is_admin, // Если есть аватар (например, через медиа-библиотеку)
+            'role' => $user->role?->name ?? 'user', // Роль пользователя
+            'created_at' => $user->created_at?->format('Y-m-d'), // Дата регистрации
+
+            // Дополнительные поля для админки
+//            'permissions' => $user->getAllPermissions()->pluck('name'), // Если используете Spatie Permissions
+//            'is_admin' => $user->hasRole('admin'),
         ];
     }
 }

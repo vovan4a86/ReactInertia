@@ -123,7 +123,7 @@ const BreadCrumbs = () => {
                   <Breadcrumbs aria-label='breadcrumb'>
                     <Typography variant='h4'>{c.label}</Typography>
                   </Breadcrumbs>
-                  {location.pathname.includes('/app/dashboard') && (
+                  {location.pathname.includes('/admin/dashboard') && (
                     <Tabs
                       value={value}
                       onChange={handleChange}
@@ -132,10 +132,10 @@ const BreadCrumbs = () => {
                       scrollButtons='auto'
                       style={{ marginLeft: 38 }}
                     >
-                      <CustomTab label='Today' {...a11yProps(0)} />
-                      <CustomTab label='This week' {...a11yProps(1)} />
-                      <CustomTab label='This month' {...a11yProps(2)} />
-                      <CustomTab label='This year' {...a11yProps(3)} />
+                      <CustomTab label='Сегодня' {...a11yProps(0)} />
+                      <CustomTab label='Эта неделя' {...a11yProps(1)} />
+                      <CustomTab label='Этот месяц' {...a11yProps(2)} />
+                      <CustomTab label='Этот год' {...a11yProps(3)} />
                     </Tabs>
                   )}
                 </Box>
@@ -143,7 +143,7 @@ const BreadCrumbs = () => {
             }
           })
         }
-        {location.pathname.includes('/app/dashboard') ? (
+        {location.pathname.includes('/admin/dashboard') ? (
           <Box display='flex' alignItems='center'>
             <CalendarIcon className={classes.calendarIcon} />
             <Typography className={classes.date} style={{ marginRight: 38 }}>
@@ -155,7 +155,7 @@ const BreadCrumbs = () => {
               color='secondary'
               className={classes.button}
             >
-              Latest Reports
+              Последние отчеты
             </Button>
           </Box>
         ) : (

@@ -1,7 +1,5 @@
 import { useState, createContext, useContext } from 'react';
 import {
-    useMediaQuery,
-    useTheme,
     Fab,
     IconButton,
 } from '@mui/material';
@@ -10,6 +8,7 @@ import GithubIcon from '@mui/icons-material/GitHub';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import TwitterIcon from '@mui/icons-material/Twitter';
 import classnames from 'classnames';
+import { usePage } from '@inertiajs/react';
 
 // Компоненты
 import Header from '@admin-components/Header/Header';
@@ -19,13 +18,15 @@ import Footer from '@admin-components/Footer/Footer';
 import { Link } from '@admin-components/Wrappers/Wrappers.jsx';
 import ColorChangeThemePopper from '@admin-layouts/components/ColorChangeThemePopper.jsx';
 
+// Стили
 import useStyles from './styles';
 import structure from './structure.jsx';
 
-// context
+// Контекст
 import { useLayoutState } from './context/LayoutContext';
 
-export default function AdminLayout({ children }) {
+
+export default function AdminLayout({ children, title = 'Панель администратора' }) {
     const classes = useStyles();
     // Для поппера смены темы
     const [anchorEl, setAnchorEl] = useState(null);
@@ -38,9 +39,24 @@ export default function AdminLayout({ children }) {
 
     let layoutState = useLayoutState();
 
+    // ================================================
+    // Получаем данные из Inertia
+    // ================================================
+    const { auth, appName, flash, can } = usePage().props;
+    const user = auth?.user; // Безопасное извлечение (если не авторизован)
+
+    // Flash-сообщения можно показывать через Snackbar/Alert
+    const defaultMessage = flash?.message;
+    const successMessage = flash?.success;
+    const errorMessage = flash?.error;
+
+    // Проверка прав доступа
+    // const canManageUsers = can?.manage_users;
+    // const canManageSettings = can?.manage_settings;
+
     return (
         <div className={classes.root}>
-                <Header />
+                <Header title={title} user={user} />
 
                 <Sidebar structure={structure}/>
 

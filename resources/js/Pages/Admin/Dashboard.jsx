@@ -16,4 +16,4 @@ export default function Dashboard({ auth }) {
 }
 
 // Важно! Назначаем лейаут странице.
-Dashboard.layout = (page) => <AdminLayout title="Dashboard">{page}</AdminLayout>;
+Dashboard.layout = (page) => <AdminLayout title="Панель администратора">{page}</AdminLayout>;

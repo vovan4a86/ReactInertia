@@ -25,6 +25,7 @@ import useStyles2 from '../../styles';
 // components
 import Dot from '../Dot';
 import {Button, Badge, Link as LinkMaterial} from '../../../Wrappers/Wrappers';
+import { Link as InertiaLink } from '@inertiajs/react';
 
 export default function SidebarLink({
   link,
@@ -99,7 +100,7 @@ export default function SidebarLink({
             return toggleDrawer(e);
           }}
           onKeyPress={toggleDrawer}
-          component={link ? LinkMaterial : null}
+          component={link ? InertiaLink : null}
           href={link}
           className={classes.link}
           classes={{
@@ -140,8 +141,8 @@ export default function SidebarLink({
             return toggleDrawer(e);
           }}
           onKeyPress={toggleDrawer}
-          component={link ? LinkMaterial : null}
-          to={link}
+          component={link ? InertiaLink : null}
+          href={link}
           className={classes.link}
           classes={{
             root: classnames(classes.link, {
@@ -213,13 +214,13 @@ export default function SidebarLink({
     <>
       {props.badge ? (
         <ListItemButton
-          component={link ? LinkMaterial : 'div'}
+          component={link ? InertiaLink : 'div'}
           onClick={toggleCollapse}
           className={classnames(classes.link, {
             [classes.linkActive]: isLinkActive,
             [classes.nestedMenu]: type === 'nested',
           })}
-          {...(link ? { to: link } : {})}
+          {...(link ? { href: link } : {})}
           disableRipple
         >
           <ListItemIcon
@@ -252,13 +253,13 @@ export default function SidebarLink({
         </ListItemButton>
       ) : (
         <ListItemButton
-          component={link ? LinkMaterial : 'div'}
+          component={link ? InertiaLink : 'div'}
           onClick={toggleCollapse}
           className={classnames(classes.link, {
             [classes.linkActive]: isLinkActive,
             [classes.nestedMenu]: type === 'nested',
           })}
-          {...(link ? { to: link } : {})}
+          {...(link ? { href: link } : {})}
           disableRipple
         >
           <ListItemIcon
