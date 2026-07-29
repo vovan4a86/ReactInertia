@@ -27,17 +27,40 @@ const BreadCrumbs = () => {
   const classes = useStyles();
   const [value, setValue] = React.useState(2);
 
+    // Словарь для перевода путей
+    const routeTranslations = {
+        'admin': 'Главная',
+        'dashboard': 'Панель управления',
+        'users': 'Пользователи',
+        'products': 'Товары',
+        'categories': 'Категории',
+        'orders': 'Заказы',
+        'settings': 'Настройки',
+        'profile': 'Профиль',
+        'reports': 'Отчеты',
+        'analytics': 'Аналитика',
+        'messages': 'Сообщения',
+        'notifications': 'Уведомления',
+        'create': 'Создать',
+        'edit': 'Редактировать',
+    };
+
   const renderBreadCrumbs = () => {
     let url = location.pathname;
-    let route = url
-      .split('/')
-      .slice(1)
-      .map((route) =>
-        route
-          .split('-')
-          .map((word) => word[0].toUpperCase() + word.slice(1))
-          .join(' '),
-      );
+      let route = url
+          .split('/')
+          .slice(1)
+          .map((route) => {
+              // Сначала форматируем как раньше
+              const formattedRoute = route
+                  .split('-')
+                  .map((word) => word[0].toUpperCase() + word.slice(1))
+                  .join(' ');
+
+              // применяем перевод, если он есть
+              return routeTranslations[route.toLowerCase()] || formattedRoute;
+          });
+
     const length = route.length;
     return route.map((item, index) => {
       let middlewareUrl =
