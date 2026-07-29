@@ -1,4 +1,4 @@
-import { makeStyles } from '@admin-components/mui';
+import { makeStyles } from './mui';
 
 export default makeStyles((theme) => ({
     root: {

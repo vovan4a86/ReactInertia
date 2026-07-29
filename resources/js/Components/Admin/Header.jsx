@@ -18,6 +18,8 @@ import {
 
 import { Typography, Avatar } from './Wrappers';
 
+// Импортируем кастомный хук, который мы создали в AdminLayout.
+// Через него получаем доступ к состоянию сайдбара.
 import { useSidebar } from '@admin-layouts/AdminLayout';
 
 const defaultAvatar = '/images/logo192.png';
@@ -32,17 +34,28 @@ export default function AdminHeader({
                                         toggleTheme,
                                     }) {
     const theme = useTheme();
+
+    /*
+   * ===========================================================================
+   * 1. ИСПОЛЬЗОВАНИЕ КОНТЕКСТА САЙДБАРА
+   * ===========================================================================
+   * Вместо того чтобы пробрасывать isSidebarOpened через 10 пропсов,
+   * хук useSidebar() достает эти данные напрямую из контекста.
+   */
     const { isSidebarOpened, toggleSidebar } = useSidebar(); // из вашего контекста
+
+    // Получаем данные аутентификации, которые Laravel передает через Inertia
     const { auth } = usePage().props; // пользователь из Laravel Breeze
     const user = auth?.user;
 
-    // локальное состояние
+    // Локальное состояние для меню профиля (какой элемент DOM открыл меню)
     const [profileMenu, setProfileMenu] = useState(null);
     const isSmall = useMediaQuery(theme.breakpoints.down('md'));
 
     // ==================== ОБРАБОТЧИКИ ====================
     const handleSignOut = () => {
-        setProfileMenu(null);
+        setProfileMenu(null); // Закрываем меню перед выходом
+        // Отправляем POST запрос на /logout. Inertia обработает редирект.
         router.post('/logout'); // стандартный маршрут Breeze
     };
 
@@ -51,6 +64,13 @@ export default function AdminHeader({
             position="fixed"
             elevation={1}
             sx={{
+                /*
+              * ===========================================================================
+              * 2. АДАПТИВНАЯ ШИРИНА ХЕДЕРА
+              * ===========================================================================
+              * Ширина и отступ синхронизированы с контентом в AdminLayout.
+              * Если на десктопе сайдбар открыт, хедер сдвигается и сужается.
+              */
                 width: { md: open && !isMobile ? `calc(100% - ${drawerWidth}px)` : '100%' },
                 ml: { md: open && !isMobile ? `${drawerWidth}px` : 0 },
                 transition: theme.transitions.create(['width', 'margin'], {
@@ -60,7 +80,7 @@ export default function AdminHeader({
                 backgroundColor: theme.palette.mode === 'dark'
                     ? theme.palette.background.paper
                     : theme.palette.primary.main,
-                zIndex: theme.zIndex.drawer + 1,
+                zIndex: theme.zIndex.drawer + 1, // Чтобы хедер был над сайдбаром
             }}
         >
             <Toolbar>
@@ -72,7 +92,14 @@ export default function AdminHeader({
                     onClick={handleDrawerToggle || toggleSidebar}
                     sx={{ mr: 2 }}
                 >
-                    {/* Иконка меняется в зависимости от состояния сайдбара */}
+                    {/*
+                      * ===========================================================================
+                      * 3. ДИНАМИЧЕСКАЯ ИКОНКА БУРГЕРА
+                      * ===========================================================================
+                      * Логика:
+                      * - Если сайдбар открыт на десктопе (isSidebarOpened && !isSmall): показываем стрелку "закрыть"
+                      * - Если сайдбар закрыт на мобилке (!isSidebarOpened && isSmall): показываем гамбургер "открыть"
+                      */}
                     {(isSidebarOpened && !isSmall) || (!isSidebarOpened && isSmall) ? (
                         <ArrowBackIcon />
                     ) : (
@@ -85,7 +112,7 @@ export default function AdminHeader({
                     {title || 'Admin Panel'}
                 </Typography>
 
-                {/* Растягивающийся разделитель */}
+                {/* Спейсер, расталкивающий контент по краям */}
                 <Box sx={{ flexGrow: 1 }} />
 
                 {/* Аватар пользователя */}
@@ -116,6 +143,13 @@ export default function AdminHeader({
                         {/* Выпадающее меню профиля */}
                         <Menu
                             id="profile-menu"
+                            /*
+                           * ===========================================================================
+                           * 4. УПРАВЛЕНИЕ ВЫПАДАЮЩИМ МЕНЮ (Menu)
+                           * ===========================================================================
+                           * open={Boolean(profileMenu)} — меню открыто, если profileMenu не null (т.е. есть anchorEl).
+                           * onClose={() => setProfileMenu(null)} — при закрытии сбрасываем состояние.
+                           */
                             open={Boolean(profileMenu)}
                             anchorEl={profileMenu}
                             onClose={() => setProfileMenu(null)}

@@ -24,7 +24,18 @@ import { Link } from '@admin-components/Wrappers'; // Если использу�
 
 const drawerWidth = 260;
 
+/*
+ * ===========================================================================
+ * 1. СТИЛИЗОВАННЫЙ КОМПОНЕНТ 'main'
+ * ===========================================================================
+ * Styled Components в MUI (styled('main')) — это способ создать HTML-элемент
+ * с переиспользуемыми стилями.
+ * shouldForwardProp: (prop) => prop !== 'open' — мы запрещаем передавать
+ * проп 'open' в реальный DOM-элемент <main>, чтобы избежать варнингов React
+ * о неизвестных атрибутах.
+ */
 const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
+    // theme — из MUI ThemeProvider, open — наш кастомный проп
     ({ theme, open }) => ({
         flexGrow: 1,
         padding: theme.spacing(3),
@@ -43,9 +54,9 @@ const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
 
         // Когда сайдбар открыт
         ...(open && {
-            [theme.breakpoints.up('md')]: {
-                width: `calc(100% - ${drawerWidth}px)`,
-                marginLeft: `${drawerWidth}px`,
+            [theme.breakpoints.up('md')]: {  // Только на экранах больше 'md' (обычно 900px)
+                width: `calc(100% - ${drawerWidth}px)`, // Ширина контента минус ширина сайдбара
+                marginLeft: `${drawerWidth}px`, // Отступ слева равен ширине сайдбара
             },
             transition: theme.transitions.create(['margin', 'width'], {
                 easing: theme.transitions.easing.easeOut,
@@ -55,20 +66,31 @@ const Main = styled('main', { shouldForwardProp: (prop) => prop !== 'open' })(
     })
 );
 
-// Контекст для управления сайдбаром (можете вынести в отдельный файл)
+/*
+ * ===========================================================================
+ * 2. КОНТЕКСТ ДЛЯ САЙДБАРА
+ * ===========================================================================
+ * Позволяет любому компоненту (например, Header) узнать, открыт ли сайдбар,
+ * и иметь возможность его переключить.
+ */
 export const SidebarContext = createContext({
     isSidebarOpened: true,
     toggleSidebar: () => {},
 });
-
 export const useSidebar = () => useContext(SidebarContext);
 
 export default function AdminLayout({ children, title = 'Admin Panel' }) {
     const theme = useTheme();
+    // Хук useMediaQuery подписывается на изменение размера экрана.
+    // down('md') означает "все разрешения меньше десктопного (md)".
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+    // Разделяем состояния: одно для мобильного Drawer (временный), другое для десктопа (постоянный)
     const [mobileOpen, setMobileOpen] = useState(false);
     const [desktopOpen, setDesktopOpen] = useState(true);
 
+    // Вычисляемое свойство: считаем, что сайдбар открыт, только если мы на десктопе
+    // и состояние desktopOpen === true. На мобилке "открытость" не влияет на сдвиг контента.
     const isSidebarOpen = !isMobile && desktopOpen;
 
     // Для поппера смены темы (как в исходном шаблоне)
@@ -76,14 +98,16 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
     const openPopper = Boolean(anchorEl);
     const popperId = openPopper ? 'add-section-popover' : undefined;
 
+    // Универсальный обработчик переключения сайдбара
     const handleDrawerToggle = () => {
         if (isMobile) {
-            setMobileOpen(!mobileOpen);
+            setMobileOpen(!mobileOpen); // На мобилке переключаем временный Drawer
         } else {
-            setDesktopOpen(!desktopOpen);
+            setDesktopOpen(!desktopOpen); // На десктопе сворачиваем/разворачиваем постоянный
         }
     };
 
+    // Обработчик клика по кнопке смены темы (шестеренка)
     const handleThemePopperClick = (event) => {
         setAnchorEl(openPopper ? null : event.currentTarget);
     };
@@ -96,6 +120,7 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
 
     return (
         <SidebarContext.Provider value={sidebarContextValue}>
+            {/* Основная обертка страницы */}
             <Box component="div"
                  sx={{
                      flexGrow: 1,
@@ -120,7 +145,7 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
                      }),
                  }}
             >
-                {/*<CssBaseline />*/}
+                {/* Шапка: передаем пропсы для управления */}
                 <AdminHeader
                     title={title}
                     drawerWidth={drawerWidth}
@@ -129,6 +154,7 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
                     isMobile={isMobile}
                 />
 
+                {/* Сайдбар: отдельно управляется для мобилки и десктопа */}
                 <AdminSidebar
                     drawerWidth={drawerWidth}
                     mobileOpen={mobileOpen}
@@ -137,14 +163,15 @@ export default function AdminLayout({ children, title = 'Admin Panel' }) {
                     isMobile={isMobile}
                 />
 
+                {/* Main — здесь находится основной контент страницы */}
                 <Main>
-                    {/* Toolbar для отступа, т.к. AppBar фиксированный */}
+                    {/* Передаем вычисленное состояние "открытости" */}
                     <Toolbar />
 
                     {/* Хлебные крошки (можно передавать через props или глобальный стор) */}
                     <Breadcrumbs />
 
-                    {/* Содержимое страницы Inertia */}
+                    {/* СЮДА INERTIA ВСТАВЛЯЕТ СОДЕРЖИМОЕ СТРАНИЦЫ */}
                     {children}
 
                     {/* Кнопка и поппер для смены темы */}
