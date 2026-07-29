@@ -12,7 +12,7 @@ class AdminDashboardController
     {
         $user = Auth::user();
 
-        return Inertia::render('Admin/Dashboard', [
+        return Inertia::render('Admin/Dashboard/Index', [
             'user' => $user,
             'stats' => User::all()->count(),
         ]);

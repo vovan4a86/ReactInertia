@@ -82,8 +82,7 @@ class HandleInertiaRequests extends Middleware
             'id' => $user->id,
             'name' => $user->name,
             'email' => $user->email,
-            'avatar' => $user->avatar_url, // Если есть аватар (например, через медиа-библиотеку)
-            'is_admin' => $user->is_admin, // Если есть аватар (например, через медиа-библиотеку)
+            'avatar' => $user->avatar, // Если есть аватар (например, через медиа-библиотеку)
             'role' => $user->role?->name ?? 'user', // Роль пользователя
             'created_at' => $user->created_at?->format('Y-m-d'), // Дата регистрации
 

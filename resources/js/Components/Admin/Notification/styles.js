@@ -1,4 +1,4 @@
-import { makeStyles } from 'styles/mui';
+import { makeStyles } from '@admin-layouts/mui';
 
 export default makeStyles((theme) => ({
   notificationContainer: {

@@ -28,7 +28,12 @@
     },
     "dependencies": {
         "@babel/plugin-transform-react-jsx": "^8.0.1",
+        "dayjs": "^1.11.21",
+        "prop-types": "^15.8.1",
+        "react-toastify": "^11.1.0",
+        "recharts": "^3.10.1",
         "tinycolor2": "^1.6.0",
-        "tss-react": "^4.9.21"
+        "tss-react": "^4.9.21",
+        "uuid": "^14.0.1"
     }
 }

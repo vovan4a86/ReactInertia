@@ -17,7 +17,7 @@ import {
   ArrowBack as ArrowBackIcon
 } from "@mui/icons-material";
 import { alpha } from "@mui/material/styles";
-import { makeStyles } from "styles/mui";
+import { makeStyles } from "@admin-layouts/mui";
 import classNames from "classnames";
 
 import { Badge, Typography } from "../Wrappers";

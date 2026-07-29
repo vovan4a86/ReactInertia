@@ -7,6 +7,7 @@ import {
   NavigateNext as NavigateNextIcon,
   CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
+import { Link as InertiaLink } from '@inertiajs/react';
 
 // styles
 import useStyles from '@admin-layouts/styles';
@@ -59,12 +60,12 @@ const BreadCrumbs = () => {
             {length === index + 1 ? (
               item
             ) : (
-              <Link
-                to={middlewareUrl}
+              <InertiaLink
+                href={middlewareUrl}
                 style={{ color: 'unset', textDecoration: 'none' }}
               >
                 {item}
-              </Link>
+              </InertiaLink>
             )}
           </Typography>
         </Breadcrumbs>

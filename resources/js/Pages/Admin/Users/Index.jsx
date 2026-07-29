@@ -28,7 +28,7 @@ export default function UsersIndex({ users }) {
     };
 
     return (
-        <AdminLayout title="Users Management">
+        <AdminLayout title="Управление пользователями">
             <Head title="Users" />
 
             <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

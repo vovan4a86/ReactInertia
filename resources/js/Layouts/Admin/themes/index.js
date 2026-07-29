@@ -180,10 +180,10 @@ const darkModeOverrides = {
       active: {
         color: '#76767B !important',
       },
-      iconDirectionDesc: {
+      icondirectiondesc: {
         color: '#76767B !important',
       },
-      iconDirectionAsc: {
+      icondirectionasc: {
         color: '#76767B !important',
       },
     },
@@ -191,7 +191,7 @@ const darkModeOverrides = {
       toolbar: {
         color: '#76767B',
       },
-      selectIcon: {
+      selecticon: {
         color: '#76767B',
       },
     },
