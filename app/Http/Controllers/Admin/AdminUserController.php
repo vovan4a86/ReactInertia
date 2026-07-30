@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 use function Laravel\Prompts\alert;
@@ -18,6 +20,14 @@ class AdminUserController extends Controller
 
         return Inertia::render('Admin/Users/UserList', [
             'users' => $users
+        ]);
+    }
+
+    public function edit(User $user)
+    {
+        return Inertia::render('Admin/Users/EditUser', [
+            'user' => $user,
+            'isEditable' => true,
         ]);
     }
 
@@ -91,5 +101,72 @@ class AdminUserController extends Controller
 
         return redirect()->route('admin.users.index')
             ->with('success', 'Пользователь успешно создан!');
+    }
+
+    public function update(Request $request, int $userId)
+    {
+        $user = User::findOrFail($userId);
+
+        try {
+            $validated = $request->validate([
+                'firstName' => 'required|string|max:255',
+                'lastName' => 'nullable|string|max:255',
+                'email' => 'required|email|unique:users,email,' . $user->id,
+                'phone' => 'nullable|string|max:20',
+                'role' => 'required|in:admin,user',
+                'avatar' => 'nullable|file|image|max:2048', // Валидация файла
+                'remove_avatar' => 'nullable|boolean',
+            ]);
+
+            // Обновляем основные данные
+            $user->update([
+                'first_name' => $validated['firstName'],
+                'last_name' => $validated['lastName'],
+                'email' => $validated['email'],
+                'phone' => $validated['phone'],
+                'role' => $validated['role'],
+            ]);
+
+            // Обработка аватара
+            if ($request->boolean('remove_avatar')) {
+                // Удаляем старый аватар
+                if ($user->avatar && Storage::exists($user->avatar)) {
+                    Storage::delete($user->avatar);
+                }
+                $user->update(['avatar' => null]);
+            }
+
+            if ($request->hasFile('avatar')) {
+                // Удаляем старый аватар
+                if ($user->avatar && Storage::exists($user->avatar)) {
+                    Storage::delete($user->avatar);
+                }
+
+                // Сохраняем новый
+                $path = $request->file('avatar')->store('avatars', 'public');
+                $user->update(['avatar' => $path]);
+            }
+
+            return redirect()->back()->with('success', 'Пользователь успешно обновлен');
+
+        } catch (ValidationException $e) {
+            return redirect()->back()
+                ->withErrors($e->validator)
+                ->with('error', 'Исправьте ошибки в форме.');
+        }
+    }
+
+    public function changePassword(Request $request, User $user)
+    {
+        $request->validate([
+            'current_password' => 'required|current_password',
+            'new_password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $user->update([
+            'password' => bcrypt($request->new_password),
+        ]);
+
+        return redirect()->back()->with('success', 'Пароль успешно изменен');
     }
 }

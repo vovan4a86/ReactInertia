@@ -11,6 +11,7 @@ import classnames from 'classnames';
 import { usePage } from '@inertiajs/react';
 
 // Компоненты
+import FlashMessages from '@admin-components/FlashMessages/FlashMessages';
 import Header from '@admin-components/Header/Header';
 import Sidebar from '@admin-components/Sidebar/Sidebar';
 import BreadCrumbs from '@admin-components/BreadCrumbs';
@@ -56,6 +57,7 @@ export default function AdminLayout({ children, title = 'Панель админ
 
     return (
         <div className={classes.root}>
+                <FlashMessages />
                 <Header title={title} user={user} />
 
                 <Sidebar structure={structure}/>

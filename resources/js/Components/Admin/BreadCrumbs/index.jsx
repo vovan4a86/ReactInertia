@@ -41,8 +41,8 @@ const BreadCrumbs = () => {
         'analytics': 'Аналитика',
         'messages': 'Сообщения',
         'notifications': 'Уведомления',
-        'create': 'Создать',
-        'edit': 'Редактировать',
+        'create': 'Создание',
+        'edit': 'Редактирование',
     };
 
   const renderBreadCrumbs = () => {

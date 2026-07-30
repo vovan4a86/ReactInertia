@@ -31,6 +31,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::resource('users', AdminUserController::class);
+    Route::post('/users/{user}/change-password', [AdminUserController::class, 'changePassword'])
+        ->name('admin.users.change-password');
 
     Route::any('/profile', [AdminProfileController::class, 'edit'])->name('profile.edit');
 });

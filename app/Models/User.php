@@ -16,9 +16,7 @@ use Illuminate\Support\Facades\Storage;
     'name',
     'email',
     'password',
-    'name',
     'email',
-    'password',
     'role',
     'is_active',
     'first_name',
@@ -190,7 +188,7 @@ class User extends Authenticatable
     /**
      * Обновить время последнего входа
      */
-    public function updateLastLogin(string $ip = null): void
+    public function updateLastLogin(string $ip): void
     {
         $this->updateQuietly([
             'last_login_at' => now(),
