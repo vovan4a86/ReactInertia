@@ -1,5 +1,12 @@
 import React from 'react';
-import {Grid, Box, TextField} from '@mui/material';
+import {
+    Grid,
+    Box,
+    TextField,
+    FormControl,
+    FormControlLabel,
+    FormLabel
+} from '@mui/material';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Checkbox from '@mui/material/Checkbox';
@@ -8,16 +15,16 @@ import useStyles from './styles';
 
 import {
     PersonOutline as PersonOutlineIcon,
-    Lock as LockIcon
+    Lock as LockIcon,
+    RadioButtonUnchecked as RadioButtonUncheckedIcon,
+    RadioButtonChecked as RadioButtonCheckedIcon
 } from '@mui/icons-material';
 
 import AdminLayout from '@admin-layouts/AdminLayout';
 import Widget from '@admin-components/Widget/Widget.jsx';
-import {Typography, Button} from '@mui/material';
+import {Typography, Button, Radio, RadioGroup} from '@mui/material';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 
 import {useForm} from '@inertiajs/react';
@@ -38,14 +45,18 @@ const EditUser = ({user, isEditable = true}) => {
 
     // useForm автоматически поддерживает файлы через FormData
     const {data, setData, put, post, processing, errors, clearErrors} = useForm({
+        name: user?.name || '',
         firstName: user?.first_name || '',
         lastName: user?.last_name || '',
         email: user?.email || '',
         phone: user?.phone || '',
         role: user?.role || 'user',
+        // Radio поле
+        is_active: user?.is_active,
         avatar: null, // Здесь будет файл
         avatar_id: null, // Для удаления
-        remove_avatar: false // Флаг удаления аватара
+        remove_avatar: false, // Флаг удаления аватара
+
     });
 
     // Обработка выбора файла
@@ -174,14 +185,14 @@ const EditUser = ({user, isEditable = true}) => {
                                             Аккаунт
                                         </Typography>
                                         <TextField
-                                            label='Ваше имя'
-                                            value={data?.firstName || ''}
+                                            label='Никнейм'
+                                            value={data?.name || ''}
                                             onChange={handleChange}
                                             name='firstName'
                                             variant='outlined'
                                             style={{marginBottom: 35}}
-                                            error={!!errors.firstName}
-                                            helperText={errors.firstName}
+                                            error={!!errors.name}
+                                            helperText={errors.name}
                                         />
 
                                         <TextField
@@ -211,6 +222,43 @@ const EditUser = ({user, isEditable = true}) => {
                                                 <MenuItem value={'user'}>User</MenuItem>
                                                 <MenuItem value={'editor'}>Editor</MenuItem>
                                             </Select>
+                                        </FormControl>
+
+                                        <FormControl component="fieldset" sx={{ mb: 3 }}>
+                                            <FormLabel component="legend">Активность</FormLabel>
+                                            <RadioGroup
+                                                row
+                                                name="is_active"
+                                                value={data.is_active}
+                                                onChange={(e) => setData('is_aсtive', e.target.value)}
+                                            >
+                                                <FormControlLabel
+                                                    control={
+                                                        <Radio
+                                                            checked={data.is_active === true}
+                                                            onChange={() => setData('is_active', true)}
+                                                            value={true}
+                                                            color="primary"
+                                                            icon={<RadioButtonUncheckedIcon fontSize="small" />}
+                                                            checkedIcon={<RadioButtonCheckedIcon fontSize="small" />}
+                                                        />
+                                                    }
+                                                    label="Активный"
+                                                />
+                                                <FormControlLabel
+                                                    control={
+                                                        <Radio
+                                                            checked={data.is_active === false}
+                                                            onChange={() => setData('is_active', false)}
+                                                            value={false}
+                                                            color="warning"
+                                                            icon={<RadioButtonUncheckedIcon fontSize="small" />}
+                                                            checkedIcon={<RadioButtonCheckedIcon fontSize="small" />}
+                                                        />
+                                                    }
+                                                    label="Неактивный"
+                                                />
+                                            </RadioGroup>
                                         </FormControl>
                                     </> :
                                     tab === 1 ?

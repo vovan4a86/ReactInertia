@@ -109,6 +109,7 @@ class AdminUserController extends Controller
 
         try {
             $validated = $request->validate([
+                'name' => 'string|max:255',
                 'firstName' => 'required|string|max:255',
                 'lastName' => 'nullable|string|max:255',
                 'email' => 'required|email|unique:users,email,' . $user->id,
@@ -116,15 +117,18 @@ class AdminUserController extends Controller
                 'role' => 'required|in:admin,user',
                 'avatar' => 'nullable|file|image|max:2048', // Валидация файла
                 'remove_avatar' => 'nullable|boolean',
+                'is_active' => 'boolean',
             ]);
 
             // Обновляем основные данные
             $user->update([
+                'name' => $validated['name'],
                 'first_name' => $validated['firstName'],
                 'last_name' => $validated['lastName'],
                 'email' => $validated['email'],
                 'phone' => $validated['phone'],
                 'role' => $validated['role'],
+                'is_active' => $validated['is_active'],
             ]);
 
             // Обработка аватара

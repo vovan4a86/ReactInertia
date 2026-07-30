@@ -97,11 +97,10 @@ export default function Header({ title, user }) {
           onClick={(e) => setProfileMenu(e.currentTarget)}
         >
           <Avatar
-            alt={currentUser?.name}
+            alt={currentUser?.name || currentUser?.firstName}
 
             src={
-              (currentUser?.avatar?.length >= 1 &&
-              currentUser?.avatar[currentUser.avatar.length - 1].publicUrl) || profile
+              currentUser?.avatar_url || profile
             }
             classes={{ root: classes.headerIcon }}
           >
@@ -114,7 +113,7 @@ export default function Header({ title, user }) {
         >
           <div className={classes.profileLabel}>Привет,&nbsp;</div>
           <Typography weight={'bold'} className={classes.profileLabel}>
-            {currentUser?.name}
+            {currentUser?.name || currentUser?.firstName}
           </Typography>
         </Typography>
         <Menu
