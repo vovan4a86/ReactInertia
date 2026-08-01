@@ -47,10 +47,15 @@ function Sidebar({
 
     const [isPermanent, setPermanent] = useState(true);
 
-    const isSidebarOpenedWrapper = useMemo(
-        () => (!isPermanent ? !isSidebarOpened : isSidebarOpened),
-        [isPermanent, isSidebarOpened]
-    );
+    // Синхронизируем LayoutContext с состоянием collapsed
+    useEffect(() => {
+        if (collapsed === isSidebarOpened) {
+            toggleSidebar(layoutDispatch);
+        }
+    }, []); // Только при монтировании
+
+    // Используем оба состояния для определения, свёрнут ли сайдбар
+    const isCollapsed = !isSidebarOpened;
 
     useEffect(() => {
         const handleWindowWidthChange = () => {
@@ -97,20 +102,28 @@ function Sidebar({
             return (
                 <Box key={item.id}>
                     <ListItem disablePadding>
-                        <Tooltip title={collapsed ? item.label : ''} placement="right" arrow>
+                        <Tooltip
+                            title={isCollapsed ? item.label : ''}
+                            placement="right"
+                            arrow
+                            disableHoverListener={!isCollapsed}
+                        >
                             <ListItemButton
                                 onClick={() => onToggleGroup(item.id)}
                                 sx={{
                                     minHeight: 48,
-                                    justifyContent: collapsed ? 'center' : 'initial',
+                                    justifyContent: isCollapsed ? 'center' : 'initial',
                                     px: 2.5,
                                     bgcolor: active ? 'action.selected' : 'transparent',
+                                    '&:hover': {
+                                        bgcolor: active ? 'action.selected' : 'action.hover',
+                                    },
                                 }}
                             >
                                 <ListItemIcon
                                     sx={{
                                         minWidth: 0,
-                                        mr: collapsed ? 0 : 2,
+                                        mr: isCollapsed ? 0 : 2,
                                         justifyContent: 'center',
                                         color: active ? 'primary.main' : 'inherit',
                                     }}
@@ -118,43 +131,33 @@ function Sidebar({
                                     <item.icon />
                                 </ListItemIcon>
 
-                                <ListItemText
-                                    primary={item.label}
-                                    sx={{
-                                        opacity: collapsed ? 0 : 1,
-                                        width: collapsed ? 0 : 'auto',
-                                        overflow: 'hidden',
-                                        whiteSpace: 'nowrap',
-                                        transition: 'opacity 0.2s, width 0.2s',
-                                        '& .MuiTypography-root': {
-                                            whiteSpace: 'nowrap',
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                        },
-                                    }}
-                                />
-
-                                <Box
-                                    sx={{
-                                        opacity: collapsed ? 0 : 1,
-                                        width: collapsed ? 0 : 'auto',
-                                        overflow: 'hidden',
-                                        transition: 'opacity 0.2s, width 0.2s',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                    }}
-                                >
-                                    {isExpanded ? <ExpandLess /> : <ExpandMore />}
-                                </Box>
+                                {!isCollapsed && (
+                                    <>
+                                        <ListItemText
+                                            primary={item.label}
+                                            sx={{
+                                                '& .MuiTypography-root': {
+                                                    fontSize: 14,
+                                                    fontWeight: active ? 600 : 400,
+                                                },
+                                            }}
+                                        />
+                                        <Box
+                                            sx={{
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                ml: 1,
+                                            }}
+                                        >
+                                            {isExpanded ? <ExpandLess /> : <ExpandMore />}
+                                        </Box>
+                                    </>
+                                )}
                             </ListItemButton>
                         </Tooltip>
                     </ListItem>
 
-                    <Collapse
-                        in={isExpanded && !collapsed}
-                        timeout="auto"
-                        unmountOnExit
-                    >
+                    <Collapse in={isExpanded && !isCollapsed} timeout="auto" unmountOnExit>
                         <List component="div" disablePadding>
                             {item.children.map((child) =>
                                 renderItem({ ...child, nested: true })
@@ -169,7 +172,7 @@ function Sidebar({
             <SidebarLink
                 key={item.id}
                 item={item}
-                collapsed={collapsed}
+                collapsed={isCollapsed}
                 active={active}
                 nested={nested}
                 onMobileClose={onMobileClose}
@@ -181,21 +184,21 @@ function Sidebar({
         <Drawer
             variant={isPermanent ? 'permanent' : 'temporary'}
             className={classNames(classes.drawer, {
-                [classes.drawerOpen]: isSidebarOpenedWrapper,
-                [classes.drawerClose]: !isSidebarOpenedWrapper,
+                [classes.drawerOpen]: !isCollapsed,
+                [classes.drawerClose]: isCollapsed,
             })}
             classes={{
                 paper: classNames({
-                    [classes.drawerOpen]: isSidebarOpenedWrapper,
-                    [classes.drawerClose]: !isSidebarOpenedWrapper,
+                    [classes.drawerOpen]: !isCollapsed,
+                    [classes.drawerClose]: isCollapsed,
                 }),
             }}
-            open={isSidebarOpenedWrapper}
+            open={isPermanent ? true : !isCollapsed}
             onClose={toggleDrawer(true)}
         >
             <div className={classes.toolbar} />
             <div className={classes.mobileBackButton}>
-                <IconButton onClick={() => toggleSidebar(layoutDispatch)}>
+                <IconButton onClick={onToggle}>
                     <ArrowBackIcon
                         classes={{
                             root: classNames(classes.headerIcon, classes.headerIconCollapse),

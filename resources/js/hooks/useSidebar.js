@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { usePage } from '@inertiajs/react';
 
 /**
@@ -18,7 +18,17 @@ import { usePage } from '@inertiajs/react';
 
 export default function useSidebar(config, { permissions = []}) {
     // --- СВЁРНУТ/РАЗВЁРНУТ САЙДБАР ---
-    const [collapsed, setCollapsed] = useState(false);
+    // Инициализируем из localStorage, если есть сохранённое значение
+    const [collapsed, setCollapsed] = useState(() => {
+        const saved = localStorage.getItem('sidebar_collapsed');
+        return saved ? JSON.parse(saved) : false;
+    });
+
+    // Сохраняем состояние в localStorage при изменении
+    useEffect(() => {
+        localStorage.setItem('sidebar_collapsed', JSON.stringify(collapsed));
+    }, [collapsed]);
+
     const toggleCollapse = useCallback(() => setCollapsed(prev => !prev), []);
 
     // --- РАСКРЫТЫЕ ВЛОЖЕННЫЕ ГРУППЫ ---
