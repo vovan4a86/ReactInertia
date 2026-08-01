@@ -13,7 +13,7 @@ import { usePage } from '@inertiajs/react';
 // Компоненты
 import FlashMessages from '@admin-components/FlashMessages/FlashMessages';
 import Header from '@admin-components/Header/Header';
-import Sidebar from '@admin-components/Sidebar/Sidebar';
+import Sidebar from '@/Components/Admin/Sidebar/Sidebar.jsx';
 import BreadCrumbs from '@admin-components/BreadCrumbs';
 import Footer from '@admin-components/Footer/Footer';
 import { Link } from '@admin-components/Wrappers/Wrappers.jsx';
@@ -21,10 +21,11 @@ import ColorChangeThemePopper from '@admin-layouts/components/ColorChangeThemePo
 
 // Стили
 import useStyles from './styles';
-import structure from './structure.jsx';
 
 // Контекст
 import { useLayoutState } from './context/LayoutContext';
+import sidebarConfig from "@/Layouts/Admin/sidebarConfig.jsx";
+import useSidebar from "@/hooks/useSidebar.js";
 
 
 export default function AdminLayout({ children, title = 'Панель администратора' }) {
@@ -42,9 +43,11 @@ export default function AdminLayout({ children, title = 'Панель админ
 
     // ================================================
     // Получаем данные из Inertia
+    // Inertia передаёт их из Laravel через HandleInertiaRequests
     // ================================================
-    const { auth, appName, flash, can } = usePage().props;
+    const { auth,flash } = usePage().props;
     const user = auth?.user; // Безопасное извлечение (если не авторизован)
+    const userPermissions = auth?.user?.permissions || [];
 
     // Flash-сообщения можно показывать через Snackbar/Alert
     const defaultMessage = flash?.message;
@@ -55,12 +58,29 @@ export default function AdminLayout({ children, title = 'Панель админ
     // const canManageUsers = can?.manage_users;
     // const canManageSettings = can?.manage_settings;
 
+    // --- ИСПОЛЬЗУЕМ ХУК ---
+    const {
+        collapsed,
+        toggleCollapse,
+        expandedGroups,
+        toggleGroup,
+        isActive,
+        filteredConfig,
+    } = useSidebar(sidebarConfig, { permissions: userPermissions });
+
     return (
         <div className={classes.root}>
                 <FlashMessages />
                 <Header title={title} user={user} />
 
-                <Sidebar structure={structure}/>
+                <Sidebar
+                    config={filteredConfig}      // уже отфильтрованное меню
+                    collapsed={collapsed}
+                    onToggle={toggleCollapse}
+                    expandedGroups={expandedGroups}
+                    onToggleGroup={toggleGroup}
+                    isActive={isActive}
+                />
 
                 <div
                     className={classnames(classes.content, {

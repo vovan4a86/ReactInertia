@@ -13,7 +13,7 @@ import { Link as InertiaLink } from '@inertiajs/react';
 import useStyles from '@admin-layouts/styles';
 
 // components
-import structure from '@admin-layouts/structure.jsx';
+import sidebarConfig from "@/Layouts/Admin/sidebarConfig.jsx";
 
 // Tab styling
 const CustomTab = styled(Tab)(() => ({
@@ -22,7 +22,6 @@ const CustomTab = styled(Tab)(() => ({
   fontWeight: 400,
 }));
 
-//Sidebar structure
 const BreadCrumbs = () => {
   const classes = useStyles();
   const [value, setValue] = React.useState(2);
@@ -54,7 +53,7 @@ const BreadCrumbs = () => {
               // Сначала форматируем как раньше
               const formattedRoute = route
                   .split('-')
-                  .map((word) => word[0].toUpperCase() + word.slice(1))
+                  .map((word) => word[0]?.toUpperCase() + word.slice(1))
                   .join(' ');
 
               // применяем перевод, если он есть
@@ -136,11 +135,11 @@ const BreadCrumbs = () => {
       >
         {
 
-          structure.map((c) => {
+            sidebarConfig.map((c) => {
             if (
               location.pathname.includes(c.link) &&
               c.link &&
-              c.label === 'Dashboard'
+              c.id === 'Dashboard'
             ) {
               return (
                 <Box display='flex' alignItems='center' key={c.id}>

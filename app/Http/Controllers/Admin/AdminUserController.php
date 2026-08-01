@@ -156,7 +156,7 @@ class AdminUserController extends Controller
         } catch (ValidationException $e) {
             return redirect()->back()
                 ->withErrors($e->validator)
-                ->with('error', 'Исправьте ошибки в форме.');
+                ->with('error', 'Необходимо исправить ошибки в форме.');
         }
     }
 

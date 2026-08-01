@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminArticleController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\AdminUserController;
@@ -33,6 +34,8 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::resource('users', AdminUserController::class);
     Route::post('/users/{user}/change-password', [AdminUserController::class, 'changePassword'])
         ->name('admin.users.change-password');
+
+    Route::resource('articles', AdminArticleController::class);
 
     Route::any('/profile', [AdminProfileController::class, 'edit'])->name('profile.edit');
 });
