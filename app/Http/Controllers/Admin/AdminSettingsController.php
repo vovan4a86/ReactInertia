@@ -181,19 +181,22 @@ class AdminSettingsController
     {
         if (in_array($type, [4, 6]) && isset($params['fields'])) {
             $fields = [];
-            $keys = $params['fields']['key'] ?? [];
-            $types = $params['fields']['type'] ?? [];
-            $titles = $params['fields']['title'] ?? [];
 
-            foreach ($keys as $index => $key) {
+            // Если fields пришел как объект с ключами (из React)
+            foreach ($params['fields'] as $key => $fieldData) {
                 if (empty($key)) {
                     continue;
                 }
-                $fields[$key] = [
-                    'type' => (int)($types[$index] ?? 0),
-                    'title' => $titles[$index] ?? '',
-                ];
+
+                // Проверяем, является ли $fieldData массивом с type и title
+                if (is_array($fieldData) && isset($fieldData['type'])) {
+                    $fields[$key] = [
+                        'type' => (int)$fieldData['type'],
+                        'title' => $fieldData['title'] ?? '',
+                    ];
+                }
             }
+
             return ['fields' => $fields];
         }
 
@@ -281,10 +284,11 @@ class AdminSettingsController
         }
 
         $params = $setting->params ?? [];
+        $fields = $params['fields'] ?? [];
         $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
 
         // Обрабатываем файлы в структуре данных
-        $processedValue = $this->processNestedFiles($value, $params, $request, $setting, $oldValue);
+        $processedValue = $this->processNestedFiles($value, $fields, $request, $setting, $oldValue);
 
         $setting->value = json_encode($processedValue);
         $setting->save();

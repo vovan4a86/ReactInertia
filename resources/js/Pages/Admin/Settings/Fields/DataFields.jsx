@@ -12,6 +12,13 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
         onChange({ ...value, [field]: val });
     };
 
+    // Оборачиваем onFileChange для правильного ключа
+    const handleFileChange = (field) => (key, file) => {
+        // Для вложенных файлов ключ должен быть settings.{settingId}.{fieldName}
+        const fileKey = `${name}.${field}`;
+        onFileChange(fileKey, file);
+    };
+
     return (
         <Box>
             <Box component="dl" sx={{
@@ -64,7 +71,7 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
                                     value={value[field]}
                                     fileUrl={getFileUrl(value[field], setting.file_urls, field)}
                                     onChange={(val) => handleFieldChange(field, val)}
-                                    onFileChange={onFileChange}
+                                    onFileChange={handleFileChange(field)}
                                     placeholder={params.title}
                                 />
                             )}

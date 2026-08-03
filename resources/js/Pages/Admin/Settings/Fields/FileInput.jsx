@@ -47,12 +47,13 @@ export default function FileInput({
             setPreview(null);
         }
 
+        setSelectedFileName(file.name);
+
         // Используем правильный формат имени для бэкенда
         const uploadKey = name; // settings.{setting.id}
         onFileChange(uploadKey, file);
         onChange(uploadKey); // Передаем ключ как значение, чтобы бэкенд знал что это файл
     };
-
 
     const handleClear = () => {
         onChange(null);

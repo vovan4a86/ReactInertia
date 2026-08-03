@@ -128,7 +128,6 @@ export default function SettingsFields({ settings, onSave }) {
         return null;
     }
 
-
     return (
         <Box component="form" onSubmit={handleSubmit}>
             {settings.map((setting, index) => (
