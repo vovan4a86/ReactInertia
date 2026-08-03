@@ -405,10 +405,12 @@ class AdminSettingsController
         foreach ($data as $key => $value) {
             if (is_array($value)) {
                 $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? []);
-            } elseif ($this->isFileUploadMarker($value)) {
-                // Это маркер файла, нужно найти реальный файл в запросе
-                $fileInputName = $value; // Маркер содержит правильное имя поля
+            } else {
+                // Формируем имя поля для поиска файла
+                // Для типа 4: settings.{settingId}.{fieldName}
+                $fileInputName = 'settings.' . $setting->id . '.' . $key;
 
+                // Проверяем, есть ли файл в запросе
                 if ($request->hasFile($fileInputName)) {
                     $file = $request->file($fileInputName);
                     $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
@@ -417,19 +419,53 @@ class AdminSettingsController
 
                     // Delete old file if exists
                     $oldFile = $oldData[$key] ?? null;
-                    if ($oldFile && is_string($oldFile)) {
+                    if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
                         $this->deleteFile($oldFile);
                     }
 
                     $data[$key] = $fileName;
-                } else {
-                    // Файл не был загружен, сохраняем старое значение если есть
-                    $data[$key] = $oldData[$key] ?? null;
+                } elseif ($this->isFileUploadMarker($value)) {
+                    // Старая логика для маркеров (если еще используется)
+                    $fileInputName = $this->convertDotNotationToBrackets($value);
+
+                    if ($request->hasFile($fileInputName)) {
+                        $file = $request->file($fileInputName);
+                        $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+
+                        $this->storeFile($file, $fileName);
+
+                        $oldFile = $oldData[$key] ?? null;
+                        if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
+                            $this->deleteFile($oldFile);
+                        }
+
+                        $data[$key] = $fileName;
+                    } else {
+                        $oldFile = $oldData[$key] ?? null;
+                        $data[$key] = (is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) ? $oldFile : null;
+                    }
                 }
             }
         }
 
         return $data;
+    }
+
+
+    /**
+     * Convert dot notation to bracket notation for file inputs
+     * Example: settings.123.title -> settings[123][title]
+     */
+    protected function convertDotNotationToBrackets(string $dotNotation): string
+    {
+        $parts = explode('.', $dotNotation);
+        $result = array_shift($parts); // settings
+
+        foreach ($parts as $part) {
+            $result .= '[' . $part . ']';
+        }
+
+        return $result;
     }
 
     protected function isFileUploadMarker(mixed $value): bool

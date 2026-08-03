@@ -40,6 +40,7 @@ export default function SettingsFields({ settings, onSave }) {
     };
 
     const handleFileChange = (key, file) => {
+        console.log('SettingsFields handleFileChange:', { key, file, isFile: file instanceof File });
         setFiles(prev => {
             const newFiles = { ...prev };
             if (file) {

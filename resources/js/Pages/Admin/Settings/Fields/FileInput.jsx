@@ -53,6 +53,8 @@ export default function FileInput({
         const uploadKey = name; // settings.{setting.id}
         onFileChange(uploadKey, file);
         onChange(uploadKey); // Передаем ключ как значение, чтобы бэкенд знал что это файл
+
+        console.log('FileInput handleFileSelect:', { uploadKey: name, file });
     };
 
     const handleClear = () => {

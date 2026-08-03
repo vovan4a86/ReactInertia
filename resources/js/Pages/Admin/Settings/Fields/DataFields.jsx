@@ -9,13 +9,19 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
     const fields = setting.params?.fields || {};
 
     const handleFieldChange = (field, val) => {
+        // Не сохраняем маркеры файлов как значения
+        if (typeof val === 'string' && val.startsWith('settings[')) {
+            // Это маркер файла, не обновляем значение поля
+            return;
+        }
         onChange({ ...value, [field]: val });
     };
 
     // Оборачиваем onFileChange для правильного ключа
     const handleFileChange = (field) => (key, file) => {
         // Для вложенных файлов ключ должен быть settings.{settingId}.{fieldName}
-        const fileKey = `${name}.${field}`;
+        const fileKey = `${name}[${field}]`;
+        console.log('DataFields handleFileChange:', { field, key, file, fileKey });
         onFileChange(fileKey, file);
     };
 
