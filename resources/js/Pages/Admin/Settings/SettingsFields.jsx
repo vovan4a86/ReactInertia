@@ -57,39 +57,38 @@ export default function SettingsFields({ settings, onSave }) {
 
         const formData = new FormData();
 
-        // Добавляем ВСЕ значения настроек, включая неизмененные
+        // Добавляем ВСЕ значения настроек
         Object.entries(values).forEach(([settingId, value]) => {
             if (value === null || value === undefined) {
-                // Отправляем null для очистки значения
                 formData.append(`settings[${settingId}]`, '');
                 return;
             }
 
             if (Array.isArray(value)) {
-                // Handle array values (lists, galleries)
                 if (value.length === 0) {
-                    // Пустой массив
                     formData.append(`settings[${settingId}]`, JSON.stringify([]));
                 } else {
                     value.forEach((item, index) => {
                         if (typeof item === 'object' && item !== null) {
-                            // Handle nested objects (list data)
                             Object.entries(item).forEach(([field, fieldVal]) => {
                                 if (fieldVal !== null && fieldVal !== undefined) {
                                     formData.append(
                                         `settings[${settingId}][${index}][${field}]`,
                                         fieldVal
                                     );
+                                } else {
+                                    formData.append(
+                                        `settings[${settingId}][${index}][${field}]`,
+                                        ''
+                                    );
                                 }
                             });
                         } else if (item !== null && item !== undefined) {
-                            // Handle simple arrays (simple list)
                             formData.append(`settings[${settingId}][${index}]`, item);
                         }
                     });
                 }
             } else if (typeof value === 'object' && value !== null) {
-                // Handle object values (data type)
                 const entries = Object.entries(value);
                 if (entries.length === 0) {
                     formData.append(`settings[${settingId}]`, JSON.stringify({}));
@@ -109,12 +108,12 @@ export default function SettingsFields({ settings, onSave }) {
                     });
                 }
             } else {
-                // Handle simple values (text, textarea, editor)
-                formData.append(`settings[${settingId}]`, value);
+                // Для редактора передаем HTML как есть
+                formData.append(`settings[${settingId}]`, String(value));
             }
         });
 
-        // Add files with correct naming
+        // Add files
         Object.entries(files).forEach(([key, file]) => {
             if (file instanceof File) {
                 formData.append(key, file);

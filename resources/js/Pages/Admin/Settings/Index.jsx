@@ -361,23 +361,6 @@ export default function SettingsIndex() {
                     )}
                 </Grid>
             </Grid>
-
-            {/* Snackbar Notifications */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={4000}
-                onClose={handleSnackbarClose}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-            >
-                <Alert
-                    onClose={handleSnackbarClose}
-                    severity={snackbar.severity}
-                    variant="filled"
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </Alert>
-            </Snackbar>
         </Box>
         </AdminLayout>
     );

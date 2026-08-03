@@ -207,10 +207,17 @@ class AdminSettingsController
     {
         switch ($setting->type) {
             case 0: // Text
+                $setting->value = $this->sanitizeTextValue($value);
+                $setting->save();
+                break;
+
             case 1: // Textarea
-            case 2: // Editor
-                // Сохраняем даже пустые значения
                 $setting->value = $value !== null ? $value : '';
+                $setting->save();
+                break;
+
+            case 2: // Editor - сохраняем HTML как есть
+                $setting->value = $this->sanitizeHtmlValue($value);
                 $setting->save();
                 break;
 
@@ -663,5 +670,70 @@ class AdminSettingsController
         }
 
         return $data;
+    }
+
+    /**
+     * Санитизация HTML контента (разрешаем безопасные теги)
+     */
+    protected function sanitizeHtmlValue($value): string
+    {
+        if (empty($value)) {
+            return '';
+        }
+
+        // Разрешенные HTML теги
+        $allowedTags = '<p><br><strong><b><em><i><u><s><strike><del><ins><mark><span><div>'
+            . '<h1><h2><h3><h4><h5><h6>'
+            . '<ul><ol><li>'
+            . '<blockquote><pre><code>'
+            . '<a><img><table><thead><tbody><tr><th><td>'
+            . '<hr><sub><sup>';
+
+        // Разрешенные атрибуты
+        $allowedAttributes = [
+            'href', 'src', 'alt', 'title', 'target', 'rel',
+            'class', 'id', 'style', 'align', 'width', 'height',
+            'colspan', 'rowspan', 'data-type', 'data-checked',
+            'start', 'type', 'reversed', 'compact'
+        ];
+
+        // Очищаем HTML
+        $value = strip_tags($value, $allowedTags);
+
+        // Дополнительная очистка атрибутов
+        $value = preg_replace_callback('/<([a-zA-Z][a-zA-Z0-9]*)\s+([^>]*)>/', function($matches) use ($allowedAttributes) {
+            $tag = $matches[1];
+            $attributes = $matches[2];
+
+            // Оставляем только разрешенные атрибуты
+            $cleanedAttributes = '';
+            preg_match_all('/([a-zA-Z-]+)\s*=\s*["\']([^"\']*)["\']/', $attributes, $attrMatches);
+
+            foreach ($attrMatches[1] as $i => $attrName) {
+                if (in_array(strtolower($attrName), $allowedAttributes)) {
+                    $attrValue = $attrMatches[2][$i];
+                    // Дополнительная защита от XSS в атрибутах
+                    $attrValue = htmlspecialchars($attrValue, ENT_QUOTES, 'UTF-8');
+                    $cleanedAttributes .= " $attrName=\"$attrValue\"";
+                }
+            }
+
+            return "<$tag$cleanedAttributes>";
+        }, $value);
+
+        return $value;
+    }
+
+    /**
+     * Санитизация текстовых значений
+     */
+    protected function sanitizeTextValue($value): string
+    {
+        if (empty($value)) {
+            return '';
+        }
+
+        // Для текстовых полей убираем все HTML теги
+        return strip_tags($value);
     }
 }
