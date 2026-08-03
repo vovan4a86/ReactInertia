@@ -8,7 +8,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Intervention\Image\ImageManager;
-use Intervention\Image\Laravel\Facades\Image;
 
 class AdminSettingsController
 {
@@ -139,11 +138,6 @@ class AdminSettingsController
 
         Setting::clearCache();
 
-        if ($request->hasFile('settings.*')) {
-            return redirect()->route('admin.settings.groupItems', $groupId)
-                ->with('success', 'Изменения сохранены');
-        }
-
         return back()->with('success', 'Изменения сохранены');
     }
 
@@ -192,7 +186,9 @@ class AdminSettingsController
             $titles = $params['fields']['title'] ?? [];
 
             foreach ($keys as $index => $key) {
-                if (empty($key)) continue;
+                if (empty($key)) {
+                    continue;
+                }
                 $fields[$key] = [
                     'type' => (int)($types[$index] ?? 0),
                     'title' => $titles[$index] ?? '',
@@ -213,7 +209,8 @@ class AdminSettingsController
             case 0: // Text
             case 1: // Textarea
             case 2: // Editor
-                $setting->value = $value;
+                // Сохраняем даже пустые значения
+                $setting->value = $value !== null ? $value : '';
                 $setting->save();
                 break;
 
@@ -256,13 +253,15 @@ class AdminSettingsController
             $this->storeFile($file, $fileName);
 
             $setting->value = $fileName;
-        } elseif ($value === null && !empty($setting->value)) {
-            // Delete file when value is cleared
-            $this->deleteFile($setting->value);
-            $setting->value = null;
+            $setting->save();
+        } elseif ($value === null || $value === '') {
+            // Очищаем файл если значение null или пустая строка
+            if (!empty($setting->value)) {
+                $this->deleteFile($setting->value);
+                $setting->value = null;
+                $setting->save();
+            }
         }
-
-        $setting->save();
     }
 
     /**
@@ -274,32 +273,13 @@ class AdminSettingsController
             return;
         }
 
+        $params = $setting->params ?? [];
         $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
 
-        array_walk_recursive($value, function (&$item, $key) use ($request, $setting, $oldValue) {
-            if (is_string($item) && $this->isFileUploadKey($item)) {
-                $uploadKey = $this->extractUploadKey($item);
+        // Обрабатываем файлы в структуре данных
+        $processedValue = $this->processNestedFiles($value, $params, $request, $setting, $oldValue);
 
-                if ($request->hasFile($uploadKey)) {
-                    $file = $request->file($uploadKey);
-                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-
-                    $this->storeFile($file, $fileName);
-
-                    // Delete old file if exists
-                    $oldFile = $this->findOldFileValue($oldValue, $key);
-                    if ($oldFile) {
-                        $this->deleteFile($oldFile);
-                    }
-
-                    $item = $fileName;
-                } else {
-                    $item = null;
-                }
-            }
-        });
-
-        $setting->value = json_encode($value);
+        $setting->value = json_encode($processedValue);
         $setting->save();
     }
 
@@ -312,8 +292,10 @@ class AdminSettingsController
             return;
         }
 
-        // Remove last empty element
-        array_pop($value);
+        // Remove empty elements
+        $value = array_filter($value, function($item) {
+            return $item !== null && $item !== '';
+        });
 
         $setting->value = json_encode(array_values($value));
         $setting->save();
@@ -328,45 +310,40 @@ class AdminSettingsController
             return;
         }
 
-        // Transpose array from field-based to row-based
-        $rows = [];
-        foreach ($value as $field => $fieldValues) {
-            foreach ($fieldValues as $index => $val) {
-                $rows[$index][$field] = $val;
+        $params = $setting->params ?? [];
+        $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
+
+        // Транспонируем массив для list data
+        if ($this->isAssociativeArray($value) && !empty($value)) {
+            $rows = [];
+            $firstKey = array_key_first($value);
+            if (is_array($value[$firstKey])) {
+                foreach ($value[$firstKey] as $index => $v) {
+                    $row = [];
+                    foreach ($value as $field => $fieldValues) {
+                        $row[$field] = $fieldValues[$index] ?? null;
+                    }
+                    $rows[] = $row;
+                }
+                $value = $rows;
             }
         }
 
-        // Remove last empty row
-        array_pop($rows);
-        $value = array_values($rows);
-
-        $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
-
-        // Process files in the structure
-        array_walk_recursive($value, function (&$item, $key) use ($request, $setting, $oldValue) {
-            if (is_string($item) && $this->isFileUploadKey($item)) {
-                $uploadKey = $this->extractUploadKey($item);
-
-                if ($request->hasFile($uploadKey)) {
-                    $file = $request->file($uploadKey);
-                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-
-                    $this->storeFile($file, $fileName);
-
-                    // Delete old file if exists
-                    $oldFile = $this->findOldFileValue($oldValue, $key);
-                    if ($oldFile) {
-                        $this->deleteFile($oldFile);
-                    }
-
-                    $item = $fileName;
-                } else {
-                    $item = null;
-                }
-            }
+        // Remove empty rows
+        $value = array_filter($value, function($row) {
+            if (!is_array($row)) return false;
+            return !empty(array_filter($row, function($val) {
+                return $val !== null && $val !== '';
+            }));
         });
 
-        $setting->value = json_encode($value);
+        // Process files in each row
+        $processedValue = [];
+        foreach ($value as $row) {
+            $processedValue[] = $this->processNestedFiles($row, $params, $request, $setting, $oldValue);
+        }
+
+        $setting->value = json_encode(array_values($processedValue));
         $setting->save();
     }
 
@@ -379,33 +356,80 @@ class AdminSettingsController
             ? json_decode($setting->value, true) ?? []
             : [];
 
+        $newFiles = [];
+
         foreach ($value as $index => $item) {
-            if (is_string($item) && $this->isFileUploadKey($item)) {
-                $uploadKey = $this->extractUploadKey($item);
+            $fileInputName = "settings.{$setting->id}.{$index}";
 
-                if ($request->hasFile($uploadKey)) {
-                    $file = $request->file($uploadKey);
-                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+            if ($request->hasFile($fileInputName)) {
+                $file = $request->file($fileInputName);
+                $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
 
-                    $this->storeFile($file, $fileName);
+                $this->storeFile($file, $fileName);
 
-                    $value[$index] = $fileName;
-                } else {
-                    unset($value[$index]);
+                // Delete old file if replacing
+                if (isset($existingFiles[$index])) {
+                    $this->deleteFile($existingFiles[$index]);
                 }
+
+                $newFiles[] = $fileName;
+            } elseif (is_string($item) && !empty($item)) {
+                // Keep existing file
+                $newFiles[] = $item;
             }
         }
 
         // Delete removed files
-        $newFiles = array_filter($value, fn($v) => is_string($v) && !$this->isFileUploadKey($v));
         $filesToDelete = array_diff($existingFiles, $newFiles);
-
         foreach ($filesToDelete as $deletedFile) {
             $this->deleteFile($deletedFile);
         }
 
         $setting->value = json_encode(array_values($newFiles));
         $setting->save();
+    }
+
+    protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_array($value)) {
+                $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? []);
+            } elseif ($this->isFileUploadMarker($value)) {
+                // Это маркер файла, нужно найти реальный файл в запросе
+                $fileInputName = $value; // Маркер содержит правильное имя поля
+
+                if ($request->hasFile($fileInputName)) {
+                    $file = $request->file($fileInputName);
+                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+
+                    $this->storeFile($file, $fileName);
+
+                    // Delete old file if exists
+                    $oldFile = $oldData[$key] ?? null;
+                    if ($oldFile && is_string($oldFile)) {
+                        $this->deleteFile($oldFile);
+                    }
+
+                    $data[$key] = $fileName;
+                } else {
+                    // Файл не был загружен, сохраняем старое значение если есть
+                    $data[$key] = $oldData[$key] ?? null;
+                }
+            }
+        }
+
+        return $data;
+    }
+
+    protected function isFileUploadMarker(mixed $value): bool
+    {
+        return is_string($value) && str_starts_with($value, 'settings.');
+    }
+
+    protected function isAssociativeArray(array $arr): bool
+    {
+        if ([] === $arr) return false;
+        return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
     /**
@@ -493,14 +517,19 @@ class AdminSettingsController
             $fullPath = Storage::disk(Setting::UPLOAD_DISK)->path($filePath);
 
             if (file_exists($fullPath)) {
-                $quality = (int) Setting::get('image_quality', 100);
+                $quality = 100;
 
-                $manager = new ImageManager(['driver' => 'gd']);
-                $image = $manager->make($fullPath);
-                $image->save(null, $quality);
+                // Можно также указать драйвер через enum
+                $manager = new ImageManager(
+                    driver: \Intervention\Image\Drivers\Gd\Driver::class
+                );
+
+                $image = $manager->decode($fullPath);
+
+                // Дополнительная оптимизация для JPEG/PNG
+                $image->save($fullPath, quality: $quality);
             }
         } catch (\Exception $e) {
-            // Silently fail if image optimization fails
             \Log::warning('Image optimization failed: ' . $e->getMessage());
         }
     }
@@ -585,8 +614,9 @@ class AdminSettingsController
             }
 
             // Add file URLs for file types
-            if ($setting->type == 3) {
-                $data['file_url'] = $setting->file_url;
+            if ($setting->type == 3 && !empty($setting->value)) {
+                $data['file_url'] = Storage::disk(Setting::UPLOAD_DISK)
+                    ->url(Setting::getFilePath($setting->value));
             }
 
             // Add file URLs for nested files in complex types

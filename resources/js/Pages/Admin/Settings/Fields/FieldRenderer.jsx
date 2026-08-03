@@ -9,6 +9,7 @@ import ListDataInput from './ListDataInput';
 import GalleryInput from './GalleryInput';
 
 export default function FieldRenderer({ setting, value, onChange, onFileChange }) {
+    // Правильный формат имени для файлов: settings.{setting.id}
     const fieldName = `settings[${setting.id}]`;
 
     // Helper to get file URL from various formats
@@ -59,7 +60,7 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
         case 3:
             return (
                 <FileInput
-                    name={`settings.${setting.id}`}
+                    name={fieldName}
                     value={value}
                     fileUrl={setting.file_url}
                     onChange={onChange}

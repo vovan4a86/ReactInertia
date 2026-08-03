@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box,
     Button,
@@ -10,9 +10,30 @@ import { Save as SaveIcon } from '@mui/icons-material';
 import FieldRenderer from './Fields/FieldRenderer';
 
 export default function SettingsFields({ settings, onSave }) {
-    const [values, setValues] = useState({});
+    // Инициализируем values всеми текущими значениями настроек
+    const [values, setValues] = useState(() => {
+        const initialValues = {};
+        settings.forEach(setting => {
+            initialValues[setting.id] = setting.value;
+        });
+        return initialValues;
+    });
     const [files, setFiles] = useState({});
     const [saving, setSaving] = useState(false);
+
+    // Обновляем values при изменении settings
+    useEffect(() => {
+        setValues(prev => {
+            const newValues = { ...prev };
+            settings.forEach(setting => {
+                // Сохраняем существующие значения, если они есть
+                if (!(setting.id in newValues) || newValues[setting.id] === undefined) {
+                    newValues[setting.id] = setting.value;
+                }
+            });
+            return newValues;
+        });
+    }, [settings]);
 
     const handleFieldChange = (settingId, value) => {
         setValues(prev => ({ ...prev, [settingId]: value }));
@@ -30,60 +51,84 @@ export default function SettingsFields({ settings, onSave }) {
         });
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         setSaving(true);
 
         const formData = new FormData();
 
-        // Add all setting values
+        // Добавляем ВСЕ значения настроек, включая неизмененные
         Object.entries(values).forEach(([settingId, value]) => {
+            if (value === null || value === undefined) {
+                // Отправляем null для очистки значения
+                formData.append(`settings[${settingId}]`, '');
+                return;
+            }
+
             if (Array.isArray(value)) {
                 // Handle array values (lists, galleries)
-                value.forEach((item, index) => {
-                    if (typeof item === 'object' && item !== null) {
-                        // Handle nested objects (list data)
-                        Object.entries(item).forEach(([field, fieldVal]) => {
-                            if (fieldVal !== null && fieldVal !== undefined) {
-                                formData.append(
-                                    `settings[${settingId}][${field}][${index}]`,
-                                    fieldVal
-                                );
-                            }
-                        });
-                    } else if (item !== null && item !== undefined) {
-                        // Handle simple arrays (simple list)
-                        formData.append(`settings[${settingId}][${index}]`, item);
-                    }
-                });
+                if (value.length === 0) {
+                    // Пустой массив
+                    formData.append(`settings[${settingId}]`, JSON.stringify([]));
+                } else {
+                    value.forEach((item, index) => {
+                        if (typeof item === 'object' && item !== null) {
+                            // Handle nested objects (list data)
+                            Object.entries(item).forEach(([field, fieldVal]) => {
+                                if (fieldVal !== null && fieldVal !== undefined) {
+                                    formData.append(
+                                        `settings[${settingId}][${index}][${field}]`,
+                                        fieldVal
+                                    );
+                                }
+                            });
+                        } else if (item !== null && item !== undefined) {
+                            // Handle simple arrays (simple list)
+                            formData.append(`settings[${settingId}][${index}]`, item);
+                        }
+                    });
+                }
             } else if (typeof value === 'object' && value !== null) {
                 // Handle object values (data type)
-                Object.entries(value).forEach(([field, fieldVal]) => {
-                    if (fieldVal !== null && fieldVal !== undefined) {
-                        formData.append(
-                            `settings[${settingId}][${field}]`,
-                            fieldVal
-                        );
-                    }
-                });
-            } else if (value !== null && value !== undefined) {
+                const entries = Object.entries(value);
+                if (entries.length === 0) {
+                    formData.append(`settings[${settingId}]`, JSON.stringify({}));
+                } else {
+                    entries.forEach(([field, fieldVal]) => {
+                        if (fieldVal !== null && fieldVal !== undefined) {
+                            formData.append(
+                                `settings[${settingId}][${field}]`,
+                                fieldVal
+                            );
+                        } else {
+                            formData.append(
+                                `settings[${settingId}][${field}]`,
+                                ''
+                            );
+                        }
+                    });
+                }
+            } else {
                 // Handle simple values (text, textarea, editor)
                 formData.append(`settings[${settingId}]`, value);
             }
         });
 
-        // Add files
+        // Add files with correct naming
         Object.entries(files).forEach(([key, file]) => {
-            formData.append(key, file);
+            if (file instanceof File) {
+                formData.append(key, file);
+            }
         });
 
-        onSave(formData);
+        await onSave(formData);
         setSaving(false);
     };
 
     if (!settings || settings.length === 0) {
         return null;
     }
+
 
     return (
         <Box component="form" onSubmit={handleSubmit}>

@@ -25,6 +25,7 @@ export default function FileInput({
                                   }) {
     const fileInputRef = useRef(null);
     const [preview, setPreview] = useState(null);
+    const [selectedFileName, setSelectedFileName] = useState(null);
 
     const isImage = (filename) => {
         if (!filename) return false;
@@ -46,23 +47,38 @@ export default function FileInput({
             setPreview(null);
         }
 
-        const uploadKey = `setting_file_${name}`;
+        // Используем правильный формат имени для бэкенда
+        const uploadKey = name; // settings.{setting.id}
         onFileChange(uploadKey, file);
-        onChange(uploadKey);
+        onChange(uploadKey); // Передаем ключ как значение, чтобы бэкенд знал что это файл
     };
+
 
     const handleClear = () => {
         onChange(null);
         onFileChange(name, null);
         setPreview(null);
+        setSelectedFileName(null);
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
     };
 
-    const displayUrl = preview || fileUrl;
-    const hasValue = value && !value.startsWith('setting_file_');
-    const currentFileName = hasValue ? value : '';
+    // Определяем, есть ли существующий файл (реальное значение, а не маркер)
+    const hasExistingFile = value &&
+        typeof value === 'string' &&
+        !value.startsWith('settings.') &&
+        value !== '';
+    const hasNewFile = preview !== null;
+
+    // URL для отображения: сначала preview нового файла, потом существующий fileUrl
+    const displayUrl = preview || (hasExistingFile ? fileUrl : null);
+
+    // Имя файла для отображения
+    const displayFileName = selectedFileName || (hasExistingFile ? value : null);
+
+    // Определяем, является ли файл изображением
+    const isDisplayImage = preview ? true : (hasExistingFile && fileUrl ? isImage(fileUrl) : false);
 
     return (
         <Box>
@@ -74,8 +90,8 @@ export default function FileInput({
                 accept="*/*"
             />
 
-            {/* File Preview */}
-            {displayUrl && isImage(currentFileName || preview) && (
+            {/* File Preview для изображений */}
+            {displayUrl && isDisplayImage && (
                 <Card sx={{ mb: 1.5, maxWidth: 300 }} variant="outlined">
                     <CardMedia
                         component="img"
@@ -87,8 +103,8 @@ export default function FileInput({
                 </Card>
             )}
 
-            {/* File Link */}
-            {hasValue && fileUrl && !isImage(currentFileName) && (
+            {/* File Link для не-изображений */}
+            {hasExistingFile && !isDisplayImage && (
                 <Box sx={{
                     mb: 1.5,
                     p: 1,
@@ -102,8 +118,8 @@ export default function FileInput({
                 }}>
                     <FileIcon color="action" />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" noWrap title={value}>
-                            {value}
+                        <Typography variant="body2" noWrap title={displayFileName}>
+                            {displayFileName}
                         </Typography>
                     </Box>
                     {fileUrl && (
@@ -119,10 +135,10 @@ export default function FileInput({
                 </Box>
             )}
 
-            {/* File Name (new upload) */}
-            {preview && !isImage(currentFileName) && (
+            {/* Информация о новом не-изображении файле */}
+            {hasNewFile && !preview && (
                 <Typography variant="body2" color="textSecondary" sx={{ mb: 1 }}>
-                    Выбран файл: {value}
+                    Выбран файл: {selectedFileName}
                 </Typography>
             )}
 
@@ -137,7 +153,7 @@ export default function FileInput({
                     {placeholder || 'Выбрать файл'}
                 </Button>
 
-                {hasValue && (
+                {(hasExistingFile || hasNewFile) && (
                     <IconButton
                         size="small"
                         color="error"

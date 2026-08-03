@@ -154,6 +154,7 @@ export default function SettingsIndex() {
                     message: 'Ошибка при сохранении',
                     severity: 'error'
                 });
+                console.log(errors);
             },
         });
     };
@@ -164,10 +165,10 @@ export default function SettingsIndex() {
 
     return (
         <AdminLayout>
-            <Box sx={{ p: 3 }}>
+            <Box>
             <Grid container spacing={3}>
                 {/* Groups Sidebar */}
-                <Grid item xs={12} md={3}>
+                <Grid item size={{ xs:12, md:3 }} >
                     <Paper sx={{ height: '100%' }}>
                         {/* Header */}
                         <Box sx={{
@@ -299,7 +300,7 @@ export default function SettingsIndex() {
                 </Grid>
 
                 {/* Settings Content */}
-                <Grid item xs={12} md={9}>
+                <Grid item size={{ xs:12, md:9 }}>
                     {activeGroup ? (
                         <Paper>
                             {/* Group Header */}
@@ -309,7 +310,7 @@ export default function SettingsIndex() {
                                 borderColor: 'divider',
                                 bgcolor: 'grey.50',
                             }}>
-                                <Typography variant="h6">
+                                <Typography variant="h6" color="textSecondary">
                                     {activeGroup.name}
                                 </Typography>
                                 {activeGroup.description && (
