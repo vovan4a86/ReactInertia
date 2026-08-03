@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin\AdminArticleController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminProfileController;
+use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminUserController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -34,6 +35,24 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     Route::resource('users', AdminUserController::class);
     Route::post('/users/{user}/change-password', [AdminUserController::class, 'changePassword'])
         ->name('admin.users.change-password');
+
+    Route::prefix('/settings')->name('settings.')->group(function () {
+        Route::get('/', [AdminSettingsController::class, 'index'])->name('index');
+        Route::get('/group/{id}/items', [AdminSettingsController::class, 'groupItems'])->name('groupItems');
+
+        Route::post('/group', [AdminSettingsController::class, 'storeGroup'])->name('group.store');
+        Route::put('/group/{id}', [AdminSettingsController::class, 'updateGroup'])->name('group.update');
+        Route::delete('/group/{id}', [AdminSettingsController::class, 'destroyGroup'])->name('group.delete');
+
+        Route::get('/edit', [AdminSettingsController::class, 'editSetting'])->name('edit');
+        Route::get('/{id}/edit', [AdminSettingsController::class, 'editSetting'])->name('edit');
+        Route::post('/setting', [AdminSettingsController::class, 'storeSetting'])->name('store');
+        Route::put('/setting/{id}', [AdminSettingsController::class, 'updateSetting'])->name('update');
+
+        Route::post('/clear-value/{id}', [AdminSettingsController::class, 'clearValue'])->name('clearValue');
+        Route::post('/save', [AdminSettingsController::class, 'saveSettings'])->name('save');
+    });
+
 
     Route::resource('articles', AdminArticleController::class);
 
