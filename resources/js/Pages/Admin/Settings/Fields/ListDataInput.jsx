@@ -1,13 +1,7 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
     Box,
     IconButton,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
     Card,
     CardContent,
     Paper,
@@ -24,6 +18,112 @@ import TextareaInput from './TextareaInput';
 import EditorInput from './EditorInput';
 import FileInput from './FileInput';
 
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+} from '@dnd-kit/core';
+
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+
+function SortableItem({ id, children }) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.5 : 1,
+        position: 'relative',
+        zIndex: isDragging ? 1000 : 'auto',
+    };
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes}>
+            {React.cloneElement(children, { dragListeners: listeners })}
+        </div>
+    );
+}
+
+function ListItemCard({ item, index, fieldKeys, fields, onRemove, onItemChange, renderField, dragListeners }) {
+    return (
+        <Card variant="outlined">
+            <CardContent sx={{ pb: 1 }}>
+                {/* Заголовок карточки с кнопкой удаления и перетаскиванием */}
+                <Box sx={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    mb: 2,
+                }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box
+                            {...dragListeners}
+                            sx={{
+                                cursor: 'grab',
+                                display: 'flex',
+                                alignItems: 'center',
+                                '&:active': { cursor: 'grabbing' },
+                            }}
+                        >
+                            <DragIndicatorIcon
+                                sx={{
+                                    color: 'text.disabled',
+                                    fontSize: 20,
+                                }}
+                            />
+                        </Box>
+                        <Typography variant="subtitle2" color="textSecondary">
+                            Элемент {index + 1}
+                        </Typography>
+                    </Box>
+                    <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() => onRemove(index)}
+                        title="Удалить элемент"
+                    >
+                        <DeleteIcon fontSize="small" />
+                    </IconButton>
+                </Box>
+
+                {/* Поля в столбик */}
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {fieldKeys.map(field => (
+                        <Box key={field}>
+                            <Typography
+                                variant="caption"
+                                color="textSecondary"
+                                sx={{ mb: 0.5, display: 'block' }}
+                            >
+                                {fields[field].title}
+                            </Typography>
+                            {renderField(field, fields[field], item, index)}
+                        </Box>
+                    ))}
+                </Box>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function ListDataInput({
                                           setting,
                                           name,
@@ -31,13 +131,30 @@ export default function ListDataInput({
                                           onChange,
                                           onFileChange,
                                           getFileUrl,
+                                          fileUrls = {},
                                       }) {
+    console.log('ListDataInput - setting:');
+    console.log(setting);
+    console.log('ListDataInput - value:');
+    console.log(value);
+
     const fields = setting.params?.fields || {};
     const items = Array.isArray(value) ? value : [];
     const fieldKeys = Object.keys(fields);
 
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
     const handleAdd = () => {
-        const newItem = {};
+        const newItem = { _key: `item-${Date.now()}-${Math.random()}` };
         fieldKeys.forEach(field => {
             newItem[field] = '';
         });
@@ -54,9 +171,22 @@ export default function ListDataInput({
         onChange(newItems);
     };
 
+    const handleDragEnd = (event) => {
+        const { active, over } = event;
+
+        if (active.id !== over?.id) {
+            const oldIndex = items.findIndex(item => (item._key || `item-${items.indexOf(item)}`) === active.id);
+            const newIndex = items.findIndex(item => (item._key || `item-${items.indexOf(item)}`) === over.id);
+
+            if (oldIndex !== -1 && newIndex !== -1) {
+                const newItems = arrayMove(items, oldIndex, newIndex);
+                onChange(newItems);
+            }
+        }
+    };
+
     const renderField = (field, params, item, index) => {
         // Правильный формат имени файла для вложенных элементов
-        // settings.{settingId}.{index}.{field}
         const fileInputName = `${name}.${index}.${field}`;
         const fieldInputName = `${name}[${index}][${field}]`;
 
@@ -96,9 +226,13 @@ export default function ListDataInput({
             case 3:
                 return (
                     <FileInput
-                        name={fileInputName}
+                        name={`${name}[${index}][${field}]`}
                         value={item[field]}
-                        fileUrl={getFileUrl(item[field], item._fileUrls, field)}
+                        fileUrl={
+                            getFileUrl(item[field], fileUrls, field) ||
+                            (fileUrls[index] && fileUrls[index][field]) ||
+                            fileUrls[item[field]]
+                        }
                         onChange={(val) => handleItemChange(index, field, val)}
                         onFileChange={onFileChange}
                         placeholder={params.title}
@@ -135,58 +269,36 @@ export default function ListDataInput({
                     </Typography>
                 </Paper>
             ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {items.map((item, index) => (
-                        <Card key={index} variant="outlined">
-                            <CardContent sx={{ pb: 1 }}>
-                                {/* Заголовок карточки с кнопкой удаления */}
-                                <Box sx={{
-                                    display: 'flex',
-                                    justifyContent: 'space-between',
-                                    alignItems: 'center',
-                                    mb: 2,
-                                }}>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <DragIndicatorIcon
-                                            sx={{
-                                                color: 'text.disabled',
-                                                cursor: 'grab',
-                                                fontSize: 20,
-                                            }}
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                    modifiers={[restrictToVerticalAxis]}
+                >
+                    <SortableContext
+                        items={items.map(item => item._key || `item-${items.indexOf(item)}`)}
+                        strategy={verticalListSortingStrategy}
+                    >
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                            {items.map((item, index) => {
+                                const itemKey = item._key || `item-${index}`;
+                                return (
+                                    <SortableItem key={itemKey} id={itemKey}>
+                                        <ListItemCard
+                                            item={item}
+                                            index={index}
+                                            fieldKeys={fieldKeys}
+                                            fields={fields}
+                                            onRemove={handleRemove}
+                                            onItemChange={handleItemChange}
+                                            renderField={renderField}
                                         />
-                                        <Typography variant="subtitle2" color="textSecondary">
-                                            Элемент {index + 1}
-                                        </Typography>
-                                    </Box>
-                                    <IconButton
-                                        size="small"
-                                        color="error"
-                                        onClick={() => handleRemove(index)}
-                                        title="Удалить элемент"
-                                    >
-                                        <DeleteIcon fontSize="small" />
-                                    </IconButton>
-                                </Box>
-
-                                {/* Поля в столбик */}
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                                    {fieldKeys.map(field => (
-                                        <Box key={field}>
-                                            <Typography
-                                                variant="caption"
-                                                color="textSecondary"
-                                                sx={{ mb: 0.5, display: 'block' }}
-                                            >
-                                                {fields[field].title}
-                                            </Typography>
-                                            {renderField(field, fields[field], item, index)}
-                                        </Box>
-                                    ))}
-                                </Box>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </Box>
+                                    </SortableItem>
+                                );
+                            })}
+                        </Box>
+                    </SortableContext>
+                </DndContext>
             )}
 
             <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -208,3 +320,4 @@ export default function ListDataInput({
         </Box>
     );
 }
+

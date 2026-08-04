@@ -21,9 +21,9 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
             return setting.file_url;
         }
 
-        // Nested file URL from file_urls
-        if (fileUrls && fieldKey) {
-            return fileUrls[fieldKey] || null;
+        // Nested file URL from file_urls (для типа 4 - DataFields)
+        if (fileUrls && fieldKey && !Array.isArray(fileUrls)) {
+            return fileUrls[fieldKey] || fileUrls[fileValue] || null;
         }
 
         return null;
@@ -98,6 +98,7 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
                     onChange={onChange}
                     onFileChange={onFileChange}
                     getFileUrl={getFileUrl}
+                    fileUrls={setting.file_urls || {}}
                 />
             );
 

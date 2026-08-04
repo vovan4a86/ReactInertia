@@ -106,11 +106,25 @@ export default function SettingsFields({ settings, onSave }) {
         });
 
         // Add files
+        console.log('Files to upload:', files);
         Object.entries(files).forEach(([key, file]) => {
             if (file instanceof File) {
-                formData.append(key, file);
+                // Конвертируем ключ из точечной нотации в скобочную, если нужно
+                // settings.7.0.field_name -> settings[7][0][field_name]
+                let formKey = key;
+                if (key.startsWith('settings.') && !key.includes('[')) {
+                    const parts = key.split('.');
+                    formKey = parts[0] + '[' + parts.slice(1).join('][') + ']';
+                }
+                formData.append(formKey, file);
             }
         });
+
+        // Вывод всех данных FormData для отладки
+        console.log('FormData contents:');
+        for (let pair of formData.entries()) {
+            console.log(pair[0], pair[1]);
+        }
 
         await onSave(formData);
         setSaving(false);

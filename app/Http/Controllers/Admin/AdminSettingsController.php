@@ -317,6 +317,12 @@ class AdminSettingsController
      */
     protected function processListData(Setting $setting, mixed $value, Request $request): void
     {
+        \Log::info('processListData called', [
+            'setting_id' => $setting->id,
+            'value' => $value,
+            'all_files' => array_keys($request->allFiles()),
+            'has_files' => $request->allFiles(),
+        ]);
         if (!is_array($value)) {
             return;
         }
@@ -348,11 +354,19 @@ class AdminSettingsController
             }));
         });
 
+
+        \Log::info('processListData before processNestedFiles', [
+            'value' => $value,
+            'old_value' => $oldValue,
+        ]);
+
         // Process files in each row
         $processedValue = [];
         foreach ($value as $row) {
             $processedValue[] = $this->processNestedFiles($row, $params, $request, $setting, $oldValue);
         }
+
+        \Log::info('processListData result', ['processed' => $processedValue]);
 
         $setting->value = json_encode(array_values($processedValue));
         $setting->save();
@@ -400,65 +414,75 @@ class AdminSettingsController
         $setting->save();
     }
 
-    protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData, string $prefix = ''): array
+    protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData): array
     {
+        // Получаем все файлы из запроса
+        $allFiles = $request->allFiles();
+
         foreach ($data as $key => $value) {
+            // Пропускаем системные ключи
+            if ($key === '_key') {
+                continue;
+            }
+
             if (is_array($value)) {
-                $newPrefix = $prefix === '' ? (string)$key : $prefix . '.' . $key;
-                $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? [], $newPrefix);
-            } else {
-                // Формируем имя поля для поиска файла
-                // Для типа 6: settings.{settingId}.{rowIndex}.{fieldName}
-                $fileInputName = $prefix === ''
-                    ? 'settings.' . $setting->id . '.' . $key
-                    : 'settings.' . $setting->id . '.' . $prefix . '.' . $key;
+                $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? []);
+                continue;
+            }
 
-                // Проверяем, есть ли файл в запросе
-                if ($request->hasFile($fileInputName)) {
-                    $file = $request->file($fileInputName);
+            // Проверяем, является ли значение маркером файла
+            $isMarker = $this->isFileUploadMarker($value);
 
-                    // Если это массив файлов (может случиться при неправильной отправке)
-                    if (is_array($file)) {
-                        $file = reset($file); // Берем первый файл
-                    }
+            \Log::info('processNestedFiles field', [
+                'key' => $key,
+                'value' => $value,
+                'is_marker' => $isMarker,
+            ]);
 
-                    if ($file instanceof \Illuminate\Http\UploadedFile) {
-                        $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+            if ($isMarker) {
+                // Извлекаем файл из структуры Laravel
+                $file = $this->extractFileFromRequest($value, $allFiles);
+
+                \Log::info('File extraction result', [
+                    'marker' => $value,
+                    'file_found' => $file !== null,
+                    'file_type' => $file ? get_class($file) : null,
+                ]);
+
+                if ($file instanceof \Illuminate\Http\UploadedFile) {
+                    try {
+                        $extension = $file->getClientOriginalExtension();
+                        $fileName = $this->generateUniqueFileName($setting, $extension);
                         $this->storeFile($file, $fileName);
 
-                        // Delete old file if exists
+                        // Удаляем старый файл если есть
                         $oldFile = $oldData[$key] ?? null;
-                        if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
+                        if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.') && !str_starts_with($oldFile, 'settings[')) {
                             $this->deleteFile($oldFile);
                         }
 
                         $data[$key] = $fileName;
+
+                        \Log::info('File saved successfully', [
+                            'key' => $key,
+                            'file_name' => $fileName,
+                        ]);
+                    } catch (\Exception $e) {
+                        \Log::error('File save error', [
+                            'key' => $key,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                        ]);
                     }
-                } elseif ($this->isFileUploadMarker($value)) {
-                    $fileInputName = $this->convertDotNotationToBrackets($value);
+                } else {
+                    // Файл не найден, но есть старый - сохраняем его
+                    $oldFile = $oldData[$key] ?? null;
+                    $data[$key] = (is_string($oldFile) && !str_starts_with($oldFile, 'settings.') && !str_starts_with($oldFile, 'settings[')) ? $oldFile : null;
 
-                    if ($request->hasFile($fileInputName)) {
-                        $file = $request->file($fileInputName);
-
-                        if (is_array($file)) {
-                            $file = reset($file);
-                        }
-
-                        if ($file instanceof \Illuminate\Http\UploadedFile) {
-                            $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-                            $this->storeFile($file, $fileName);
-
-                            $oldFile = $oldData[$key] ?? null;
-                            if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
-                                $this->deleteFile($oldFile);
-                            }
-
-                            $data[$key] = $fileName;
-                        }
-                    } else {
-                        $oldFile = $oldData[$key] ?? null;
-                        $data[$key] = (is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) ? $oldFile : null;
-                    }
+                    \Log::info('File not found, keeping old', [
+                        'key' => $key,
+                        'old_file' => $data[$key],
+                    ]);
                 }
             }
         }
@@ -467,24 +491,45 @@ class AdminSettingsController
     }
 
     /**
-     * Convert dot notation to bracket notation for file inputs
-     * Example: settings.123.title -> settings[123][title]
+     * Извлекает файл из структуры, созданной Laravel
+     * Пример маркера: settings[7][0][field_1785819796375]
+     * Структура: ['settings' => ['7' => [['field_1785819796375' => UploadedFile]]]]
      */
-    protected function convertDotNotationToBrackets(string $dotNotation): string
+    protected function extractFileFromRequest(string $marker, array $allFiles): ?\Illuminate\Http\UploadedFile
     {
-        $parts = explode('.', $dotNotation);
-        $result = array_shift($parts); // settings
+        // Удаляем settings[ и разбиваем по ][
+        $path = str_replace(['settings[', ']'], '', $marker);
+        $parts = explode('[', $path);
+
+        // parts = ['7', '0', 'field_1785819796375']
+
+        $current = $allFiles['settings'] ?? null;
 
         foreach ($parts as $part) {
-            $result .= '[' . $part . ']';
+            if ($current === null) {
+                return null;
+            }
+
+            if (is_array($current) && array_key_exists($part, $current)) {
+                $current = $current[$part];
+            } elseif (is_array($current) && is_numeric($part) && array_key_exists((int)$part, $current)) {
+                $current = $current[(int)$part];
+            } else {
+                return null;
+            }
         }
 
-        return $result;
+        return $current instanceof \Illuminate\Http\UploadedFile ? $current : null;
     }
 
     protected function isFileUploadMarker(mixed $value): bool
     {
-        return is_string($value) && str_starts_with($value, 'settings.');
+        if (!is_string($value)) {
+            return false;
+        }
+
+        // Проверяем оба формата: settings. и settings[
+        return str_starts_with($value, 'settings.') || str_starts_with($value, 'settings[');
     }
 
     protected function isAssociativeArray(array $arr): bool

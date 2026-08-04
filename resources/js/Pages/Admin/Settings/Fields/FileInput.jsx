@@ -53,8 +53,6 @@ export default function FileInput({
         const uploadKey = name; // settings.{setting.id}
         onFileChange(uploadKey, file);
         onChange(uploadKey); // Передаем ключ как значение, чтобы бэкенд знал что это файл
-
-        console.log('FileInput handleFileSelect:', { uploadKey: name, file });
     };
 
     const handleClear = () => {
@@ -153,7 +151,7 @@ export default function FileInput({
                     startIcon={<UploadIcon />}
                     onClick={() => fileInputRef.current?.click()}
                 >
-                    {placeholder || 'Выбрать файл'}
+                    {'Выбрать файл'}
                 </Button>
 
                 {(hasExistingFile || hasNewFile) && (

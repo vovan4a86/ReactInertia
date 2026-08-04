@@ -74,15 +74,82 @@ class Setting extends Model
         return $value;
     }
 
-    public function getFileUrlAttribute(): ?string
+    public function getFileUrlAttribute(): ?array
     {
-        if (empty($this->value)) {
-            return null;
+        $value = $this->value;
+
+        if (empty($value)) {
+            return [];
         }
 
-        return Storage::disk(self::UPLOAD_DISK)->url(
-            self::UPLOAD_DIR . '/' . $this->value
-        );
+        // Для типа 6 (ListDataInput) - массив объектов
+        if ($this->type === 6 && is_array($value)) {
+            $urls = [];
+            foreach ($value as $rowIndex => $row) {
+                if (is_array($row)) {
+                    foreach ($row as $field => $fieldValue) {
+                        if (is_string($fieldValue) && $this->isStoredFile($fieldValue)) {
+                            if (!isset($urls[$rowIndex])) {
+                                $urls[$rowIndex] = [];
+                            }
+                            $urls[$rowIndex][$field] = asset('storage/' . $fieldValue);
+                        }
+                    }
+                }
+            }
+            return $urls;
+        }
+
+        // Для типа 4 (DataFields) - объект с полями
+        if ($this->type === 4 && is_array($value)) {
+            $urls = [];
+            foreach ($value as $field => $fieldValue) {
+                if (is_string($fieldValue) && $this->isStoredFile($fieldValue)) {
+                    $urls[$fieldValue] = asset('storage/' . $fieldValue);
+                }
+            }
+            return $urls;
+        }
+
+        // Для типа 7 (Gallery) - массив файлов
+        if ($this->type === 7 && is_array($value)) {
+            $urls = [];
+            foreach ($value as $file) {
+                if (is_string($file) && $this->isStoredFile($file)) {
+                    $urls[] = asset('storage/' . $file);
+                }
+            }
+            return $urls;
+        }
+
+        // Для типа 3 (File) - одиночный файл
+        if ($this->type === 3 && is_string($value) && $this->isStoredFile($value)) {
+            return [$value => asset('storage/' . $value)];
+        }
+
+        return [];
+
+//        return Storage::disk(self::UPLOAD_DISK)->url(
+//            self::UPLOAD_DIR . '/' . $this->value
+//        );
+    }
+
+    /**
+     * Check if value is a stored file (not a marker)
+     */
+    protected function isStoredFile($value): bool
+    {
+        if (!is_string($value)) {
+            return false;
+        }
+
+        // Исключаем маркеры
+        if (str_starts_with($value, 'settings.') || str_starts_with($value, 'settings[')) {
+            return false;
+        }
+
+        // Проверяем, что это похоже на имя файла (содержит расширение)
+        return preg_match('/\.[a-zA-Z0-9]{2,4}$/', $value) === 1;
     }
 
     public static function getFilePath(string $filename): string
