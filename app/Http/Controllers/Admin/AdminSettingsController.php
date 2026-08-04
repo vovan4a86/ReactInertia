@@ -400,46 +400,61 @@ class AdminSettingsController
         $setting->save();
     }
 
-    protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData): array
+    protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData, string $prefix = ''): array
     {
         foreach ($data as $key => $value) {
             if (is_array($value)) {
-                $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? []);
+                $newPrefix = $prefix === '' ? (string)$key : $prefix . '.' . $key;
+                $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? [], $newPrefix);
             } else {
                 // Формируем имя поля для поиска файла
-                // Для типа 4: settings.{settingId}.{fieldName}
-                $fileInputName = 'settings.' . $setting->id . '.' . $key;
+                // Для типа 6: settings.{settingId}.{rowIndex}.{fieldName}
+                $fileInputName = $prefix === ''
+                    ? 'settings.' . $setting->id . '.' . $key
+                    : 'settings.' . $setting->id . '.' . $prefix . '.' . $key;
 
                 // Проверяем, есть ли файл в запросе
                 if ($request->hasFile($fileInputName)) {
                     $file = $request->file($fileInputName);
-                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
 
-                    $this->storeFile($file, $fileName);
-
-                    // Delete old file if exists
-                    $oldFile = $oldData[$key] ?? null;
-                    if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
-                        $this->deleteFile($oldFile);
+                    // Если это массив файлов (может случиться при неправильной отправке)
+                    if (is_array($file)) {
+                        $file = reset($file); // Берем первый файл
                     }
 
-                    $data[$key] = $fileName;
-                } elseif ($this->isFileUploadMarker($value)) {
-                    // Старая логика для маркеров (если еще используется)
-                    $fileInputName = $this->convertDotNotationToBrackets($value);
-
-                    if ($request->hasFile($fileInputName)) {
-                        $file = $request->file($fileInputName);
+                    if ($file instanceof \Illuminate\Http\UploadedFile) {
                         $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-
                         $this->storeFile($file, $fileName);
 
+                        // Delete old file if exists
                         $oldFile = $oldData[$key] ?? null;
                         if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
                             $this->deleteFile($oldFile);
                         }
 
                         $data[$key] = $fileName;
+                    }
+                } elseif ($this->isFileUploadMarker($value)) {
+                    $fileInputName = $this->convertDotNotationToBrackets($value);
+
+                    if ($request->hasFile($fileInputName)) {
+                        $file = $request->file($fileInputName);
+
+                        if (is_array($file)) {
+                            $file = reset($file);
+                        }
+
+                        if ($file instanceof \Illuminate\Http\UploadedFile) {
+                            $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+                            $this->storeFile($file, $fileName);
+
+                            $oldFile = $oldData[$key] ?? null;
+                            if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) {
+                                $this->deleteFile($oldFile);
+                            }
+
+                            $data[$key] = $fileName;
+                        }
                     } else {
                         $oldFile = $oldData[$key] ?? null;
                         $data[$key] = (is_string($oldFile) && !str_starts_with($oldFile, 'settings.')) ? $oldFile : null;
@@ -450,7 +465,6 @@ class AdminSettingsController
 
         return $data;
     }
-
 
     /**
      * Convert dot notation to bracket notation for file inputs

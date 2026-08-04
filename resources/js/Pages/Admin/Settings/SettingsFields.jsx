@@ -69,8 +69,21 @@ export default function SettingsFields({ settings, onSave }) {
                 if (value.length === 0) {
                     formData.append(`settings[${settingId}]`, JSON.stringify([]));
                 } else {
+                    // Проверяем, является ли массив массивом объектов (ListDataInput)
+                    const isArrayOfObjects = value.every(item => typeof item === 'object' && item !== null);
+
                     value.forEach((item, index) => {
-                        if (typeof item === 'object' && item !== null) {
+                        if (isArrayOfObjects) {
+                            // Для ListDataInput - каждый объект с полями
+                            Object.entries(item).forEach(([field, fieldVal]) => {
+                                if (fieldVal !== null && fieldVal !== undefined) {
+                                    formData.append(
+                                        `settings[${settingId}][${index}][${field}]`,
+                                        fieldVal
+                                    );
+                                }
+                            });
+                        } else if (typeof item === 'object' && item !== null) {
                             Object.entries(item).forEach(([field, fieldVal]) => {
                                 if (fieldVal !== null && fieldVal !== undefined) {
                                     formData.append(
@@ -89,28 +102,6 @@ export default function SettingsFields({ settings, onSave }) {
                         }
                     });
                 }
-            } else if (typeof value === 'object' && value !== null) {
-                const entries = Object.entries(value);
-                if (entries.length === 0) {
-                    formData.append(`settings[${settingId}]`, JSON.stringify({}));
-                } else {
-                    entries.forEach(([field, fieldVal]) => {
-                        if (fieldVal !== null && fieldVal !== undefined) {
-                            formData.append(
-                                `settings[${settingId}][${field}]`,
-                                fieldVal
-                            );
-                        } else {
-                            formData.append(
-                                `settings[${settingId}][${field}]`,
-                                ''
-                            );
-                        }
-                    });
-                }
-            } else {
-                // Для редактора передаем HTML как есть
-                formData.append(`settings[${settingId}]`, String(value));
             }
         });
 

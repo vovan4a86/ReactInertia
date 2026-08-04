@@ -159,10 +159,6 @@ export default function SettingsIndex() {
         });
     };
 
-    const handleSnackbarClose = () => {
-        setSnackbar(prev => ({ ...prev, open: false }));
-    };
-
     return (
         <AdminLayout>
             <Box>

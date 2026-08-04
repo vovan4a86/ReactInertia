@@ -8,12 +8,15 @@ import {
     TableContainer,
     TableHead,
     TableRow,
+    Card,
+    CardContent,
     Paper,
     Button,
+    Typography
 } from '@mui/material';
 import {
     Delete as DeleteIcon,
-    DragIndicator as DragIcon,
+    DragIndicator as DragIndicatorIcon,
     Add as AddIcon,
 } from '@mui/icons-material';
 import TextFieldInput from './TextFieldInput';
@@ -52,34 +55,39 @@ export default function ListDataInput({
     };
 
     const renderField = (field, params, item, index) => {
-        const fieldName = `${name}[${field}][${index}]`;
+        // Правильный формат имени файла для вложенных элементов
+        // settings.{settingId}.{index}.{field}
+        const fileInputName = `${name}.${index}.${field}`;
+        const fieldInputName = `${name}[${index}][${field}]`;
 
         switch (params.type) {
             case 0:
                 return (
                     <TextFieldInput
-                        name={fieldName}
+                        name={fieldInputName}
                         value={item[field] || ''}
                         onChange={(val) => handleItemChange(index, field, val)}
                         placeholder={params.title}
+                        fullWidth
                     />
                 );
 
             case 1:
                 return (
                     <TextareaInput
-                        name={fieldName}
+                        name={fieldInputName}
                         value={item[field] || ''}
                         onChange={(val) => handleItemChange(index, field, val)}
                         placeholder={params.title}
                         rows={2}
+                        fullWidth
                     />
                 );
 
             case 2:
                 return (
                     <EditorInput
-                        name={fieldName}
+                        name={fieldInputName}
                         value={item[field] || ''}
                         onChange={(val) => handleItemChange(index, field, val)}
                     />
@@ -88,7 +96,7 @@ export default function ListDataInput({
             case 3:
                 return (
                     <FileInput
-                        name={fieldName}
+                        name={fileInputName}
                         value={item[field]}
                         fileUrl={getFileUrl(item[field], item._fileUrls, field)}
                         onChange={(val) => handleItemChange(index, field, val)}
@@ -100,107 +108,99 @@ export default function ListDataInput({
             default:
                 return (
                     <TextFieldInput
-                        name={fieldName}
+                        name={fieldInputName}
                         value={item[field] || ''}
                         onChange={(val) => handleItemChange(index, field, val)}
                         placeholder={params.title}
+                        fullWidth
                     />
                 );
         }
     };
 
-    // Если нет полей, показываем сообщение
     if (fieldKeys.length === 0) {
         return (
             <Box sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <p>Нет настроенных полей для этого списка</p>
+                <Typography color="textSecondary">Нет настроенных полей для этого списка</Typography>
             </Box>
         );
     }
 
     return (
         <Box>
-            <TableContainer component={Paper} variant="outlined">
-                <Table size="small" sx={{ minWidth: 650 }}>
-                    <TableHead>
-                        <TableRow sx={{ bgcolor: 'grey.50' }}>
-                            <TableCell width={40} padding="checkbox" />
-                            {fieldKeys.map(field => (
-                                <TableCell key={field} sx={{ fontWeight: 600 }}>
-                                    {fields[field].title}
-                                </TableCell>
-                            ))}
-                            <TableCell width={40} padding="checkbox" />
-                        </TableRow>
-                    </TableHead>
-
-                    <TableBody>
-                        {items.length === 0 ? (
-                            <TableRow>
-                                <TableCell
-                                    colSpan={fieldKeys.length + 2}
-                                    align="center"
-                                    sx={{ py: 3, color: 'text.secondary' }}
-                                >
-                                    Нет элементов. Нажмите "Добавить" для создания.
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            items.map((item, index) => (
-                                <TableRow
-                                    key={index}
-                                    hover
-                                    sx={{ '&:hover': { bgcolor: 'action.hover' } }}
-                                >
-                                    <TableCell padding="checkbox">
-                                        <DragIcon
+            {items.length === 0 ? (
+                <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                    <Typography color="textSecondary" sx={{ mb: 1 }}>
+                        Нет элементов. Нажмите "Добавить" для создания.
+                    </Typography>
+                </Paper>
+            ) : (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {items.map((item, index) => (
+                        <Card key={index} variant="outlined">
+                            <CardContent sx={{ pb: 1 }}>
+                                {/* Заголовок карточки с кнопкой удаления */}
+                                <Box sx={{
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    mb: 2,
+                                }}>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <DragIndicatorIcon
                                             sx={{
                                                 color: 'text.disabled',
                                                 cursor: 'grab',
                                                 fontSize: 20,
                                             }}
                                         />
-                                    </TableCell>
+                                        <Typography variant="subtitle2" color="textSecondary">
+                                            Элемент {index + 1}
+                                        </Typography>
+                                    </Box>
+                                    <IconButton
+                                        size="small"
+                                        color="error"
+                                        onClick={() => handleRemove(index)}
+                                        title="Удалить элемент"
+                                    >
+                                        <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
 
+                                {/* Поля в столбик */}
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     {fieldKeys.map(field => (
-                                        <TableCell key={field} sx={{ py: 1 }}>
+                                        <Box key={field}>
+                                            <Typography
+                                                variant="caption"
+                                                color="textSecondary"
+                                                sx={{ mb: 0.5, display: 'block' }}
+                                            >
+                                                {fields[field].title}
+                                            </Typography>
                                             {renderField(field, fields[field], item, index)}
-                                        </TableCell>
+                                        </Box>
                                     ))}
+                                </Box>
+                            </CardContent>
+                        </Card>
+                    ))}
+                </Box>
+            )}
 
-                                    <TableCell padding="checkbox">
-                                        <IconButton
-                                            size="small"
-                                            color="error"
-                                            onClick={() => handleRemove(index)}
-                                            title="Удалить элемент"
-                                        >
-                                            <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
-
-            <Box sx={{ mt: 1 }}>
+            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
                 <Button
                     size="small"
                     startIcon={<AddIcon />}
                     onClick={handleAdd}
-                    variant="text"
+                    variant="outlined"
                 >
                     Добавить элемент
                 </Button>
 
                 {items.length > 0 && (
-                    <Typography
-                        variant="caption"
-                        color="textSecondary"
-                        sx={{ ml: 2 }}
-                    >
+                    <Typography variant="caption" color="textSecondary">
                         Всего элементов: {items.length}
                     </Typography>
                 )}
