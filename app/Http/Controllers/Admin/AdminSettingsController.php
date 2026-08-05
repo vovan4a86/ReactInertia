@@ -340,12 +340,6 @@ class AdminSettingsController
      */
     protected function processListData(Setting $setting, mixed $value, Request $request): void
     {
-        \Log::info('processListData called', [
-            'setting_id' => $setting->id,
-            'value' => $value,
-            'all_files' => array_keys($request->allFiles()),
-            'has_files' => $request->allFiles(),
-        ]);
         if (!is_array($value)) {
             return;
         }
@@ -377,19 +371,13 @@ class AdminSettingsController
             }));
         });
 
-
-        \Log::info('processListData before processNestedFiles', [
-            'value' => $value,
-            'old_value' => $oldValue,
-        ]);
-
         // Process files in each row
         $processedValue = [];
-        foreach ($value as $row) {
-            $processedValue[] = $this->processNestedFiles($row, $params, $request, $setting, $oldValue);
+        foreach ($value as $index => $row) {
+            // Передаем старые данные для этого индекса
+            $oldRow = $oldValue[$index] ?? [];
+            $processedValue[] = $this->processNestedFiles($row, $params, $request, $setting, $oldRow);
         }
-
-        \Log::info('processListData result', ['processed' => $processedValue]);
 
         $setting->value = json_encode(array_values($processedValue));
         $setting->save();
@@ -442,6 +430,12 @@ class AdminSettingsController
         // Получаем все файлы из запроса
         $allFiles = $request->allFiles();
 
+        \Log::info('processNestedFiles started', [
+            'data_keys' => array_keys($data),
+            'old_data_keys' => array_keys($oldData),
+            'files_count' => count($allFiles)
+        ]);
+
         foreach ($data as $key => $value) {
             // Пропускаем системные ключи
             if ($key === '_key') {
@@ -456,21 +450,9 @@ class AdminSettingsController
             // Проверяем, является ли значение маркером файла
             $isMarker = $this->isFileUploadMarker($value);
 
-            \Log::info('processNestedFiles field', [
-                'key' => $key,
-                'value' => $value,
-                'is_marker' => $isMarker,
-            ]);
-
             if ($isMarker) {
                 // Извлекаем файл из структуры Laravel
                 $file = $this->extractFileFromRequest($value, $allFiles);
-
-                \Log::info('File extraction result', [
-                    'marker' => $value,
-                    'file_found' => $file !== null,
-                    'file_type' => $file ? get_class($file) : null,
-                ]);
 
                 if ($file instanceof \Illuminate\Http\UploadedFile) {
                     try {
@@ -480,7 +462,7 @@ class AdminSettingsController
 
                         // Удаляем старый файл если есть
                         $oldFile = $oldData[$key] ?? null;
-                        if ($oldFile && is_string($oldFile) && !str_starts_with($oldFile, 'settings.') && !str_starts_with($oldFile, 'settings[')) {
+                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
                             $this->deleteFile($oldFile);
                         }
 
@@ -494,17 +476,24 @@ class AdminSettingsController
                         \Log::error('File save error', [
                             'key' => $key,
                             'error' => $e->getMessage(),
-                            'trace' => $e->getTraceAsString(),
                         ]);
+
+                        // В случае ошибки сохраняем старый файл
+                        $oldFile = $oldData[$key] ?? null;
+                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
+                            $data[$key] = $oldFile;
+                        }
                     }
                 } else {
-                    // Файл не найден, но есть старый - сохраняем его
+                    // Файл не найден - сохраняем старый если есть
                     $oldFile = $oldData[$key] ?? null;
-                    $data[$key] = (is_string($oldFile) && !str_starts_with($oldFile, 'settings.') && !str_starts_with($oldFile, 'settings[')) ? $oldFile : null;
+                    $data[$key] = ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile))
+                        ? $oldFile
+                        : null;
 
                     \Log::info('File not found, keeping old', [
                         'key' => $key,
-                        'old_file' => $data[$key],
+                        'result' => $data[$key],
                     ]);
                 }
             }

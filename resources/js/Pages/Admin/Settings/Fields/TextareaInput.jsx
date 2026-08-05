@@ -31,7 +31,6 @@ export default function TextareaInput({
             variant="outlined"
             multiline
             rows={rows}
-            maxRows={maxRows}
             {...props}
         />
     );

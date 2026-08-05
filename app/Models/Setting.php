@@ -97,7 +97,7 @@ class Setting extends Model
                     }
                 }
             }
-            return $urls;
+            return $urls; // Возвращаем индексированный массив с ключами по индексам
         }
 
         // Для типа 4 (DataFields) - объект с полями
@@ -105,7 +105,7 @@ class Setting extends Model
             $urls = [];
             foreach ($value as $field => $fieldValue) {
                 if (is_string($fieldValue) && $this->isStoredFile($fieldValue)) {
-                    $urls[$fieldValue] = asset('storage/' . $fieldValue);
+                    $urls[$field] = asset('storage/' . $fieldValue); // Ключ - имя поля
                 }
             }
             return $urls;
@@ -114,9 +114,9 @@ class Setting extends Model
         // Для типа 7 (Gallery) - массив файлов
         if ($this->type === 7 && is_array($value)) {
             $urls = [];
-            foreach ($value as $file) {
+            foreach ($value as $index => $file) {
                 if (is_string($file) && $this->isStoredFile($file)) {
-                    $urls[] = asset('storage/' . $file);
+                    $urls[$index] = asset('storage/' . $file);
                 }
             }
             return $urls;
@@ -128,10 +128,6 @@ class Setting extends Model
         }
 
         return [];
-
-//        return Storage::disk(self::UPLOAD_DISK)->url(
-//            self::UPLOAD_DIR . '/' . $this->value
-//        );
     }
 
     /**

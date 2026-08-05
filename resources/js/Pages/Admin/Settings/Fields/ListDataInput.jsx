@@ -223,11 +223,7 @@ export default function ListDataInput({
                     <FileInput
                         name={`${name}[${index}][${field}]`}
                         value={item[field]}
-                        fileUrl={
-                            getFileUrl(item[field], fileUrls, field) ||
-                            (fileUrls[index] && fileUrls[index][field]) ||
-                            fileUrls[item[field]]
-                        }
+                        fileUrl={getFileUrl(item[field], fileUrls, field, index)} // Передаем index
                         onChange={(val) => handleItemChange(index, field, val)}
                         onFileChange={onFileChange}
                         placeholder={params.title}
