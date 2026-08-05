@@ -92,6 +92,12 @@ class AdminSettingsController
 
         $groups = SettingGroup::where('page_id', 0)->orderBy('order')->get();
 
+        \Log::info('Edit Setting Modal:', [
+            'id' => $id,
+            'setting' => $setting->toArray(),
+            'has_setting_group_id' => $setting->setting_group_id,
+        ]);
+
         // Всегда возвращаем главную страницу, но с данными для модалки
         return Inertia::render('Admin/Settings/Index', [
             // Данные для основной страницы

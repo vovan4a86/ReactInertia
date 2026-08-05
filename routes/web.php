@@ -44,8 +44,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::put('/group/{id}', [AdminSettingsController::class, 'updateGroup'])->name('group.update');
         Route::delete('/group/{id}', [AdminSettingsController::class, 'destroyGroup'])->name('group.delete');
 
-        Route::get('/edit', [AdminSettingsController::class, 'editSetting'])->name('edit');
-        Route::get('/{id}/edit', [AdminSettingsController::class, 'editSetting'])->name('edit');
+        Route::get('/edit/{id?}', [AdminSettingsController::class, 'editSetting'])->name('edit');
         Route::post('/setting', [AdminSettingsController::class, 'storeSetting'])->name('store');
         Route::put('/setting/{id}', [AdminSettingsController::class, 'updateSetting'])->name('update');
 

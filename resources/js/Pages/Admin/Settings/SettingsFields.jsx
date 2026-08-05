@@ -5,9 +5,11 @@ import {
     Typography,
     Divider,
     CircularProgress,
+    IconButton,
 } from '@mui/material';
-import { Save as SaveIcon } from '@mui/icons-material';
+import { Save as SaveIcon, Edit as EditIcon } from '@mui/icons-material';
 import FieldRenderer from './Fields/FieldRenderer';
+import {useModal} from "@/Contexts/Admin/ModalContext.jsx";
 
 export default function SettingsFields({ settings, onSave }) {
     // Инициализируем values всеми текущими значениями настроек
@@ -20,6 +22,8 @@ export default function SettingsFields({ settings, onSave }) {
     });
     const [files, setFiles] = useState({});
     const [saving, setSaving] = useState(false);
+
+    const { openModal } = useModal();
 
     // Обновляем values при изменении settings
     useEffect(() => {
@@ -34,6 +38,12 @@ export default function SettingsFields({ settings, onSave }) {
             return newValues;
         });
     }, [settings]);
+
+    const handleEditSettings = (settingId) => {
+        const url = route('admin.settings.edit', { id: settingId });
+        console.log('Opening modal URL:', url);
+        openModal(url);
+    };
 
     const handleFieldChange = (settingId, value) => {
         setValues(prev => ({ ...prev, [settingId]: value }));
@@ -156,14 +166,13 @@ export default function SettingsFields({ settings, onSave }) {
                                     </Typography>
                                 )}
                             </Box>
-                            <Button
+                            <IconButton
                                 size="small"
-                                variant="text"
-                                href={`/admin/settings/${setting.id}/edit`}
+                                onClick={() => handleEditSettings(setting.id)}
                                 sx={{ ml: 2, flexShrink: 0 }}
                             >
-                                редактировать
-                            </Button>
+                                <EditIcon fontSize="small" />
+                            </IconButton>
                         </Box>
 
                         {/* Field Renderer */}
