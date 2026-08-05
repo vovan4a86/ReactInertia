@@ -2,18 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { usePage, useForm, router } from '@inertiajs/react';
 import {
     Box,
-    Paper,
-    Typography,
     TextField,
     Button,
+    Typography,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
-    Grid,
     Alert,
-    CircularProgress,
     Divider,
+    CircularProgress,
+    Snackbar,
+    Alert as MuiAlert,
+    Stack,
 } from '@mui/material';
 import {
     Save as SaveIcon,
@@ -22,9 +23,8 @@ import {
 import EditParams from './EditParams';
 import { useModal } from '@/Contexts/Admin/ModalContext.jsx';
 
-export default function Edit({ modalId }) {
+export default function Edit({ setting, groups, types }) {
     const { closeModal } = useModal();
-    const { setting, groups, types, errors: serverErrors, flash } = usePage().props;
 
     const [formData, setFormData] = useState({
         id: setting?.id || null,
@@ -37,28 +37,16 @@ export default function Edit({ modalId }) {
     });
 
     const [errors, setErrors] = useState({});
-    const [loading, setLoading] = useState(false);
+    const [processing, setProcessing] = useState(false);
     const [snackbar, setSnackbar] = useState({
         open: false,
         message: '',
         severity: 'success',
     });
 
-    const { data, setData, post, processing } = useForm({
-        id: setting?.id || null,
-        setting_group_id: setting?.setting_group_id || '',
-        code: setting?.code || '',
-        type: setting?.type || 0,
-        name: setting?.name || '',
-        description: setting?.description || '',
-        params: setting?.params || {},
-    });
-
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
-        setData(field, value);
 
-        // Clear error for changed field
         if (errors[field]) {
             setErrors(prev => {
                 const newErrors = { ...prev };
@@ -72,7 +60,6 @@ export default function Edit({ modalId }) {
         const newType = parseInt(e.target.value);
         handleChange('type', newType);
 
-        // Reset params when type changes
         if (![4, 6].includes(newType)) {
             handleChange('params', {});
         }
@@ -84,18 +71,7 @@ export default function Edit({ modalId }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        setLoading(true);
-        setErrors({});
-
-        post('/admin/settings/setting', {
-            onSuccess: () => {
-                closeModal();
-            },
-        });
-    };
-
-    const handleBack = () => {
-        e.preventDefault();
+        setProcessing(true);
 
         const isNew = !formData.id;
         const url = isNew
@@ -124,6 +100,9 @@ export default function Edit({ modalId }) {
                     severity: 'error'
                 });
             },
+            onFinish: () => {
+                setProcessing(false);
+            },
         });
     };
 
@@ -145,26 +124,18 @@ export default function Edit({ modalId }) {
     };
 
     return (
-        <Box sx={{ maxWidth: 800 }}>
-            {/* Header */}
-            <Box sx={{
-                mb: 3,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 2,
-            }}>
-                <Typography variant="h6">
-                    {isNew ? 'Создание настройки' : 'Редактирование настройки'}
-                </Typography>
-            </Box>
+        <Box>
+            {/* Заголовок */}
+            <Typography variant="h6" gutterBottom>
+                {isNew ? 'Новая настройка' : 'Редактирование настройки'}
+            </Typography>
 
-            {/* Form */}
             <Box component="form" onSubmit={handleSubmit}>
-                <Grid container spacing={3}>
-                    {/* Name */}
-                    <Grid item xs={12}>
+                <Stack spacing={2.5}>
+                    {/* 1) Название + Группа (2:1) */}
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                         <TextField
-                            fullWidth
+                            sx={{ flex: 2 }}
                             label="Название"
                             value={formData.name}
                             onChange={(e) => handleChange('name', e.target.value)}
@@ -172,64 +143,9 @@ export default function Edit({ modalId }) {
                             helperText={errors.name}
                             required
                             placeholder="Введите название настройки"
+                            size="small"
                         />
-                    </Grid>
-
-                    {/* Description */}
-                    <Grid item xs={12}>
-                        <TextField
-                            fullWidth
-                            label="Описание (подсказка)"
-                            value={formData.description}
-                            onChange={(e) => handleChange('description', e.target.value)}
-                            error={!!errors.description}
-                            helperText={errors.description}
-                            multiline
-                            rows={2}
-                            placeholder="Описание или подсказка для пользователя"
-                        />
-                    </Grid>
-
-                    {/* Code and Type */}
-                    <Grid item xs={12} md={6}>
-                        <TextField
-                            fullWidth
-                            label="Системный ключ"
-                            value={formData.code}
-                            onChange={(e) => handleChange('code', e.target.value)}
-                            error={!!errors.code}
-                            helperText={errors.code || 'Уникальный ключ для доступа из кода'}
-                            required
-                            placeholder="Например: site_title"
-                        />
-                    </Grid>
-
-                    <Grid item xs={12} md={6}>
-                        <FormControl fullWidth error={!!errors.type}>
-                            <InputLabel>Тип</InputLabel>
-                            <Select
-                                value={formData.type}
-                                onChange={handleTypeChange}
-                                label="Тип"
-                                required
-                            >
-                                {types && Object.entries(types).map(([value, label]) => (
-                                    <MenuItem key={value} value={parseInt(value)}>
-                                        {label}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                            {errors.type && (
-                                <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 2 }}>
-                                    {errors.type}
-                                </Typography>
-                            )}
-                        </FormControl>
-                    </Grid>
-
-                    {/* Group */}
-                    <Grid item xs={12}>
-                        <FormControl fullWidth error={!!errors.setting_group_id}>
+                        <FormControl sx={{ flex: 1 }} error={!!errors.setting_group_id} size="small">
                             <InputLabel>Группа</InputLabel>
                             <Select
                                 value={formData.setting_group_id}
@@ -244,58 +160,128 @@ export default function Edit({ modalId }) {
                                 ))}
                             </Select>
                             {errors.setting_group_id && (
-                                <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 2 }}>
+                                <Typography variant="caption" color="error">
                                     {errors.setting_group_id}
                                 </Typography>
                             )}
                         </FormControl>
-                    </Grid>
+                    </Stack>
 
-                    {/* Type Description */}
-                    <Grid item xs={12}>
-                        <Alert severity="info" variant="outlined">
-                            {getTypeDescription(formData.type)}
-                        </Alert>
-                    </Grid>
+                    {/* 2) Описание — одна строка */}
+                    <TextField
+                        fullWidth
+                        label="Описание (подсказка)"
+                        value={formData.description}
+                        onChange={(e) => handleChange('description', e.target.value)}
+                        error={!!errors.description}
+                        helperText={errors.description}
+                        size="small"
+                        placeholder="Краткое описание или подсказка для пользователя"
+                    />
 
-                    {/* Params Section */}
+                    {/* 3) Системный ключ + Тип (1:1) */}
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                        <TextField
+                            sx={{ flex: 1 }}
+                            label="Системный ключ"
+                            value={formData.code}
+                            onChange={(e) => handleChange('code', e.target.value)}
+                            error={!!errors.code}
+                            helperText={errors.code || 'Уникальный ключ для доступа из кода'}
+                            required
+                            placeholder="Например: site_title"
+                            size="small"
+                        />
+                        <FormControl sx={{ flex: 1 }} error={!!errors.type} size="small">
+                            <InputLabel>Тип</InputLabel>
+                            <Select
+                                value={formData.type}
+                                onChange={handleTypeChange}
+                                label="Тип"
+                                required
+                            >
+                                {types && Object.entries(types).map(([value, label]) => (
+                                    <MenuItem key={value} value={parseInt(value)}>
+                                        {label}
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                            {errors.type && (
+                                <Typography variant="caption" color="error">
+                                    {errors.type}
+                                </Typography>
+                            )}
+                        </FormControl>
+                    </Stack>
+
+                    {/* 4) Описание типа */}
+                    <Alert severity="info" variant="outlined" sx={{ '& .MuiAlert-message': { fontSize: '0.875rem' } }}>
+                        {getTypeDescription(formData.type)}
+                    </Alert>
+
+                    {/* Параметры (для галереи/повторителя) */}
                     {showParams && (
-                        <Grid item xs={12}>
-                            <Divider sx={{ my: 1 }} />
-                            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-                                Параметры полей
+                        <>
+                            <Divider />
+                            <Typography variant="subtitle2" color="text.secondary">
+                                Настройка параметров
                             </Typography>
-                            <Typography variant="body2" color="textSecondary">
-                                Настройка параметров в разработке...
+                            <Typography variant="body2" color="text.disabled">
+                                Дополнительные параметры для выбранного типа настройки
                             </Typography>
-                        </Grid>
+                            <EditParams
+                                type={formData.type}
+                                params={formData.params}
+                                types={types}
+                                onChange={handleParamsChange}
+                            />
+                        </>
                     )}
-                </Grid>
+                </Stack>
 
-                {/* Actions */}
-                <Box sx={{
-                    mt: 4,
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    gap: 2,
-                }}>
+                {/* Кнопки */}
+                <Stack
+                    direction="row"
+                    spacing={1.5}
+                    justifyContent="flex-end"
+                    sx={{ mt: 3 }}
+                >
                     <Button
                         variant="outlined"
                         onClick={() => closeModal()}
                         disabled={processing}
+                        size="small"
                     >
                         Отмена
                     </Button>
                     <Button
                         type="submit"
                         variant="contained"
-                        startIcon={processing ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                        startIcon={processing ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
                         disabled={processing}
+                        size="small"
                     >
                         {processing ? 'Сохранение...' : isNew ? 'Создать' : 'Сохранить'}
                     </Button>
-                </Box>
+                </Stack>
             </Box>
+
+            {/* Уведомления */}
+            <Snackbar
+                open={snackbar.open}
+                autoHideDuration={3000}
+                onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+            >
+                <MuiAlert
+                    severity={snackbar.severity}
+                    variant="filled"
+                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+                    sx={{ width: '100%' }}
+                >
+                    {snackbar.message}
+                </MuiAlert>
+            </Snackbar>
         </Box>
     );
 }

@@ -37,7 +37,11 @@ export default function SettingsIndex() {
     const { openModal, setModalFromProps } = useModal();
 
     const handleOpenSettings = () => {
-        openModal(route('admin.settings.edit'));
+        if (activeGroup?.id) {
+            openModal(route('admin.settings.edit', { setting_group_id: activeGroup.id }));
+        } else {
+            openModal(route('admin.settings.edit'));
+        }
     };
 
     useEffect(() => {
@@ -339,10 +343,15 @@ export default function SettingsIndex() {
                                     size="small"
                                     startIcon={<AddIcon />}
                                     onClick={handleOpenSettings}
-                                    // href={`/admin/settings/edit?setting_group_id=${activeGroup.id}`}
+                                    disabled={!activeGroup}
                                 >
                                     Добавить настройку
                                 </Button>
+                                {!activeGroup && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                        Выберите группу слева
+                                    </Typography>
+                                )}
                             </Box>
 
                             {/* Settings Fields */}
