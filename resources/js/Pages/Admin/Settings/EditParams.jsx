@@ -1,4 +1,4 @@
-import React from 'react';
+import React, {useState} from 'react';
 import {
     Box,
     Table,
@@ -25,12 +25,13 @@ import {
 export default function EditParams({ type, params, types, onChange }) {
     const fields = params?.fields || {};
     const fieldKeys = Object.keys(fields);
+    const [errors, setErrors] = useState({});
 
     const handleAddField = () => {
-        const newKey = `field_${Date.now()}`;
+        const tempKey = `temp_${Date.now()}`;
         const newFields = {
             ...fields,
-            [newKey]: {
+            [tempKey]: {
                 type: 0,
                 title: '',
             },
@@ -41,6 +42,9 @@ export default function EditParams({ type, params, types, onChange }) {
     const handleRemoveField = (key) => {
         const newFields = { ...fields };
         delete newFields[key];
+        const newErrors = { ...errors };
+        delete newErrors[key];
+        setErrors(newErrors);
         onChange({ fields: newFields });
     };
 
@@ -56,12 +60,30 @@ export default function EditParams({ type, params, types, onChange }) {
     };
 
     const handleKeyChange = (oldKey, newKey) => {
-        if (oldKey === newKey || !newKey.trim()) return;
+        const trimmedNewKey = newKey.trim();
+
+        if (oldKey === trimmedNewKey) return;
+
+        const newErrors = { ...errors };
+
+        if (!trimmedNewKey) {
+            newErrors[oldKey] = 'Ключ обязателен';
+        } else if (Object.keys(fields).some(key => key !== oldKey && key === trimmedNewKey)) {
+            newErrors[oldKey] = 'Такой ключ уже существует';
+        } else {
+            delete newErrors[oldKey];
+        }
+
+        setErrors(newErrors);
+
+        if (!trimmedNewKey || Object.keys(fields).some(key => key !== oldKey && key === trimmedNewKey)) {
+            return;
+        }
 
         const newFields = {};
         Object.entries(fields).forEach(([key, value]) => {
             if (key === oldKey) {
-                newFields[newKey] = value;
+                newFields[trimmedNewKey] = value;
             } else {
                 newFields[key] = value;
             }
@@ -69,7 +91,6 @@ export default function EditParams({ type, params, types, onChange }) {
         onChange({ fields: newFields });
     };
 
-    // Available types for sub-fields
     const availableTypes = Object.entries(types)
         .filter(([value]) => ['0', '1', '2', '3'].includes(value))
         .reduce((acc, [value, label]) => {
@@ -82,10 +103,10 @@ export default function EditParams({ type, params, types, onChange }) {
             <TableContainer component={Paper} variant="outlined">
                 <Table size="small">
                     <TableHead>
-                        <TableRow sx={{ bgcolor: 'grey.50' }}>
+                        <TableRow>
                             <TableCell width={40} padding="checkbox" />
                             <TableCell>Название поля</TableCell>
-                            <TableCell width={200}>Ключ</TableCell>
+                            <TableCell width={200}>Ключ *</TableCell>
                             <TableCell width={200}>Тип</TableCell>
                             <TableCell width={40} padding="checkbox" />
                         </TableRow>
@@ -104,8 +125,8 @@ export default function EditParams({ type, params, types, onChange }) {
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            fieldKeys.map((key) => (
-                                <TableRow key={key} hover>
+                            fieldKeys.map((key, index) => (
+                                <TableRow key={index} hover>
                                     <TableCell padding="checkbox">
                                         <DragIcon
                                             sx={{
@@ -133,8 +154,18 @@ export default function EditParams({ type, params, types, onChange }) {
                                             size="small"
                                             value={key}
                                             onChange={(e) => handleKeyChange(key, e.target.value)}
+                                            onFocus={() => {
+                                                if (errors[key]) {
+                                                    const newErrors = { ...errors };
+                                                    delete newErrors[key];
+                                                    setErrors(newErrors);
+                                                }
+                                            }}
                                             placeholder="Ключ"
                                             variant="outlined"
+                                            required
+                                            error={!!errors[key]}
+                                            helperText={errors[key]}
                                         />
                                     </TableCell>
 
@@ -187,7 +218,6 @@ export default function EditParams({ type, params, types, onChange }) {
                 )}
             </Box>
 
-            {/* Help text */}
             <Box sx={{ mt: 2, p: 2, bgcolor: 'info.lighter', borderRadius: 1 }}>
                 <Typography variant="body2" color="textSecondary">
                     <strong>Подсказка:</strong> Здесь вы можете настроить поля для отображения в типах
@@ -198,3 +228,4 @@ export default function EditParams({ type, params, types, onChange }) {
         </Box>
     );
 }
+
