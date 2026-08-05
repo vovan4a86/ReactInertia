@@ -205,7 +205,6 @@ export default function SettingsFields({ settings, onSave }) {
                 p: 2,
                 borderTop: 1,
                 borderColor: 'divider',
-                bgcolor: 'grey.50',
                 display: 'flex',
                 justifyContent: 'flex-end',
             }}>

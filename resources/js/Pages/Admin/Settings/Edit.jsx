@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { usePage, useForm, router } from '@inertiajs/react';
+import React, {useState, useEffect} from 'react';
+import {usePage, useForm, router} from '@inertiajs/react';
 import {
     Box,
     TextField,
@@ -12,19 +12,16 @@ import {
     Alert,
     Divider,
     CircularProgress,
-    Snackbar,
-    Alert as MuiAlert,
     Stack,
 } from '@mui/material';
 import {
     Save as SaveIcon,
-    ArrowBack as BackIcon,
 } from '@mui/icons-material';
 import EditParams from './EditParams';
-import { useModal } from '@/Contexts/Admin/ModalContext.jsx';
+import {useModal} from '@/Contexts/Admin/ModalContext.jsx';
 
-export default function Edit({ setting, groups, types }) {
-    const { closeModal } = useModal();
+export default function Edit({setting, groups, types}) {
+    const {closeModal} = useModal();
 
     const [formData, setFormData] = useState({
         id: setting?.id || null,
@@ -38,18 +35,13 @@ export default function Edit({ setting, groups, types }) {
 
     const [errors, setErrors] = useState({});
     const [processing, setProcessing] = useState(false);
-    const [snackbar, setSnackbar] = useState({
-        open: false,
-        message: '',
-        severity: 'success',
-    });
 
     const handleChange = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        setFormData(prev => ({...prev, [field]: value}));
 
         if (errors[field]) {
             setErrors(prev => {
-                const newErrors = { ...prev };
+                const newErrors = {...prev};
                 delete newErrors[field];
                 return newErrors;
             });
@@ -80,25 +72,11 @@ export default function Edit({ setting, groups, types }) {
         const method = isNew ? 'post' : 'put';
 
         router[method](url, formData, {
-            onSuccess: (page) => {
-                if (page.props.flash?.success) {
-                    setSnackbar({
-                        open: true,
-                        message: page.props.flash.success,
-                        severity: 'success'
-                    });
-                    setTimeout(() => closeModal(), 1000);
-                } else {
-                    closeModal();
-                }
+            onSuccess: () => {
+                setTimeout(() => closeModal(), 1000);
             },
             onError: (errs) => {
                 setErrors(errs);
-                setSnackbar({
-                    open: true,
-                    message: 'Ошибка при сохранении',
-                    severity: 'error'
-                });
             },
             onFinish: () => {
                 setProcessing(false);
@@ -133,9 +111,9 @@ export default function Edit({ setting, groups, types }) {
             <Box component="form" onSubmit={handleSubmit}>
                 <Stack spacing={2.5}>
                     {/* 1) Название + Группа (2:1) */}
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <Stack direction={{xs: 'column', sm: 'row'}} spacing={2}>
                         <TextField
-                            sx={{ flex: 2 }}
+                            sx={{flex: 2}}
                             label="Название"
                             value={formData.name}
                             onChange={(e) => handleChange('name', e.target.value)}
@@ -145,7 +123,7 @@ export default function Edit({ setting, groups, types }) {
                             placeholder="Введите название настройки"
                             size="small"
                         />
-                        <FormControl sx={{ flex: 1 }} error={!!errors.setting_group_id} size="small">
+                        <FormControl sx={{flex: 1}} error={!!errors.setting_group_id} size="small">
                             <InputLabel>Группа</InputLabel>
                             <Select
                                 value={formData.setting_group_id}
@@ -180,9 +158,9 @@ export default function Edit({ setting, groups, types }) {
                     />
 
                     {/* 3) Системный ключ + Тип (1:1) */}
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <Stack direction={{xs: 'column', sm: 'row'}} spacing={2}>
                         <TextField
-                            sx={{ flex: 1 }}
+                            sx={{flex: 1}}
                             label="Системный ключ"
                             value={formData.code}
                             onChange={(e) => handleChange('code', e.target.value)}
@@ -192,7 +170,7 @@ export default function Edit({ setting, groups, types }) {
                             placeholder="Например: site_title"
                             size="small"
                         />
-                        <FormControl sx={{ flex: 1 }} error={!!errors.type} size="small">
+                        <FormControl sx={{flex: 1}} error={!!errors.type} size="small">
                             <InputLabel>Тип</InputLabel>
                             <Select
                                 value={formData.type}
@@ -215,14 +193,14 @@ export default function Edit({ setting, groups, types }) {
                     </Stack>
 
                     {/* 4) Описание типа */}
-                    <Alert severity="info" variant="outlined" sx={{ '& .MuiAlert-message': { fontSize: '0.875rem' } }}>
+                    <Alert severity="info" variant="outlined" sx={{'& .MuiAlert-message': {fontSize: '0.875rem'}}}>
                         {getTypeDescription(formData.type)}
                     </Alert>
 
                     {/* Параметры (для галереи/повторителя) */}
                     {showParams && (
                         <>
-                            <Divider />
+                            <Divider/>
                             <Typography variant="subtitle2" color="text.secondary">
                                 Настройка параметров
                             </Typography>
@@ -244,7 +222,7 @@ export default function Edit({ setting, groups, types }) {
                     direction="row"
                     spacing={1.5}
                     justifyContent="flex-end"
-                    sx={{ mt: 3 }}
+                    sx={{mt: 3}}
                 >
                     <Button
                         variant="outlined"
@@ -257,7 +235,7 @@ export default function Edit({ setting, groups, types }) {
                     <Button
                         type="submit"
                         variant="contained"
-                        startIcon={processing ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+                        startIcon={processing ? <CircularProgress size={16} color="inherit"/> : <SaveIcon/>}
                         disabled={processing}
                         size="small"
                     >
@@ -265,23 +243,6 @@ export default function Edit({ setting, groups, types }) {
                     </Button>
                 </Stack>
             </Box>
-
-            {/* Уведомления */}
-            <Snackbar
-                open={snackbar.open}
-                autoHideDuration={3000}
-                onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            >
-                <MuiAlert
-                    severity={snackbar.severity}
-                    variant="filled"
-                    onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-                    sx={{ width: '100%' }}
-                >
-                    {snackbar.message}
-                </MuiAlert>
-            </Snackbar>
         </Box>
     );
 }

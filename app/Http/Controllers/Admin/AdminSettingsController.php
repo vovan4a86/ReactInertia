@@ -92,12 +92,6 @@ class AdminSettingsController
 
         $groups = SettingGroup::where('page_id', 0)->orderBy('order')->get();
 
-        \Log::info('Edit Setting Modal:', [
-            'id' => $id,
-            'setting' => $setting->toArray(),
-            'has_setting_group_id' => $setting->setting_group_id,
-        ]);
-
         // Всегда возвращаем главную страницу, но с данными для модалки
         return Inertia::render('Admin/Settings/Index', [
             // Данные для основной страницы
@@ -683,41 +677,6 @@ class AdminSettingsController
     protected function generateUniqueFileName(Setting $setting, string $extension): string
     {
         return 'setting_' . $setting->id . '_' . uniqid() . '.' . $extension;
-    }
-
-    /**
-     * Check if string is a file upload marker
-     */
-    protected function isFileUploadKey(string $value): bool
-    {
-        return str_starts_with($value, 'setting_file_');
-    }
-
-    /**
-     * Extract the actual upload key from the marker
-     */
-    protected function extractUploadKey(string $value): string
-    {
-        return str_replace('setting_file_', '', $value);
-    }
-
-    /**
-     * Find old file value in nested array by key
-     */
-    protected function findOldFileValue(array $data, $searchKey)
-    {
-        foreach ($data as $key => $value) {
-            if ($key === $searchKey) {
-                return is_string($value) ? $value : null;
-            }
-            if (is_array($value)) {
-                $result = $this->findOldFileValue($value, $searchKey);
-                if ($result !== null) {
-                    return $result;
-                }
-            }
-        }
-        return null;
     }
 
     /**

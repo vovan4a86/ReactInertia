@@ -12,6 +12,7 @@ import {
     ThemeStateContext,
 } from '@admin-layouts/context/ThemeContext';
 import { ModalProvider } from "@/Contexts/Admin/ModalContext.jsx";
+import { DialogProvider } from "@/Contexts/Admin/DialogContext.jsx";
 
 
 const appName = import.meta.env.VITE_APP_NAME || 'React19Laravel13';
@@ -61,7 +62,9 @@ createInertiaApp({
         el._root.render(
             <App>
                 <ModalProvider>
-                    <InertiaApp {...props} />
+                    <DialogProvider>
+                        <InertiaApp {...props} />
+                    </DialogProvider>
                 </ModalProvider>
             </App>
         );
