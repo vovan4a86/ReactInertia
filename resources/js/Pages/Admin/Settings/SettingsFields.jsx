@@ -41,7 +41,6 @@ export default function SettingsFields({ settings, onSave }) {
 
     const handleEditSettings = (settingId) => {
         const url = route('admin.settings.edit', { id: settingId });
-        console.log('Opening modal URL:', url);
         openModal(url);
     };
 

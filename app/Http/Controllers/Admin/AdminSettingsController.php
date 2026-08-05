@@ -168,6 +168,7 @@ class AdminSettingsController
             'setting_group_id' => 'required|exists:setting_groups,id',
             'description' => 'nullable|string',
             'params' => 'nullable|array',
+            'order' => 'integer',
         ];
 
         if ($id) {
@@ -187,7 +188,11 @@ class AdminSettingsController
             $order = Setting::where('setting_group_id', $data['setting_group_id'])->max('order') ?? 0;
             $data['order'] = $order + 1;
             $setting = Setting::create($data);
-            $message = 'Настройка создана';
+
+            $message = 'Ошибка создания настройки';
+            if ($setting) {
+                $message = 'Настройка создана';
+            }
         }
 
         Setting::clearCache();

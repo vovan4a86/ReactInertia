@@ -1,5 +1,5 @@
-import React, {useState, useEffect} from 'react';
-import {usePage, useForm, router} from '@inertiajs/react';
+import React, {useState } from 'react';
+import {router} from '@inertiajs/react';
 import {
     Box,
     TextField,
@@ -31,6 +31,7 @@ export default function Edit({setting, groups, types}) {
         name: setting?.name || '',
         description: setting?.description || '',
         params: setting?.params || {},
+        order: setting?.order ?? 0,
     });
 
     const [errors, setErrors] = useState({});
@@ -71,7 +72,12 @@ export default function Edit({setting, groups, types}) {
             : `/admin/settings/setting/${formData.id}`;
         const method = isNew ? 'post' : 'put';
 
-        router[method](url, formData, {
+        const dataToSend = {
+            ...formData,
+            order: parseInt(formData.order) || 0, // Преобразуем строку в число
+        };
+
+        router[method](url, dataToSend, {
             onSuccess: () => {
                 setTimeout(() => closeModal(), 1000);
             },
@@ -113,7 +119,7 @@ export default function Edit({setting, groups, types}) {
                     {/* 1) Название + Группа (2:1) */}
                     <Stack direction={{xs: 'column', sm: 'row'}} spacing={2}>
                         <TextField
-                            sx={{flex: 2}}
+                            sx={{flex: 3}}
                             label="Название"
                             value={formData.name}
                             onChange={(e) => handleChange('name', e.target.value)}
@@ -123,7 +129,7 @@ export default function Edit({setting, groups, types}) {
                             placeholder="Введите название настройки"
                             size="small"
                         />
-                        <FormControl sx={{flex: 1}} error={!!errors.setting_group_id} size="small">
+                        <FormControl sx={{flex: 2}} error={!!errors.setting_group_id} size="small">
                             <InputLabel>Группа</InputLabel>
                             <Select
                                 value={formData.setting_group_id}
@@ -143,6 +149,22 @@ export default function Edit({setting, groups, types}) {
                                 </Typography>
                             )}
                         </FormControl>
+                        <TextField
+                            sx={{flex: 1}}
+                            label="Порядок"
+                            value={formData.order}
+                            error={!!errors.order}
+                            onChange={(e) => handleChange('order', e.target.value)}
+                            helperText={errors.order}
+                            size="small"
+                            slotProps={{
+                                htmlInput: {
+                                    maxLength: 2,
+                                    inputMode: 'numeric'
+                                }
+                            }}
+                            type="text"
+                        />
                     </Stack>
 
                     {/* 2) Описание — одна строка */}
