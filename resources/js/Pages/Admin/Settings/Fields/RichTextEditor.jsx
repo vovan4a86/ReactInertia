@@ -1,5 +1,5 @@
 import React from 'react';
-import { useEditor, EditorContent } from '@tiptap/react';
+import {useEditor, EditorContent} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
 import Image from '@tiptap/extension-image';
@@ -58,26 +58,25 @@ import {
     FormatColorText,
     Highlight as HighlightIcon,
     CheckBox,
-    Title,
     Code as CodeBlockIcon,
     FormatClear
 } from '@mui/icons-material';
-import { useState } from 'react';
+import {useState} from 'react';
 
 // Предопределенные цвета
 const COLORS = [
-    { name: 'Черный', value: '#000000' },
-    { name: 'Красный', value: '#FF0000' },
-    { name: 'Зеленый', value: '#00FF00' },
-    { name: 'Синий', value: '#0000FF' },
-    { name: 'Желтый', value: '#FFFF00' },
-    { name: 'Фиолетовый', value: '#800080' },
-    { name: 'Оранжевый', value: '#FFA500' },
-    { name: 'Серый', value: '#808080' },
-    { name: 'Белый', value: '#FFFFFF' },
+    {name: 'Черный', value: '#000000'},
+    {name: 'Красный', value: '#FF0000'},
+    {name: 'Зеленый', value: '#00FF00'},
+    {name: 'Синий', value: '#0000FF'},
+    {name: 'Желтый', value: '#FFFF00'},
+    {name: 'Фиолетовый', value: '#800080'},
+    {name: 'Оранжевый', value: '#FFA500'},
+    {name: 'Серый', value: '#808080'},
+    {name: 'Белый', value: '#FFFFFF'},
 ];
 
-const RichTextEditor = ({ value, onChange, placeholder = 'Введите текст...' }) => {
+const RichTextEditor = ({value, onChange, placeholder = 'Введите текст...'}) => {
     const theme = useTheme();
     const isDarkMode = theme.palette.mode === 'dark';
 
@@ -103,17 +102,16 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                 inline: false,
                 allowBase64: true,
             }),
-            Link.configure({
-                openOnClick: true,
-                HTMLAttributes: {
-                    rel: 'noopener noreferrer',
-                    target: '_blank',
-                },
-            }),
+            // Link.configure({
+            //     openOnClick: true,
+            //     HTMLAttributes: {
+            //         rel: 'noopener noreferrer',
+            //         target: '_blank',
+            //     },
+            // }),
             TextAlign.configure({
                 types: ['heading', 'paragraph'],
             }),
-            Underline,
             Table.configure({
                 resizable: true,
             }),
@@ -123,14 +121,13 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
             Highlight.configure({
                 multicolor: true,
             }),
-            CodeBlock,
             TaskList,
             TaskItem.configure({
                 nested: true,
             }),
         ],
         content: value || '',
-        onUpdate: ({ editor }) => {
+        onUpdate: ({editor}) => {
             const html = editor.getHTML();
             onChange(html);
         },
@@ -143,7 +140,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
 
     if (!editor) {
         return (
-            <Box sx={{ p: 3, textAlign: 'center' }}>
+            <Box sx={{p: 3, textAlign: 'center'}}>
                 <Typography color="textSecondary">Загрузка редактора...</Typography>
             </Box>
         );
@@ -151,7 +148,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
 
     const addImage = () => {
         if (imageUrl) {
-            editor.chain().focus().setImage({ src: imageUrl }).run();
+            editor.chain().focus().setImage({src: imageUrl}).run();
             setImageUrl('');
             setImageDialogOpen(false);
         }
@@ -162,7 +159,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
             if (linkUrl === '') {
                 editor.chain().focus().extendMarkRange('link').unsetLink().run();
             } else {
-                editor.chain().focus().extendMarkRange('link').setLink({ href: linkUrl }).run();
+                editor.chain().focus().extendMarkRange('link').setLink({href: linkUrl}).run();
             }
         }
         setLinkUrl('');
@@ -176,7 +173,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
     };
 
     const addTable = () => {
-        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+        editor.chain().focus().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run();
     };
 
     const setColor = (color) => {
@@ -190,10 +187,10 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
 
     // Вспомогательные функции для заголовков
     const getHeadingLevel = () => {
-        if (editor.isActive('heading', { level: 1 })) return 'h1';
-        if (editor.isActive('heading', { level: 2 })) return 'h2';
-        if (editor.isActive('heading', { level: 3 })) return 'h3';
-        if (editor.isActive('heading', { level: 4 })) return 'h4';
+        if (editor.isActive('heading', {level: 1})) return 'h1';
+        if (editor.isActive('heading', {level: 2})) return 'h2';
+        if (editor.isActive('heading', {level: 3})) return 'h3';
+        if (editor.isActive('heading', {level: 4})) return 'h4';
         return 'paragraph';
     };
 
@@ -202,7 +199,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
             editor.chain().focus().setParagraph().run();
         } else {
             const level = parseInt(value.replace('h', ''));
-            editor.chain().focus().toggleHeading({ level }).run();
+            editor.chain().focus().toggleHeading({level}).run();
         }
     };
 
@@ -361,30 +358,35 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
             <Box sx={toolbarStyles}>
                 {/* Undo/Redo */}
                 <Tooltip title="Отменить (Ctrl+Z)">
-                    <IconButton
-                        size="small"
-                        onClick={() => editor.chain().focus().undo().run()}
-                        disabled={!editor.can().undo()}
-                        sx={{ color: isDarkMode ? '#ffffff' : 'inherit' }}
-                    >
-                        <Undo fontSize="small" />
-                    </IconButton>
+                    <span>
+                        <IconButton
+                            size="small"
+                            onClick={() => editor.chain().focus().undo().run()}
+                            disabled={!editor.can().undo()}
+                            sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}
+                        >
+                            <Undo fontSize="small"/>
+                        </IconButton>
+                    </span>
                 </Tooltip>
                 <Tooltip title="Повторить (Ctrl+Y)">
-                    <IconButton
-                        size="small"
-                        onClick={() => editor.chain().focus().redo().run()}
-                        disabled={!editor.can().redo()}
-                        sx={{ color: isDarkMode ? '#ffffff' : 'inherit' }}
-                    >
-                        <Redo fontSize="small" />
-                    </IconButton>
+                    <span>
+                        <IconButton
+                            size="small"
+                            onClick={() => editor.chain().focus().redo().run()}
+                            disabled={!editor.can().redo()}
+                            sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}
+                        >
+                            <Redo fontSize="small"/>
+                        </IconButton>
+                    </span>
                 </Tooltip>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Форматирование текста */}
-                <ToggleButtonGroup size="small" sx={{ mr: 0.5 }}>
+                <ToggleButtonGroup size="small" sx={{mr: 0.5}}>
                     <ToggleButton
                         value="bold"
                         selected={editor.isActive('bold')}
@@ -397,7 +399,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             }
                         }}
                     >
-                        <FormatBold fontSize="small" />
+                        <FormatBold fontSize="small"/>
                     </ToggleButton>
                     <ToggleButton
                         value="italic"
@@ -411,7 +413,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             }
                         }}
                     >
-                        <FormatItalic fontSize="small" />
+                        <FormatItalic fontSize="small"/>
                     </ToggleButton>
                     <ToggleButton
                         value="underline"
@@ -425,7 +427,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             }
                         }}
                     >
-                        <FormatUnderlined fontSize="small" />
+                        <FormatUnderlined fontSize="small"/>
                     </ToggleButton>
                     <ToggleButton
                         value="strike"
@@ -439,14 +441,15 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             }
                         }}
                     >
-                        <FormatStrikethrough fontSize="small" />
+                        <FormatStrikethrough fontSize="small"/>
                     </ToggleButton>
                 </ToggleButtonGroup>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Заголовки */}
-                <FormControl size="small" sx={{ minWidth: 130, mr: 0.5 }}>
+                <FormControl size="small" sx={{minWidth: 130, mr: 0.5}}>
                     <Select
                         value={getHeadingLevel()}
                         onChange={(e) => setHeading(e.target.value)}
@@ -470,20 +473,21 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                     </Select>
                 </FormControl>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Выравнивание */}
-                <ToggleButtonGroup size="small" sx={{ mr: 0.5 }}>
+                <ToggleButtonGroup size="small" sx={{mr: 0.5}}>
                     {[
-                        { value: 'left', icon: <FormatAlignLeft fontSize="small" />, title: 'По левому краю' },
-                        { value: 'center', icon: <FormatAlignCenter fontSize="small" />, title: 'По центру' },
-                        { value: 'right', icon: <FormatAlignRight fontSize="small" />, title: 'По правому краю' },
-                        { value: 'justify', icon: <FormatAlignJustify fontSize="small" />, title: 'По ширине' },
-                    ].map(({ value, icon, title }) => (
+                        {value: 'left', icon: <FormatAlignLeft fontSize="small"/>, title: 'По левому краю'},
+                        {value: 'center', icon: <FormatAlignCenter fontSize="small"/>, title: 'По центру'},
+                        {value: 'right', icon: <FormatAlignRight fontSize="small"/>, title: 'По правому краю'},
+                        {value: 'justify', icon: <FormatAlignJustify fontSize="small"/>, title: 'По ширине'},
+                    ].map(({value, icon, title}) => (
                         <Tooltip key={value} title={title}>
                             <ToggleButton
                                 value={value}
-                                selected={editor.isActive({ textAlign: value })}
+                                selected={editor.isActive({textAlign: value})}
                                 onClick={() => editor.chain().focus().setTextAlign(value).run()}
                                 sx={{
                                     px: 1,
@@ -499,15 +503,24 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                     ))}
                 </ToggleButtonGroup>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Списки */}
-                <ToggleButtonGroup size="small" sx={{ mr: 0.5 }}>
+                <ToggleButtonGroup size="small" sx={{mr: 0.5}}>
                     {[
-                        { value: 'bulletList', icon: <FormatListBulleted fontSize="small" />, title: 'Маркированный список' },
-                        { value: 'orderedList', icon: <FormatListNumbered fontSize="small" />, title: 'Нумерованный список' },
-                        { value: 'taskList', icon: <CheckBox fontSize="small" />, title: 'Список задач' },
-                    ].map(({ value, icon, title }) => (
+                        {
+                            value: 'bulletList',
+                            icon: <FormatListBulleted fontSize="small"/>,
+                            title: 'Маркированный список'
+                        },
+                        {
+                            value: 'orderedList',
+                            icon: <FormatListNumbered fontSize="small"/>,
+                            title: 'Нумерованный список'
+                        },
+                        {value: 'taskList', icon: <CheckBox fontSize="small"/>, title: 'Список задач'},
+                    ].map(({value, icon, title}) => (
                         <Tooltip key={value} title={title}>
                             <ToggleButton
                                 value={value}
@@ -527,14 +540,15 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                     ))}
                 </ToggleButtonGroup>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Специальные элементы */}
                 {[
-                    { value: 'blockquote', icon: <FormatQuote fontSize="small" />, title: 'Цитата' },
-                    { value: 'code', icon: <Code fontSize="small" />, title: 'Встроенный код' },
-                    { value: 'codeBlock', icon: <CodeBlockIcon fontSize="small" />, title: 'Блок кода' },
-                ].map(({ value, icon, title }) => (
+                    {value: 'blockquote', icon: <FormatQuote fontSize="small"/>, title: 'Цитата'},
+                    {value: 'code', icon: <Code fontSize="small"/>, title: 'Встроенный код'},
+                    {value: 'codeBlock', icon: <CodeBlockIcon fontSize="small"/>, title: 'Блок кода'},
+                ].map(({value, icon, title}) => (
                     <Tooltip key={value} title={title}>
                         <ToggleButton
                             value={value}
@@ -558,13 +572,14 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                     <IconButton
                         size="small"
                         onClick={() => editor.chain().focus().setHorizontalRule().run()}
-                        sx={{ color: isDarkMode ? '#ffffff' : 'inherit' }}
+                        sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}
                     >
-                        <HorizontalRule fontSize="small" />
+                        <HorizontalRule fontSize="small"/>
                     </IconButton>
                 </Tooltip>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Цвет и выделение */}
                 <Tooltip title="Цвет текста">
@@ -575,7 +590,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             color: editor.isActive('color') ? 'primary.main' : (isDarkMode ? '#ffffff' : 'inherit')
                         }}
                     >
-                        <FormatColorText fontSize="small" />
+                        <FormatColorText fontSize="small"/>
                     </IconButton>
                 </Tooltip>
                 <Tooltip title="Выделение текста">
@@ -592,11 +607,12 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             }
                         }}
                     >
-                        <HighlightIcon fontSize="small" />
+                        <HighlightIcon fontSize="small"/>
                     </ToggleButton>
                 </Tooltip>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Вставка элементов */}
                 <Tooltip title="Вставить ссылку">
@@ -607,38 +623,39 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                             color: editor.isActive('link') ? 'primary.main' : (isDarkMode ? '#ffffff' : 'inherit')
                         }}
                     >
-                        <LinkIcon fontSize="small" />
+                        <LinkIcon fontSize="small"/>
                     </IconButton>
                 </Tooltip>
                 <Tooltip title="Вставить изображение">
                     <IconButton
                         size="small"
                         onClick={() => setImageDialogOpen(true)}
-                        sx={{ color: isDarkMode ? '#ffffff' : 'inherit' }}
+                        sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}
                     >
-                        <ImageIcon fontSize="small" />
+                        <ImageIcon fontSize="small"/>
                     </IconButton>
                 </Tooltip>
                 <Tooltip title="Вставить таблицу">
                     <IconButton
                         size="small"
                         onClick={addTable}
-                        sx={{ color: isDarkMode ? '#ffffff' : 'inherit' }}
+                        sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}
                     >
-                        <TableChart fontSize="small" />
+                        <TableChart fontSize="small"/>
                     </IconButton>
                 </Tooltip>
 
-                <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0' }} />
+                <Divider orientation="vertical" flexItem
+                         sx={{mx: 0.5, borderColor: isDarkMode ? '#424242' : '#e0e0e0'}}/>
 
                 {/* Очистить форматирование */}
                 <Tooltip title="Очистить форматирование">
                     <IconButton
                         size="small"
                         onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}
-                        sx={{ color: isDarkMode ? '#ffffff' : 'inherit' }}
+                        sx={{color: isDarkMode ? '#ffffff' : 'inherit'}}
                     >
-                        <FormatClear fontSize="small" />
+                        <FormatClear fontSize="small"/>
                     </IconButton>
                 </Tooltip>
             </Box>
@@ -780,7 +797,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
                         }}
                         placeholder="https://example.com/image.jpg"
                     />
-                    <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
+                    <Typography variant="caption" color="textSecondary" sx={{mt: 1, display: 'block'}}>
                         Вставьте прямую ссылку на изображение
                     </Typography>
                 </DialogContent>
@@ -792,7 +809,7 @@ const RichTextEditor = ({ value, onChange, placeholder = 'Введите тек�
 
             {/* Редактор */}
             <Box sx={editorContentStyles}>
-                <EditorContent editor={editor} />
+                <EditorContent editor={editor}/>
             </Box>
         </Box>
     );

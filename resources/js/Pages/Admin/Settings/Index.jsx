@@ -136,7 +136,7 @@ export default function SettingsIndex() {
             <Box>
                 <Grid container spacing={3}>
                     {/* Groups Sidebar */}
-                    <Grid item size={{xs: 12, md: 3}}>
+                    <Grid size={{xs: 12, md: 3}}>
                         <Paper>
                             {/* Header */}
                             <Box sx={{
@@ -268,7 +268,7 @@ export default function SettingsIndex() {
                     </Grid>
 
                     {/* Settings Content */}
-                    <Grid item size={{xs: 12, md: 9}}>
+                    <Grid size={{xs: 12, md: 9}}>
                         {activeGroup ? (
                             <Paper>
                                 {/* Group Header */}
