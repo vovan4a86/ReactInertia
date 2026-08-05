@@ -28,6 +28,7 @@ class AdminSettingsController
             'groups' => $groups,
             'activeGroup' => $activeGroup,
             'settings' => $this->formatSettings($settings),
+            'modalData' => null, // Модалка закрыта
         ]);
     }
 
@@ -91,10 +92,27 @@ class AdminSettingsController
 
         $groups = SettingGroup::where('page_id', 0)->orderBy('order')->get();
 
-        return Inertia::render('Admin/Settings/Edit', [
-            'setting' => $setting,
-            'groups' => $groups,
-            'types' => Setting::$types,
+        // Всегда возвращаем главную страницу, но с данными для модалки
+        return Inertia::render('Admin/Settings/Index', [
+            // Данные для основной страницы
+            'groups' => SettingGroup::where('page_id', 0)->orderBy('order')->get(),
+            'activeGroup' => $request->input('setting_group_id')
+                ? SettingGroup::find($request->input('setting_group_id'))
+                : null,
+            'settings' => $request->input('setting_group_id')
+                ? Setting::where('setting_group_id', $request->input('setting_group_id'))->get()
+                : [],
+
+            // Данные для модального окна
+            'modalData' => [
+                'open' => true,
+                'component' => 'Admin/Settings/Edit',
+                'props' => [
+                    'setting' => $setting,
+                    'groups' => $groups,
+                    'types' => Setting::$types,
+                ]
+            ]
         ]);
     }
 

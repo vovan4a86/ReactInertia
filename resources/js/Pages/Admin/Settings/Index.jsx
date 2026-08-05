@@ -12,8 +12,6 @@ import {
     TextField,
     IconButton,
     Button,
-    Alert,
-    Snackbar,
 } from '@mui/material';
 import {
     Edit as EditIcon,
@@ -22,9 +20,11 @@ import {
 } from '@mui/icons-material';
 import SettingsFields from './SettingsFields';
 import AdminLayout from '@admin-layouts/AdminLayout';
+import { useModal } from '@/Contexts/Admin/ModalContext.jsx';
+import ModalRenderer from "@/Components/Admin/Modal/ModalRenderer.jsx";
 
 export default function SettingsIndex() {
-    const { groups, activeGroup, settings, flash } = usePage().props;
+    const { groups, activeGroup, settings, flash, modalData } = usePage().props;
     const [editingGroup, setEditingGroup] = useState(null);
     const [groupName, setGroupName] = useState('');
     const [newGroupName, setNewGroupName] = useState('');
@@ -33,6 +33,12 @@ export default function SettingsIndex() {
         message: '',
         severity: 'success',
     });
+
+    const { openModal, setModalFromProps } = useModal();
+
+    const handleOpenSettings = () => {
+        openModal(route('admin.settings.edit'));
+    };
 
     useEffect(() => {
         if (flash?.success) {
@@ -49,7 +55,13 @@ export default function SettingsIndex() {
                 severity: 'error'
             });
         }
-    }, [flash]);
+
+        if (modalData) {
+            setModalFromProps(modalData);
+        } else {
+            setModalFromProps(null);
+        }
+    }, [flash, modalData]);
 
     const handleGroupClick = (groupId) => {
         router.get(`/admin/settings/group/${groupId}/items`);
@@ -326,7 +338,8 @@ export default function SettingsIndex() {
                                     variant="outlined"
                                     size="small"
                                     startIcon={<AddIcon />}
-                                    href={`/admin/settings/edit?setting_group_id=${activeGroup.id}`}
+                                    onClick={handleOpenSettings}
+                                    // href={`/admin/settings/edit?setting_group_id=${activeGroup.id}`}
                                 >
                                     Добавить настройку
                                 </Button>
@@ -358,6 +371,7 @@ export default function SettingsIndex() {
                 </Grid>
             </Grid>
         </Box>
+        <ModalRenderer />
         </AdminLayout>
     );
 }

@@ -133,11 +133,6 @@ export default function ListDataInput({
                                           getFileUrl,
                                           fileUrls = {},
                                       }) {
-    console.log('ListDataInput - setting:');
-    console.log(setting);
-    console.log('ListDataInput - value:');
-    console.log(value);
-
     const fields = setting.params?.fields || {};
     const items = Array.isArray(value) ? value : [];
     const fieldKeys = Object.keys(fields);
