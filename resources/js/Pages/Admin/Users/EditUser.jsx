@@ -216,6 +216,7 @@ const EditUser = ({user, isEditable = true}) => {
                                                 id='demo-simple-select-outlined'
                                                 value={data?.role || ''}
                                                 name='role'
+                                                variant="outlined"
                                                 onChange={handleChange}>
 
                                                 <MenuItem value={'admin'}>Admin</MenuItem>
@@ -420,6 +421,7 @@ const EditUser = ({user, isEditable = true}) => {
                                                     <Select
                                                         labelId='demo-simple-select-outlined-label'
                                                         id='demo-simple-select-outlined'
+                                                        variant="outlined"
                                                         value={10}>
 
                                                         <MenuItem value={10}>English</MenuItem>

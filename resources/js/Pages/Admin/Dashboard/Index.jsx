@@ -855,6 +855,7 @@ export default function Dashboard({auth}) {
                                 <Select
                                     value={mainChartState}
                                     onChange={(e) => setMainChartState(e.target.value)}
+                                    variant="outlined"
                                     input={
                                         <OutlinedInput
                                             classes={{

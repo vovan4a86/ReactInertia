@@ -40,6 +40,7 @@ export default function BigStat(props) {
           <Select
             value={value}
             onChange={e => setValue(e.target.value)}
+            variant="outlined"
             input={
               <Input
                 disableUnderline

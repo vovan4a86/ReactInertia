@@ -135,6 +135,7 @@ export default function Edit({setting, groups, types}) {
                                 value={formData.setting_group_id}
                                 onChange={(e) => handleChange('setting_group_id', e.target.value)}
                                 label="Группа"
+                                variant="outlined"
                                 required
                             >
                                 {groups && groups.map((group) => (
@@ -198,6 +199,7 @@ export default function Edit({setting, groups, types}) {
                                 value={formData.type}
                                 onChange={handleTypeChange}
                                 label="Тип"
+                                variant="outlined"
                                 required
                             >
                                 {types && Object.entries(types).map(([value, label]) => (

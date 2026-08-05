@@ -173,6 +173,7 @@ export default function EditParams({ type, params, types, onChange }) {
                                         <FormControl fullWidth size="small">
                                             <Select
                                                 value={fields[key].type || 0}
+                                                variant="outlined"
                                                 onChange={(e) => handleFieldChange(key, 'type', parseInt(e.target.value))}
                                             >
                                                 {Object.entries(availableTypes).map(([value, label]) => (

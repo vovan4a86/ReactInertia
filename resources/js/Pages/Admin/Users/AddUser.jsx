@@ -391,6 +391,7 @@ const AddUser = () => {
                     name="role"
                     value={data.role}
                     onChange={handleChange}
+                    variant="outlined"
                     label="Роль"
                 >
                     <MenuItem value="user">Пользователь</MenuItem>
@@ -528,6 +529,7 @@ const AddUser = () => {
                     name="country"
                     value={data.country}
                     onChange={handleChange}
+                    variant="outlined"
                     label="Страна"
                 >
                     <MenuItem value="RU">Россия</MenuItem>
@@ -545,6 +547,7 @@ const AddUser = () => {
                     name="state"
                     value={data.state}
                     onChange={handleChange}
+                    variant="outlined"
                     label="Регион/Штат"
                 >
                     <MenuItem value="kirov_obl">Кировская область</MenuItem>
@@ -562,6 +565,7 @@ const AddUser = () => {
                     name="city"
                     value={data.city}
                     onChange={handleChange}
+                    variant="outlined"
                     label="Город"
                 >
                     <MenuItem value="kirov">Киров</MenuItem>
