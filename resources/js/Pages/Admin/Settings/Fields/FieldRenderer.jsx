@@ -21,10 +21,22 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
             return setting.file_url;
         }
 
-        // Для типа 6 - fileUrls это массив объектов, индексированный по rowIndex
-        if (setting.type === 6 && rowIndex !== undefined) {
-            if (fileUrls && fileUrls[rowIndex] && fileUrls[rowIndex][fieldKey]) {
+        // Для типа 6 - работаем с локальными fileUrls
+        if (setting.type === 6 && rowIndex !== undefined && fileUrls) {
+            // Проверяем fileUrls по индексу и полю
+            if (fileUrls[rowIndex] && fileUrls[rowIndex][fieldKey]) {
                 return fileUrls[rowIndex][fieldKey];
+            }
+
+            // Дополнительная проверка: ищем URL по значению файла
+            for (const [index, fields] of Object.entries(fileUrls)) {
+                if (fields && fields[fieldKey] &&
+                    setting.file_urls &&
+                    setting.file_urls[index] &&
+                    setting.file_urls[index][fieldKey]) {
+                    // Нашли совпадение, возвращаем URL
+                    return setting.file_urls[index][fieldKey];
+                }
             }
         }
 

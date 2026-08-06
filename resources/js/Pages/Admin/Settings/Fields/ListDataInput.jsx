@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {
     Box,
     IconButton,
@@ -137,6 +137,56 @@ export default function ListDataInput({
     const items = Array.isArray(value) ? value : [];
     const fieldKeys = Object.keys(fields);
 
+    // Состояние для локальных fileUrls, которые будут обновляться при перетаскивании
+    const [localFileUrls, setLocalFileUrls] = useState(() => {
+        // Инициализируем из props
+        return { ...fileUrls };
+    });
+
+    // Синхронизируем localFileUrls с props когда они приходят с сервера
+    useEffect(() => {
+        setLocalFileUrls(prev => {
+            // Если пришли новые fileUrls с сервера - используем их
+            if (Object.keys(fileUrls).length > 0) {
+                return { ...fileUrls };
+            }
+            return prev;
+        });
+    }, [fileUrls]);
+
+    // Отслеживаем изменения value для синхронизации fileUrls
+    useEffect(() => {
+        // Создаем маппинг старых файлов по их значениям
+        const fileValueToUrl = {};
+        Object.entries(localFileUrls).forEach(([index, fields]) => {
+            if (items[index] && fields) {
+                Object.entries(fields).forEach(([field, url]) => {
+                    if (items[index][field]) {
+                        fileValueToUrl[items[index][field]] = { index, field, url };
+                    }
+                });
+            }
+        });
+
+        // Перестраиваем fileUrls в соответствии с новым порядком items
+        const newFileUrls = {};
+        items.forEach((item, newIndex) => {
+            Object.entries(item).forEach(([field, fieldValue]) => {
+                if (typeof fieldValue === 'string' && fieldValue) {
+                    const fileInfo = fileValueToUrl[fieldValue];
+                    if (fileInfo) {
+                        if (!newFileUrls[newIndex]) {
+                            newFileUrls[newIndex] = {};
+                        }
+                        newFileUrls[newIndex][field] = fileInfo.url;
+                    }
+                }
+            });
+        });
+
+        setLocalFileUrls(newFileUrls);
+    }, [value, items]);
+
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
@@ -158,11 +208,39 @@ export default function ListDataInput({
 
     const handleRemove = (index) => {
         onChange(items.filter((_, i) => i !== index));
+
+        // Обновляем localFileUrls при удалении элемента
+        const newFileUrls = {};
+        newItems.forEach((item, newIndex) => {
+            const oldIndex = items.findIndex(oldItem =>
+                oldItem._key === item._key ||
+                JSON.stringify(oldItem) === JSON.stringify(item)
+            );
+            if (oldIndex !== -1 && localFileUrls[oldIndex]) {
+                newFileUrls[newIndex] = { ...localFileUrls[oldIndex] };
+            }
+        });
+        setLocalFileUrls(newFileUrls);
+
+        onChange(newItems);
     };
 
     const handleItemChange = (index, field, val) => {
         const newItems = [...items];
         newItems[index] = { ...newItems[index], [field]: val };
+
+        // Если поле очистилось - удаляем URL из localFileUrls
+        if (!val && localFileUrls[index] && localFileUrls[index][field]) {
+            const newFileUrls = { ...localFileUrls };
+            if (newFileUrls[index]) {
+                delete newFileUrls[index][field];
+                if (Object.keys(newFileUrls[index]).length === 0) {
+                    delete newFileUrls[index];
+                }
+            }
+            setLocalFileUrls(newFileUrls);
+        }
+
         onChange(newItems);
     };
 
@@ -175,6 +253,22 @@ export default function ListDataInput({
 
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newItems = arrayMove(items, oldIndex, newIndex);
+
+                // Синхронизируем fileUrls с новым порядком
+                const newFileUrls = {};
+                Object.entries(localFileUrls).forEach(([index, fields]) => {
+                    let newPosition;
+                    if (parseInt(index) === oldIndex) {
+                        newPosition = newIndex;
+                    } else if (parseInt(index) === newIndex) {
+                        newPosition = oldIndex;
+                    } else {
+                        newPosition = parseInt(index);
+                    }
+                    newFileUrls[newPosition] = { ...fields };
+                });
+
+                setLocalFileUrls(newFileUrls);
                 onChange(newItems);
             }
         }
@@ -223,7 +317,10 @@ export default function ListDataInput({
                     <FileInput
                         name={`${name}[${index}][${field}]`}
                         value={item[field]}
-                        fileUrl={getFileUrl(item[field], fileUrls, field, index)} // Передаем index
+                        fileUrl={
+                            // Используем localFileUrls вместо fileUrls из props
+                            getFileUrl(item[field], localFileUrls, field, index)
+                        }
                         onChange={(val) => handleItemChange(index, field, val)}
                         onFileChange={onFileChange}
                         placeholder={params.title}
