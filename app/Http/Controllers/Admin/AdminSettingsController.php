@@ -210,26 +210,6 @@ class AdminSettingsController
         return back()->with('success', 'Значение очищено');
     }
 
-    public function saveSettings(Request $request)
-    {
-        $request->validate(['setting_group_id' => 'required|exists:setting_groups,id']);
-
-        $groupId = $request->input('setting_group_id');
-        $settingsData = $request->input('settings', []);
-
-        $settings = Setting::where('setting_group_id', $groupId)->get();
-
-        foreach ($settings as $setting) {
-            $value = $settingsData[$setting->id] ?? null;
-
-            $this->processSettingValue($setting, $value, $request);
-        }
-
-        Setting::clearCache();
-
-        return back()->with('success', 'Изменения сохранены');
-    }
-
     protected function saveSetting(Request $request, ?int $id = null)
     {
         $rules = [
@@ -269,6 +249,26 @@ class AdminSettingsController
         Setting::clearCache();
 
         return back()->with('success', $message);
+    }
+
+    public function saveSettings(Request $request)
+    {
+        $request->validate(['setting_group_id' => 'required|exists:setting_groups,id']);
+
+        $groupId = $request->input('setting_group_id');
+        $settingsData = $request->input('settings', []);
+
+        $settings = Setting::where('setting_group_id', $groupId)->get();
+
+        foreach ($settings as $setting) {
+            $value = $settingsData[$setting->id] ?? null;
+
+            $this->processSettingValue($setting, $value, $request);
+        }
+
+        Setting::clearCache();
+
+        return back()->with('success', 'Изменения сохранены');
     }
 
     protected function processParams(int $type, array $params): array
@@ -386,80 +386,89 @@ class AdminSettingsController
             return;
         }
 
-        // Получаем файлы из запроса
-        $files = $request->file("settings.{$setting->id}", []);
-
-        Log::info("Processing type 4 setting", [
-            'setting_id' => $setting->id,
-            'value' => $value,
-            'files_keys' => array_keys($files),
-            'files_details' => array_map(function($file) {
-                return [
-                    'name' => $file->getClientOriginalName(),
-                    'size' => $file->getSize(),
-                    'is_valid' => $file->isValid(),
-                ];
-            }, $files),
-            'all_files_structure' => array_keys($request->allFiles()),
-        ]);
-
         $params = $setting->params ?? [];
         $fields = $params['fields'] ?? [];
         $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
 
-        // Обрабатываем файлы
+        // Получаем все файлы из запроса
+        $allFiles = $request->allFiles();
+
+        // Обрабатываем каждое поле
         foreach ($fields as $key => $fieldConfig) {
             $fieldType = $fieldConfig['type'] ?? null;
 
             // Если это файловое поле (type 3)
             if ($fieldType === 3) {
+                $currentValue = $value[$key] ?? null;
+                $oldFile = $oldValue[$key] ?? null;
+
                 Log::info("Processing file field: {$key}", [
-                    'exists_in_files' => isset($files[$key]),
-                    'file' => isset($files[$key]) ? $files[$key]->getClientOriginalName() : null,
+                    'current_value' => $currentValue,
+                    'old_file' => $oldFile,
                 ]);
 
-                $file = $files[$key] ?? null;
+                // Проверяем, является ли значение маркером файла (используем тот же метод, что и в processListData)
+                $isMarker = $this->isFileUploadMarker($currentValue);
 
-                if ($file instanceof \Illuminate\Http\UploadedFile && $file->isValid()) {
-                    try {
-                        // Удаляем старый файл
-                        $oldFile = $oldValue[$key] ?? null;
-                        if ($oldFile && is_string($oldFile)) {
-                            $this->deleteFile($oldFile);
-                            Log::info("Deleted old file: {$oldFile}");
+                if ($isMarker) {
+                    // Извлекаем файл из структуры Laravel
+                    $file = $this->extractFileFromRequest($currentValue, $allFiles);
+
+                    if ($file instanceof \Illuminate\Http\UploadedFile) {
+                        try {
+                            // Удаляем старый файл если есть
+                            if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
+                                $this->deleteFile($oldFile);
+                                Log::info("Deleted old file: {$oldFile}");
+                            }
+
+                            // Сохраняем новый файл
+                            $extension = $file->getClientOriginalExtension();
+                            $fileName = $this->generateUniqueFileName($setting, $extension);
+                            $this->storeFile($file, $fileName);
+                            $value[$key] = $fileName;
+
+                            Log::info("File saved successfully", [
+                                'field' => $key,
+                                'file_name' => $fileName,
+                            ]);
+                        } catch (\Exception $e) {
+                            Log::error("Error saving file", [
+                                'field' => $key,
+                                'error' => $e->getMessage(),
+                            ]);
+                            // В случае ошибки сохраняем старый файл
+                            if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
+                                $value[$key] = $oldFile;
+                            } else {
+                                $value[$key] = null;
+                            }
                         }
-
-                        // Сохраняем новый
-                        $extension = $file->getClientOriginalExtension();
-                        $fileName = $this->generateUniqueFileName($setting, $extension);
-
-                        $path = $this->storeFile($file, $fileName);
-
-                        $value[$key] = $fileName;
-
-                        Log::info("File saved successfully", [
-                            'field' => $key,
-                            'file_name' => $fileName,
-                            'path' => $path,
-                        ]);
-                    } catch (\Exception $e) {
-                        Log::error("Error saving file", [
-                            'field' => $key,
-                            'error' => $e->getMessage(),
-                            'trace' => $e->getTraceAsString(),
-                        ]);
-                        // Оставляем старый файл
-                        $value[$key] = $oldValue[$key] ?? null;
+                    } else {
+                        // Файл не найден в запросе - сохраняем старый если есть
+                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
+                            $value[$key] = $oldFile;
+                            Log::info("Keeping old file for {$key}: {$oldFile}");
+                        } else {
+                            $value[$key] = null;
+                            Log::info("No file for {$key}, setting null");
+                        }
                     }
                 } else {
-                    // Оставляем старый файл
-                    $oldFile = $oldValue[$key] ?? null;
-                    if ($oldFile && is_string($oldFile)) {
-                        $value[$key] = $oldFile;
-                        Log::info("Keeping old file for {$key}: {$oldFile}");
-                    } else {
-                        Log::info("No file for {$key}, setting null");
+                    // Значение не маркер - проверяем, изменилось ли оно
+                    if ($currentValue === null || $currentValue === '') {
+                        // Файл был удален (значение null или пустая строка)
+                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
+                            $this->deleteFile($oldFile);
+                            Log::info("Deleted file (cleared): {$oldFile}");
+                        }
                         $value[$key] = null;
+                    } elseif ($currentValue === $oldFile) {
+                        // Значение не изменилось - оставляем как есть
+                        Log::info("File unchanged for {$key}");
+                    } else {
+                        // Новое значение - обрабатываем как обычно
+                        Log::info("New value for {$key}: {$currentValue}");
                     }
                 }
             }

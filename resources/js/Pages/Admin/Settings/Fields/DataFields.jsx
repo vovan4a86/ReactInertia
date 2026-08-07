@@ -46,12 +46,20 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
     }
 
     const handleFieldChange = (field, val) => {
-        if (typeof val === 'string' && val.startsWith('settings[')) return;
+        const fieldConfig = fields[field];
+        const isFileField = fieldConfig?.type === 3;
+
+        if (!isFileField && typeof val === 'string' && val.startsWith('settings[')) {
+            console.warn('Ignoring marker for non-file field:', field, val);
+            return;
+        }
+
         const newValue = {
             ...(value || {}),
             [field]: val
         };
 
+        console.log('DataFields handleFieldChange:', { field, val, newValue });
         onChange(newValue);
     };
 
