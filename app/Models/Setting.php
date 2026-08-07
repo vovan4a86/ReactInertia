@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class Setting extends Model
 {
@@ -76,6 +76,7 @@ class Setting extends Model
 
     public function getFileUrlAttribute(): ?array
     {
+        Log::info('123');
         $value = $this->value;
 
         if (empty($value)) {
@@ -111,11 +112,11 @@ class Setting extends Model
             return $urls;
         }
 
-        // Для типа 7 (Gallery) - массив файлов
+        // Для типа 7 (Gallery) - массив изображений
         if ($this->type === 7 && is_array($value)) {
             $urls = [];
             foreach ($value as $index => $file) {
-                if (is_string($file) && $this->isStoredFile($file)) {
+                if (is_string($file) && !empty($file) && $this->isStoredFile($file)) {
                     $urls[$index] = asset('storage/' . $file);
                 }
             }

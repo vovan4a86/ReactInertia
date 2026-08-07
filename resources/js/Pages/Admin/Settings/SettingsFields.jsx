@@ -49,7 +49,6 @@ export default function SettingsFields({ settings, onSave }) {
     };
 
     const handleFileChange = (key, file) => {
-        console.log('SettingsFields handleFileChange:', { key, file, isFile: file instanceof File });
         setFiles(prev => {
             const newFiles = { ...prev };
             if (file) {
@@ -78,50 +77,75 @@ export default function SettingsFields({ settings, onSave }) {
                 if (value.length === 0) {
                     formData.append(`settings[${settingId}]`, JSON.stringify([]));
                 } else {
-                    // Проверяем, является ли массив массивом объектов (ListDataInput)
-                    const isArrayOfObjects = value.every(item => typeof item === 'object' && item !== null);
+                    // Проверяем, содержит ли массив File объекты (галерея)
+                    const hasFiles = value.some(item => item instanceof File);
 
-                    value.forEach((item, index) => {
-                        if (isArrayOfObjects) {
-                            // Для ListDataInput - каждый объект с полями
-                            Object.entries(item).forEach(([field, fieldVal]) => {
-                                if (fieldVal !== null && fieldVal !== undefined) {
-                                    formData.append(
-                                        `settings[${settingId}][${index}][${field}]`,
-                                        fieldVal
-                                    );
-                                }
-                            });
-                        } else if (typeof item === 'object' && item !== null) {
-                            Object.entries(item).forEach(([field, fieldVal]) => {
-                                if (fieldVal !== null && fieldVal !== undefined) {
-                                    formData.append(
-                                        `settings[${settingId}][${index}][${field}]`,
-                                        fieldVal
-                                    );
-                                } else {
-                                    formData.append(
-                                        `settings[${settingId}][${index}][${field}]`,
-                                        ''
-                                    );
-                                }
-                            });
-                        } else if (item !== null && item !== undefined) {
-                            formData.append(`settings[${settingId}][${index}]`, item);
-                        }
-                    });
+                    if (hasFiles) {
+                        // Для галереи: НЕ отправляем значение массива, только файлы
+                        // Laravel сам поймет структуру по файлам
+                        value.forEach((item, index) => {
+                            if (item instanceof File) {
+                                // Файл будет добавлен ниже в секции files
+                            } else if (typeof item === 'string') {
+                                // Существующий путь к файлу
+                                formData.append(`settings[${settingId}][${index}]`, item);
+                            }
+                        });
+                    } else {
+                        // Для обычных массивов без файлов
+                        const isArrayOfObjects = value.every(item => typeof item === 'object' && item !== null);
+
+                        value.forEach((item, index) => {
+                            if (isArrayOfObjects) {
+                                Object.entries(item).forEach(([field, fieldVal]) => {
+                                    if (fieldVal !== null && fieldVal !== undefined) {
+                                        formData.append(
+                                            `settings[${settingId}][${index}][${field}]`,
+                                            fieldVal
+                                        );
+                                    } else {
+                                        formData.append(
+                                            `settings[${settingId}][${index}][${field}]`,
+                                            ''
+                                        );
+                                    }
+                                });
+                            } else if (typeof item === 'object' && item !== null) {
+                                Object.entries(item).forEach(([field, fieldVal]) => {
+                                    if (fieldVal !== null && fieldVal !== undefined) {
+                                        formData.append(
+                                            `settings[${settingId}][${index}][${field}]`,
+                                            fieldVal
+                                        );
+                                    } else {
+                                        formData.append(
+                                            `settings[${settingId}][${index}][${field}]`,
+                                            ''
+                                        );
+                                    }
+                                });
+                            } else if (item !== null && item !== undefined) {
+                                formData.append(`settings[${settingId}][${index}]`, item);
+                            }
+                        });
+                    }
                 }
+            } else {
+                formData.append(`settings[${settingId}]`, value);
             }
         });
 
-        // Add files
-        console.log('Files to upload:', files);
+        // Add files - ВАЖНО: используем скобочную нотацию, такую же как в values
         Object.entries(files).forEach(([key, file]) => {
             if (file instanceof File) {
-                // Конвертируем ключ из точечной нотации в скобочную, если нужно
-                // settings.7.0.field_name -> settings[7][0][field_name]
+                // Конвертируем ключ из точечной нотации в скобочную
                 let formKey = key;
-                if (key.startsWith('settings.') && !key.includes('[')) {
+                if (key.includes('.')) {
+                    // settings.12.0 -> settings[12][0]
+                    formKey = key.replace(/\./g, '][');
+                    formKey = formKey.replace(/^(.*?)\[/, '$1['); // убираем лишнюю скобку в начале
+                    formKey = formKey.replace(/\]\[$/, ']'); // убираем лишнюю скобку в конце
+                    // Правильная конвертация: settings.12.0 -> settings[12][0]
                     const parts = key.split('.');
                     formKey = parts[0] + '[' + parts.slice(1).join('][') + ']';
                 }
@@ -129,14 +153,11 @@ export default function SettingsFields({ settings, onSave }) {
             }
         });
 
-        // Вывод всех данных FormData для отладки
-        console.log('FormData contents:');
-        for (let pair of formData.entries()) {
-            console.log(pair[0], pair[1]);
-        }
-
         await onSave(formData);
         setSaving(false);
+
+        // После сохранения очищаем files
+        setFiles({});
     };
 
     if (!settings || settings.length === 0) {

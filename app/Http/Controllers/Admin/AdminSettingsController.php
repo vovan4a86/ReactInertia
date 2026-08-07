@@ -151,6 +151,13 @@ class AdminSettingsController
 
         foreach ($settings as $setting) {
             $value = $settingsData[$setting->id] ?? null;
+
+            \Log::info('🔵 Controller: Starting save', [
+                'request_all' => $request->all(),
+                'request_files' => $request->allFiles(),
+                'settings_data' => $request->input('settings'),
+            ]);
+
             $this->processSettingValue($setting, $value, $request);
         }
 
@@ -388,41 +395,170 @@ class AdminSettingsController
      */
     protected function processGallery(Setting $setting, array $value, Request $request): void
     {
+        \Log::info('🖼️ processGallery: START', [
+            'setting_id' => $setting->id,
+            'setting_code' => $setting->code,
+            'value' => $value,
+            'value_type' => gettype($value),
+            'existing_value' => $setting->value,
+            'existing_value_type' => gettype($setting->value),
+            'all_files' => array_keys($request->allFiles()),
+            'settings_files' => $request->file('settings'),
+            'request_settings' => $request->input('settings'),
+        ]);
+
         $existingFiles = is_string($setting->value)
             ? json_decode($setting->value, true) ?? []
-            : [];
+            : (is_array($setting->value) ? $setting->value : []);
 
-        $newFiles = [];
+        \Log::info('🖼️ processGallery: Existing files', [
+            'existingFiles' => $existingFiles,
+            'count' => count($existingFiles),
+        ]);
 
+        $processedFiles = [];
+
+        // Process each item in the value array
         foreach ($value as $index => $item) {
             $fileInputName = "settings.{$setting->id}.{$index}";
 
-            if ($request->hasFile($fileInputName)) {
-                $file = $request->file($fileInputName);
-                $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+            \Log::info('🖼️ processGallery: Processing item', [
+                'index' => $index,
+                'item' => $item,
+                'item_type' => gettype($item),
+                'isMarker' => $this->isFileUploadMarker($item),
+                'fileInputName' => $fileInputName,
+                'hasFile' => $request->hasFile($fileInputName),
+            ]);
 
-                $this->storeFile($file, $fileName);
+            // Проверяем, является ли значение маркером файла
+            if ($this->isFileUploadMarker($item)) {
+                // Пробуем найти файл по маркеру
+                if ($request->hasFile($fileInputName)) {
+                    $file = $request->file($fileInputName);
 
-                // Delete old file if replacing
-                if (isset($existingFiles[$index])) {
-                    $this->deleteFile($existingFiles[$index]);
+                    \Log::info('🖼️ processGallery: New file found', [
+                        'index' => $index,
+                        'originalName' => $file->getClientOriginalName(),
+                        'size' => $file->getSize(),
+                        'mimeType' => $file->getMimeType(),
+                    ]);
+
+                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+
+                    \Log::info('🖼️ processGallery: Generated filename', [
+                        'fileName' => $fileName,
+                    ]);
+
+                    $this->storeFile($file, $fileName);
+
+                    // Delete old file if replacing
+                    if (isset($existingFiles[$index])) {
+                        \Log::info('🖼️ processGallery: Deleting old file', [
+                            'oldFile' => $existingFiles[$index],
+                        ]);
+                        $this->deleteFile($existingFiles[$index]);
+                    }
+
+                    $processedFiles[$index] = $fileName;
+
+                    \Log::info('🖼️ processGallery: File processed', [
+                        'index' => $index,
+                        'fileName' => $fileName,
+                    ]);
+                } else {
+                    \Log::warning('🖼️ processGallery: Marker found but no file', [
+                        'index' => $index,
+                        'marker' => $item,
+                        'fileInputName' => $fileInputName,
+                    ]);
+                    // Сохраняем старый файл, если он есть
+                    if (isset($existingFiles[$index])) {
+                        $processedFiles[$index] = $existingFiles[$index];
+                    }
                 }
-
-                $newFiles[] = $fileName;
-            } elseif (is_string($item) && !empty($item)) {
-                // Keep existing file
-                $newFiles[] = $item;
+            } elseif (is_string($item) && !empty($item) && !$this->isFileUploadMarker($item)) {
+                // Это существующий файл (путь к файлу)
+                \Log::info('🖼️ processGallery: Keeping existing file', [
+                    'index' => $index,
+                    'file' => $item,
+                ]);
+                $processedFiles[$index] = $item;
+            } else {
+                \Log::info('🖼️ processGallery: Skipping item', [
+                    'index' => $index,
+                    'item' => $item,
+                ]);
             }
         }
 
+        // Также проверяем файлы напрямую из запроса (на случай если они не связаны с value)
+        $allFiles = $request->allFiles();
+        if (isset($allFiles['settings'][$setting->id])) {
+            $settingFiles = $allFiles['settings'][$setting->id];
+
+            \Log::info('🖼️ processGallery: Checking files in request', [
+                'settingFiles' => array_keys($settingFiles),
+            ]);
+
+            foreach ($settingFiles as $fileKey => $file) {
+                if ($file instanceof \Illuminate\Http\UploadedFile) {
+                    // Проверяем, не обработан ли уже этот индекс
+                    if (!isset($processedFiles[$fileKey])) {
+                        \Log::info('🖼️ processGallery: Processing additional file from request', [
+                            'fileKey' => $fileKey,
+                            'originalName' => $file->getClientOriginalName(),
+                        ]);
+
+                        $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
+                        $this->storeFile($file, $fileName);
+
+                        // Delete old file if exists
+                        if (isset($existingFiles[$fileKey])) {
+                            $this->deleteFile($existingFiles[$fileKey]);
+                        }
+
+                        $processedFiles[$fileKey] = $fileName;
+                    }
+                }
+            }
+        }
+
+        // Сортируем по ключам и убираем пропуски в индексах
+        ksort($processedFiles);
+        $finalFiles = array_values($processedFiles);
+
         // Delete removed files
-        $filesToDelete = array_diff($existingFiles, $newFiles);
+        $existingFlat = array_values($existingFiles);
+        $filesToDelete = array_diff($existingFlat, $finalFiles);
+
+        \Log::info('🖼️ processGallery: Files to delete', [
+            'existingFiles' => $existingFlat,
+            'finalFiles' => $finalFiles,
+            'filesToDelete' => $filesToDelete,
+        ]);
+
         foreach ($filesToDelete as $deletedFile) {
+            \Log::info('🖼️ processGallery: Deleting file', [
+                'file' => $deletedFile,
+            ]);
             $this->deleteFile($deletedFile);
         }
 
-        $setting->value = json_encode(array_values($newFiles));
+        $finalValue = json_encode($finalFiles);
+        \Log::info('🖼️ processGallery: FINAL RESULT', [
+            'finalValue' => $finalValue,
+            'finalFiles' => $finalFiles,
+            'count' => count($finalFiles),
+        ]);
+
+        $setting->value = $finalValue;
         $setting->save();
+
+        \Log::info('🖼️ processGallery: Saved to database', [
+            'setting_id' => $setting->id,
+            'value' => $setting->value,
+        ]);
     }
 
     protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData): array
@@ -726,6 +862,22 @@ class AdminSettingsController
         }
 
         if (is_array($data)) {
+            // Проверяем, является ли массив списком файлов (для галереи - тип 7)
+            // Если все элементы - строки, это галерея
+            $isListOfStrings = !empty($data) && array_all($data, fn($item) => is_string($item));
+
+            if ($isListOfStrings) {
+                // Это галерея: массив путей к файлам
+                $result = [];
+                foreach ($data as $index => $filePath) {
+                    $result[$index] = !empty($filePath)
+                        ? Storage::disk(Setting::UPLOAD_DISK)->url(Setting::getFilePath($filePath))
+                        : null;
+                }
+                return $result;
+            }
+
+            // Для структурированных данных (тип 4, 6)
             $result = [];
             foreach ($data as $key => $value) {
                 if (is_array($value)) {
@@ -747,6 +899,7 @@ class AdminSettingsController
 
         return $data;
     }
+
 
     /**
      * Санитизация HTML контента (разрешаем безопасные теги)
