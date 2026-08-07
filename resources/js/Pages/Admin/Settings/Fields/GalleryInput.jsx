@@ -98,7 +98,8 @@ function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
     };
 
     const hasThumbs = image.thumbs && Object.keys(image.thumbs).length > 0;
-    const displayThumb = hasThumbs ? image.thumbs[0] : null;
+    // const displayThumb = hasThumbs ? image.thumbs[0] : null; //бейдж с размером
+    const displayThumb = null;
     const displayUrl = displayThumb?.url || image.url;
     const originalUrl = image.url;
     const thumbEntries = hasThumbs ? Object.entries(image.thumbs) : [];
