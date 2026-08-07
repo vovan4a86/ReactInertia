@@ -53,13 +53,23 @@ export default function Edit({setting, groups, types}) {
         const newType = parseInt(e.target.value);
         handleChange('type', newType);
 
-        if (![4, 6].includes(newType)) {
+        // Сбрасываем params для всех типов, кроме 4, 6 и 7
+        if (![4, 6, 7].includes(newType)) {
             handleChange('params', {});
+        }
+
+        // Для типа 7 инициализируем params с полем thumbs, если его нет
+        if (newType === 7 && !formData.params?.thumbs) {
+            handleChange('params', { thumbs: '' });
         }
     };
 
     const handleParamsChange = (params) => {
         handleChange('params', params);
+    };
+
+    const handleThumbsChange = (value) => {
+        handleChange('params', { ...formData.params, thumbs: value });
     };
 
     const handleSubmit = (e) => {
@@ -92,6 +102,7 @@ export default function Edit({setting, groups, types}) {
 
     const isNew = !formData.id;
     const showParams = [4, 6].includes(formData.type);
+    const showGalleryParams = formData.type === 7;
 
     const getTypeDescription = (type) => {
         const descriptions = {
@@ -220,6 +231,26 @@ export default function Edit({setting, groups, types}) {
                     <Alert severity="info" variant="outlined" sx={{'& .MuiAlert-message': {fontSize: '0.875rem'}}}>
                         {getTypeDescription(formData.type)}
                     </Alert>
+
+                    {/* Параметры для галереи (тип 7) */}
+                    {showGalleryParams && (
+                        <>
+                            <Divider />
+                            <Typography variant="subtitle2" color="text.secondary">
+                                Параметры галереи
+                            </Typography>
+                            <TextField
+                                fullWidth
+                                label="Thumbs"
+                                value={formData.params?.thumbs || ''}
+                                onChange={(e) => handleThumbsChange(e.target.value)}
+                                error={!!errors['params.thumbs']}
+                                helperText={errors['params.thumbs'] || 'Параметр thumbs для галереи'}
+                                size="small"
+                                placeholder="Введите значение для thumbs"
+                            />
+                        </>
+                    )}
 
                     {/* Параметры (для галереи/повторителя) */}
                     {showParams && (

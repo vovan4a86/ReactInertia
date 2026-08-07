@@ -27,7 +27,7 @@ const BreadCrumbs = () => {
   const [value, setValue] = React.useState(2);
 
     // Словарь для перевода путей
-    const routeTranslations = {
+  const routeTranslations = {
         'admin': 'Главная',
         'dashboard': 'Панель управления',
         'users': 'Пользователи',
@@ -42,6 +42,8 @@ const BreadCrumbs = () => {
         'notifications': 'Уведомления',
         'create': 'Создание',
         'edit': 'Редактирование',
+        'group': 'Группа',
+        'items': 'Элементы',
     };
 
   const renderBreadCrumbs = () => {
