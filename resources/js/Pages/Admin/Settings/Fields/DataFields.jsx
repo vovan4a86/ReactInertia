@@ -21,7 +21,6 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
     const handleFileChange = (field) => (key, file) => {
         // Для вложенных файлов ключ должен быть settings.{settingId}.{fieldName}
         const fileKey = `${name}[${field}]`;
-        console.log('DataFields handleFileChange:', { field, key, file, fileKey });
         onFileChange(fileKey, file);
     };
 

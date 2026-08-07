@@ -15,7 +15,6 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
     // Helper to get file URL from various formats
     const getFileUrl = (fileValue, fileUrls, fieldKey, rowIndex) => {
         if (!fileValue) return null;
-        console.log('getFileUrl')
         // Direct file URL for type 3
         if (setting.type === 3 && setting.file_url) {
             return setting.file_url;
@@ -38,11 +37,6 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
                     return setting.file_urls[index][fieldKey];
                 }
             }
-        }
-
-        // Для типа 7
-        if (setting.type === 7) {
-            // вернуть актуальный массив url
         }
 
         // Nested file URL from file_urls (для типа 4 - DataFields)
@@ -133,8 +127,7 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
                     value={Array.isArray(value) ? value : []}
                     onChange={onChange}
                     onFileChange={onFileChange}
-                    getFileUrl={getFileUrl}
-                    fileUrls={setting.file_urls || {}}
+                    fileUrls={setting.file_urls || []}
                 />
             );
 

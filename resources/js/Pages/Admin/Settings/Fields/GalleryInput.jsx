@@ -1,21 +1,17 @@
-// GalleryInput.jsx - исправленная версия
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import {
     Box,
-    Card,
-    CardMedia,
     IconButton,
     Button,
     Typography,
-    ImageList,
     ImageListItem,
     ImageListItemBar,
     Paper,
+    CardMedia,
 } from '@mui/material';
 import {
     Add as AddIcon,
     Delete as DeleteIcon,
-    Upload as UploadIcon,
     DragIndicator as DragIndicatorIcon,
     OpenInNew as OpenIcon,
 } from '@mui/icons-material';
@@ -25,6 +21,7 @@ import {
     PointerSensor,
     useSensor,
     useSensors,
+    DragOverlay,
 } from '@dnd-kit/core';
 import {
     arrayMove,
@@ -34,103 +31,107 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Sortable Image Item
-function SortableImage({ id, image, index, onRemove, onPreview }) {
+/**
+ * Отдельный компонент для перетаскиваемого изображения.
+ * Оборачивает ImageListItem в div с ref для корректной работы @dnd-kit.
+ */
+function SortableImage({ id, image, onRemove, isDragging }) {
     const {
         attributes,
         listeners,
         setNodeRef,
         transform,
         transition,
-        isDragging,
     } = useSortable({ id });
 
     const style = {
         transform: CSS.Transform.toString(transform),
         transition,
-        opacity: isDragging ? 0.5 : 1,
-        zIndex: isDragging ? 1000 : 'auto',
+        opacity: isDragging ? 0.3 : 1,
+        position: 'relative',
     };
 
     return (
-        <ImageListItem ref={setNodeRef} style={style} sx={{ position: 'relative' }}>
-            {/* Preview Image */}
-            <CardMedia
-                component="img"
-                height="200"
-                image={image.url}
-                alt={image.name || `Image ${index + 1}`}
-                sx={{
-                    objectFit: 'cover',
-                    cursor: 'pointer',
-                    borderRadius: 1,
-                }}
-                onClick={() => onPreview?.(image.url)}
-            />
+        <div ref={setNodeRef} style={style} {...attributes}>
+            <ImageListItem sx={{ width: '100%', height: 200 }}>
+                <CardMedia
+                    component="img"
+                    height="200"
+                    image={image.url}
+                    alt={image.name || 'Image'}
+                    sx={{
+                        objectFit: 'cover',
+                        cursor: 'pointer',
+                        borderRadius: 1,
+                    }}
+                    onClick={() => window.open(image.url, '_blank')}
+                />
 
-            {/* Image Overlay Bar */}
-            <ImageListItemBar
-                sx={{
-                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0) 100%)',
-                    borderRadius: 1,
-                }}
-                position="top"
-                actionIcon={
-                    <Box sx={{ display: 'flex', gap: 0.5, pr: 1 }}>
-                        {/* Drag Handle */}
-                        <IconButton
-                            {...attributes}
-                            {...listeners}
-                            sx={{
-                                color: 'white',
-                                cursor: 'grab',
-                                '&:active': { cursor: 'grabbing' },
-                            }}
-                            size="small"
-                        >
-                            <DragIndicatorIcon fontSize="small" />
-                        </IconButton>
+                <ImageListItemBar
+                    sx={{
+                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0) 100%)',
+                        borderRadius: 1,
+                    }}
+                    position="top"
+                    actionIcon={
+                        <Box sx={{ display: 'flex', gap: 0.5, pr: 1 }}>
+                            {/* Drag handle - только на иконке, чтобы не мешать кликам */}
+                            <IconButton
+                                {...listeners}
+                                sx={{
+                                    color: 'white',
+                                    cursor: 'grab',
+                                    '&:active': { cursor: 'grabbing' },
+                                }}
+                                size="small"
+                            >
+                                <DragIndicatorIcon fontSize="small" />
+                            </IconButton>
 
-                        {/* Open Full Size */}
-                        {image.url && (
+                            {image.url && (
+                                <IconButton
+                                    sx={{ color: 'white' }}
+                                    size="small"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(image.url, '_blank');
+                                    }}
+                                >
+                                    <OpenIcon fontSize="small" />
+                                </IconButton>
+                            )}
+
                             <IconButton
                                 sx={{ color: 'white' }}
                                 size="small"
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    window.open(image.url, '_blank');
+                                    onRemove(image.id);
                                 }}
                             >
-                                <OpenIcon fontSize="small" />
+                                <DeleteIcon fontSize="small" />
                             </IconButton>
-                        )}
+                        </Box>
+                    }
+                    actionPosition="right"
+                />
 
-                        {/* Delete */}
-                        <IconButton
-                            sx={{ color: 'white' }}
-                            size="small"
-                            onClick={(e) => {
-                                e.stopPropagation();
-                                onRemove(index);
-                            }}
-                        >
-                            <DeleteIcon fontSize="small" />
-                        </IconButton>
-                    </Box>
-                }
-                actionPosition="right"
-            />
-
-            {/* Image Name/Index */}
-            <ImageListItemBar
-                title={image.name || `Изображение ${index + 1}`}
-                subtitle={image.isNew ? 'Новое' : 'Существующее'}
-                sx={{ borderRadius: '0 0 4px 4px' }}
-            />
-        </ImageListItem>
+                <ImageListItemBar
+                    title={image.name || 'Изображение'}
+                    subtitle={image.isNew ? 'Новое' : 'Существующее'}
+                    sx={{ borderRadius: '0 0 4px 4px' }}
+                />
+            </ImageListItem>
+        </div>
     );
 }
 
+/**
+ * Компонент галереи изображений с поддержкой:
+ * - Множественной загрузки
+ * - Drag-and-drop перетаскивания
+ * - Предпросмотра новых файлов
+ */
 export default function GalleryInput({
                                          name,
                                          value = [],
@@ -139,136 +140,150 @@ export default function GalleryInput({
                                          fileUrls = [],
                                      }) {
     const fileInputRef = useRef(null);
-    // Храним preview как Map: file.name -> dataUrl
     const [previews, setPreviews] = useState({});
-    console.log(fileUrls);
+    const [activeDragId, setActiveDragId] = useState(null);
+    const idCounterRef = useRef(0);
+
+    // Локальное состояние для немедленного отклика при перетаскивании
+    const [localValue, setLocalValue] = useState(() => Array.isArray(value) ? value : []);
+
+    // Синхронизация с внешним value при изменении из родителя
+    useEffect(() => {
+        setLocalValue(Array.isArray(value) ? value : []);
+    }, [value]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
-                distance: 8,
+                distance: 8, // Минимальное расстояние для начала перетаскивания
             },
         })
     );
 
-    // Prepare images data
-    const images = Array.isArray(value) ? value.map((item, index) => {
-        // If item is a File object (new upload)
-        if (item instanceof File) {
-            // Используем имя файла как ключ для preview
-            const previewUrl = previews[item.name];
+    /**
+     * Формирует массив объектов изображений для рендера.
+     * Ключевой момент: URL ищется по имени файла, а не по индексу,
+     * что позволяет сохранять правильные URL при перетаскивании.
+     */
+    const images = useMemo(() => {
+        const items = Array.isArray(localValue) ? localValue : [];
+        const result = [];
+        const usedIds = new Set();
 
-            return {
-                key: `new-${index}-${item.name}`,
-                url: previewUrl || null,
-                name: item.name,
-                file: item,
-                isNew: true,
-            };
-        }
+        // Строим карту: имя_файла -> URL для быстрого поиска
+        const pathToUrlMap = {};
+        const fileUrlsArray = Array.isArray(fileUrls) ? fileUrls : Object.values(fileUrls || {});
 
-        // If item is a string (existing file path or marker)
-        if (typeof item === 'string') {
-            const isStoredFile = !item.startsWith('settings.') && !item.startsWith('settings[');
-
-            if (isStoredFile && item !== '') {
-                // Получаем URL из fileUrls
-                let imageUrl = null;
-
-                // Проверяем fileUrls по разным форматам
-                if (Array.isArray(fileUrls)) {
-                    imageUrl = fileUrls[index] || null;
-                    console.log(imageUrl)
-                } else if (typeof fileUrls === 'object') {
-                    imageUrl = fileUrls[index] || fileUrls[String(index)] || null;
-
-                    // Ищем по значению файла
-                    if (!imageUrl) {
-                        for (const [key, url] of Object.entries(fileUrls)) {
-                            if (url && url.includes(item)) {
-                                imageUrl = url;
-                                break;
-                            }
-                        }
-                    }
+        fileUrlsArray.forEach(url => {
+            if (url && typeof url === 'string') {
+                const fileName = url.split('/').pop();
+                if (fileName) {
+                    pathToUrlMap[fileName] = url;
                 }
-
-                // Если URL не найден, создаем стандартный путь
-                if (!imageUrl) {
-                    imageUrl = `/storage/${item}`;
-                }
-
-                return {
-                    key: `existing-${index}`,
-                    url: imageUrl,
-                    name: item.split('/').pop(),
-                    path: item,
-                    isNew: false,
-                };
             }
-        }
+        });
 
-        return null;
-    }).filter(Boolean) : [];
+        items.forEach((item) => {
+            let id, url, name, isNew;
 
+            if (item instanceof File) {
+                // Новый файл: ID стабилен благодаря имени и размеру
+                id = `file-${item.name}-${item.size}`;
+                url = previews[item.name] || null;
+                name = item.name;
+                isNew = true;
+            } else if (typeof item === 'string' && !item.startsWith('settings.')) {
+                // Существующий файл: ID стабилен благодаря пути
+                id = `existing-${item}`;
+                const fileName = item.split('/').pop();
+
+                // Ищем URL по имени файла в карте
+                url = pathToUrlMap[fileName] || pathToUrlMap[item];
+
+                // Если не нашли, пробуем найти по частичному совпадению
+                if (!url) {
+                    url = fileUrlsArray.find(u => u && u.includes(fileName)) || null;
+                }
+
+                // Fallback на стандартный путь
+                if (!url) {
+                    url = `/storage/${item}`;
+                }
+
+                name = fileName || item;
+                isNew = false;
+            } else {
+                return; // Пропускаем маркеры и пустые строки
+            }
+
+            // Гарантируем уникальность ID
+            let uniqueId = id;
+            while (usedIds.has(uniqueId)) {
+                uniqueId = `${id}-${idCounterRef.current++}`;
+            }
+            usedIds.add(uniqueId);
+
+            result.push({ id: uniqueId, url, name, isNew });
+        });
+
+        return result;
+    }, [localValue, fileUrls, previews]);
+
+    /**
+     * Добавление новых изображений.
+     * Создает preview через FileReader и добавляет файлы в массив.
+     */
     const handleAddImages = useCallback((e) => {
         const files = Array.from(e.target.files || []);
-
         if (files.length === 0) return;
 
-        // Создаем preview для всех файлов
+        // Создаем preview для всех файлов параллельно
         const newPreviews = { ...previews };
-
-        // Сначала создаем все preview
         const previewPromises = files.map((file) => {
             return new Promise((resolve) => {
-                if (file.type.startsWith('image/')) {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-
-                        newPreviews[file.name] = e.target?.result;
-                        resolve();
-                    };
-                    reader.onerror = (error) => {
-                        resolve();
-                    };
-                    reader.readAsDataURL(file);
-                } else {
+                if (!file.type.startsWith('image/')) {
                     resolve();
+                    return;
                 }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    newPreviews[file.name] = e.target?.result;
+                    resolve();
+                };
+                reader.onerror = () => resolve();
+                reader.readAsDataURL(file);
             });
         });
 
-        // После создания всех preview обновляем состояние
-        Promise.all(previewPromises).then(() => {
-            setPreviews(newPreviews);
-        });
+        Promise.all(previewPromises).then(() => setPreviews(newPreviews));
 
-        // Добавляем файлы в value
-        const currentValue = Array.isArray(value) ? value : [];
+        const currentValue = Array.isArray(localValue) ? localValue : [];
         const updatedValue = [...currentValue, ...files];
 
-        onChange(updatedValue);
+        setLocalValue(updatedValue); // Обновляем локально
+        onChange(updatedValue); // И уведомляем родителя
 
-        // Уведомляем о файлах
+        // Уведомляем родителя о новых файлах для FormData
         files.forEach((file, i) => {
-            const fileKey = `${name}[${currentValue.length + i}]`;
-            onFileChange(fileKey, file);
+            onFileChange(`${name}[${currentValue.length + i}]`, file);
         });
 
-        // Сбрасываем input
         if (fileInputRef.current) {
             fileInputRef.current.value = '';
         }
-    }, [value, name, onChange, onFileChange, previews]);
+    }, [localValue, name, onChange, onFileChange, previews]);
 
-    const handleRemove = useCallback((index) => {
-        const currentValue = Array.isArray(value) ? value : [];
-        const removedItem = currentValue[index];
+    /**
+     * Удаление изображения по его ID.
+     */
+    const handleRemove = useCallback((imageId) => {
+        const currentValue = Array.isArray(localValue) ? localValue : [];
+        const imageIndex = images.findIndex(img => img.id === imageId);
+        if (imageIndex === -1) return;
 
-        const updatedValue = currentValue.filter((_, i) => i !== index);
+        const removedItem = currentValue[imageIndex];
+        const updatedValue = currentValue.filter((_, i) => i !== imageIndex);
 
-        // Очищаем preview если удаляем новый файл
         if (removedItem instanceof File) {
             setPreviews(prev => {
                 const newPreviews = { ...prev };
@@ -277,70 +292,96 @@ export default function GalleryInput({
             });
         }
 
-        // Уведомляем об удалении
-        const fileKey = `${name}[${index}]`;
-
-        onChange(updatedValue);
+        setLocalValue(updatedValue); // Обновляем локально
+        const fileKey = `${name}[${imageIndex}]`;
+        onChange(updatedValue); // И уведомляем родителя
         onFileChange(fileKey, null);
-    }, [value, name, onChange, onFileChange]);
+    }, [localValue, name, onChange, onFileChange, images]);
 
+    /**
+     * Обработчик завершения перетаскивания.
+     * Использует arrayMove для перестановки элементов.
+     */
     const handleDragEnd = useCallback((event) => {
         const { active, over } = event;
+        setActiveDragId(null);
 
-        if (active.id !== over?.id) {
-            const oldIndex = images.findIndex(img => img.key === active.id);
-            const newIndex = images.findIndex(img => img.key === over.id);
+        if (!over || active.id === over.id) return;
 
-            if (oldIndex !== -1 && newIndex !== -1) {
-                const newValue = arrayMove(
-                    Array.isArray(value) ? value : [],
-                    oldIndex,
-                    newIndex
-                );
-                onChange(newValue);
-            }
+        const currentValue = Array.isArray(localValue) ? [...localValue] : [];
+
+        const oldIndex = images.findIndex(img => img.id === active.id);
+        const newIndex = images.findIndex(img => img.id === over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+            const currentValue = Array.isArray(localValue) ? [...localValue] : [];
+            const newValue = arrayMove(currentValue, oldIndex, newIndex);
+
+            setLocalValue(newValue); // Сначала локально для мгновенного отклика
+            onChange(newValue);      // Затем уведомляем родителя
         }
-    }, [images, value, onChange]);
+    }, [localValue, images, onChange]);
+
+    const handleDragCancel = useCallback(() => {
+        setActiveDragId(null);
+    }, []);
+
+    const sortableIds = images.map(img => img.id);
+
+    const activeImage = activeDragId
+        ? images.find(img => img.id === activeDragId)
+        : null;
 
     return (
         <Box>
-            {/* Gallery Grid */}
             {images.length > 0 ? (
                 <DndContext
                     sensors={sensors}
                     collisionDetection={closestCenter}
+                    onDragStart={(e) => setActiveDragId(e.active.id)}
                     onDragEnd={handleDragEnd}
+                    onDragCancel={() => setActiveDragId(null)}
                 >
-                    <SortableContext
-                        items={images.map(img => img.key)}
-                        strategy={rectSortingStrategy}
-                    >
-                        <ImageList
-                            cols={3}
-                            gap={12}
-                            rowHeight={200}
-                            sx={{ mb: 2 }}
+                    <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(3, 1fr)',
+                                gap: 1.5,
+                                mb: 2,
+                            }}
                         >
-                            {images.map((image, index) => (
+                            {images.map((image) => (
                                 <SortableImage
-                                    key={image.key}
-                                    id={image.key}
+                                    key={image.id}
+                                    id={image.id}
                                     image={image}
-                                    index={index}
                                     onRemove={handleRemove}
+                                    isDragging={activeDragId === image.id}
                                 />
                             ))}
-                        </ImageList>
+                        </Box>
                     </SortableContext>
+
+                    {/* Оверлей для перетаскиваемого изображения */}
+                    <DragOverlay>
+                        {activeImage ? (
+                            <Box sx={{ width: '100%', maxWidth: 300, opacity: 0.8 }}>
+                                <CardMedia
+                                    component="img"
+                                    height="200"
+                                    image={activeImage.url}
+                                    alt={activeImage.name}
+                                    sx={{ objectFit: 'cover', borderRadius: 1 }}
+                                />
+                            </Box>
+                        ) : null}
+                    </DragOverlay>
                 </DndContext>
             ) : (
                 <Paper
                     variant="outlined"
-                    sx={{
-                        p: 3,
-                        textAlign: 'center',
-                        mb: 2,
-                    }}
+                    sx={{ p: 3, textAlign: 'center', mb: 2 }}
                 >
                     <Typography color="textSecondary">
                         Нет изображений. Нажмите "Добавить" для загрузки.
@@ -348,7 +389,7 @@ export default function GalleryInput({
                 </Paper>
             )}
 
-            {/* Controls */}
+            {/* Кнопка добавления */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                 <input
                     ref={fileInputRef}
@@ -363,9 +404,7 @@ export default function GalleryInput({
                     variant="outlined"
                     size="small"
                     startIcon={<AddIcon />}
-                    onClick={() => {
-                        fileInputRef.current?.click();
-                    }}
+                    onClick={() => fileInputRef.current?.click()}
                 >
                     Добавить изображения
                 </Button>
@@ -378,7 +417,6 @@ export default function GalleryInput({
                 )}
             </Box>
 
-            {/* Help text */}
             <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
                 Поддерживаются форматы: JPG, PNG, GIF, WebP. Можно перетаскивать для изменения порядка.
             </Typography>
