@@ -1,88 +1,125 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import {
+    Box,
+    Typography,
+    Chip,
+    useTheme
+} from '@mui/material';
 import TextFieldInput from './TextFieldInput';
 import TextareaInput from './TextareaInput';
 import EditorInput from './EditorInput';
 import FileInput from './FileInput';
 
+import TextFieldsIcon from '@mui/icons-material/TextFields';
+import SubjectIcon from '@mui/icons-material/Subject';
+import EditIcon from '@mui/icons-material/Edit';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+
+const FIELD_TYPE_ICONS = {
+    0: TextFieldsIcon,
+    1: SubjectIcon,
+    2: EditIcon,
+    3: AttachFileIcon,
+};
+
+const FIELD_TYPE_LABELS = {
+    0: 'Текст',
+    1: 'Текстовое поле',
+    2: 'Редактор',
+    3: 'Файл',
+};
+
 export default function DataFields({ setting, name, value, onChange, onFileChange, getFileUrl }) {
+    const theme = useTheme();
     const fields = setting.params?.fields || {};
 
+    if (Object.keys(fields).length === 0) {
+        return (
+            <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: 'center' }}>
+                Нет настраиваемых полей
+            </Typography>
+        );
+    }
+
     const handleFieldChange = (field, val) => {
-        // Не сохраняем маркеры файлов как значения
-        if (typeof val === 'string' && val.startsWith('settings[')) {
-            // Это маркер файла, не обновляем значение поля
-            return;
-        }
+        if (typeof val === 'string' && val.startsWith('settings[')) return;
         onChange({ ...value, [field]: val });
     };
 
-    // Оборачиваем onFileChange для правильного ключа
     const handleFileChange = (field) => (key, file) => {
-        // Для вложенных файлов ключ должен быть settings.{settingId}.{fieldName}
         const fileKey = `${name}[${field}]`;
         onFileChange(fileKey, file);
     };
 
     return (
         <Box>
+            <Typography
+                variant="overline"
+                color="text.secondary"
+                sx={{ mb: 1, display: 'block' }}
+            >
+                Поля данных ({Object.keys(fields).length})
+            </Typography>
+
             <Box component="dl" sx={{
-                '& dt': {
-                    fontWeight: 'bold',
-                    mb: 0.5,
-                    color: 'text.secondary',
-                    fontSize: '0.875rem',
-                },
-                '& dd': {
-                    mb: 2,
-                    ml: 2,
-                },
+                '& dt': { mb: 0.5 },
+                '& dd': { mb: 3, ml: 0 },
             }}>
-                {Object.entries(fields).map(([field, params]) => (
-                    <React.Fragment key={field}>
-                        <Typography component="dt" variant="body2">
-                            {params.title}
-                        </Typography>
-                        <Box component="dd">
-                            {params.type === 0 && (
-                                <TextFieldInput
-                                    name={`${name}[${field}]`}
-                                    value={value[field] || ''}
-                                    onChange={(val) => handleFieldChange(field, val)}
-                                    placeholder={params.title}
-                                />
-                            )}
+                {Object.entries(fields).map(([field, params]) => {
+                    const TypeIcon = FIELD_TYPE_ICONS[params.type] || TextFieldsIcon;
+                    const hasValue = value[field] && value[field] !== '';
 
-                            {params.type === 1 && (
-                                <TextareaInput
-                                    name={`${name}[${field}]`}
-                                    value={value[field] || ''}
-                                    onChange={(val) => handleFieldChange(field, val)}
-                                    placeholder={params.title}
-                                />
-                            )}
+                    const commonProps = {
+                        name: `${name}[${field}]`,
+                        value: value[field] || '',
+                        onChange: (val) => handleFieldChange(field, val),
+                        placeholder: params.title,
+                    };
 
-                            {params.type === 2 && (
-                                <EditorInput
-                                    name={`${name}[${field}]`}
-                                    value={value[field] || ''}
-                                    onChange={(val) => handleFieldChange(field, val)}
+                    return (
+                        <React.Fragment key={field}>
+                            {/* Заголовок */}
+                            <Box component="dt" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <TypeIcon
+                                    color={hasValue ? 'primary' : 'action'}
+                                    fontSize="small"
                                 />
-                            )}
+                                <Typography variant="subtitle2" sx={{ flex: 1 }}>
+                                    {params.title}
+                                </Typography>
+                                <Chip
+                                    label={FIELD_TYPE_LABELS[params.type]}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.7rem' }}
+                                />
+                                {!hasValue && (
+                                    <Chip
+                                        label="Пусто"
+                                        size="small"
+                                        color="warning"
+                                        variant="outlined"
+                                        sx={{ height: 20, fontSize: '0.7rem' }}
+                                    />
+                                )}
+                            </Box>
 
-                            {params.type === 3 && (
-                                <FileInput
-                                    name={`${name}[${field}]`}
-                                    value={value[field]}
-                                    fileUrl={getFileUrl(value[field], setting.file_urls, field)}
-                                    onChange={(val) => handleFieldChange(field, val)}
-                                    onFileChange={handleFileChange(field)}
-                                    placeholder={params.title}
-                                />
-                            )}
-                        </Box>
-                    </React.Fragment>
-                ))}
+                            {/* Поле ввода */}
+                            <Box component="dd">
+                                {params.type === 0 && <TextFieldInput {...commonProps} />}
+                                {params.type === 1 && <TextareaInput {...commonProps} rows={3} />}
+                                {params.type === 2 && <EditorInput {...commonProps} />}
+                                {params.type === 3 && (
+                                    <FileInput
+                                        {...commonProps}
+                                        fileUrl={getFileUrl(value[field], setting.file_urls, field)}
+                                        onFileChange={handleFileChange(field)}
+                                    />
+                                )}
+                            </Box>
+                        </React.Fragment>
+                    );
+                })}
             </Box>
         </Box>
     );
