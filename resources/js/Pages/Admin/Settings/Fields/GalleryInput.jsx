@@ -38,9 +38,7 @@ import { CSS } from '@dnd-kit/utilities';
 /**
  * Компонент для отображения миниатюр изображения
  */
-function ThumbnailsPreview({ image, thumbs }) {
-    const [showThumbs, setShowThumbs] = useState(false);
-
+function ThumbnailsPreview({ image, thumbs, showThumbs, onToggle }) {
     if (!thumbs || Object.keys(thumbs).length === 0) {
         return null;
     }
@@ -48,74 +46,42 @@ function ThumbnailsPreview({ image, thumbs }) {
     const thumbEntries = Object.entries(thumbs);
 
     return (
-        <Box sx={{ mt: 0.5 }}>
-            <Button
+        <>
+            {/* Кнопка на изображении - только иконка, без фона */}
+            <IconButton
                 size="small"
-                variant="text"
-                onClick={() => setShowThumbs(!showThumbs)}
-                sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onToggle();
+                }}
+                sx={{
+                    position: 'absolute',
+                    bottom: 4,
+                    right: 4,
+                    zIndex: 2,
+                    bgcolor: 'rgba(0,0,0,0.4)',
+                    color: 'white',
+                    width: 24,
+                    height: 24,
+                    padding: 0,
+                    '&:hover': {
+                        bgcolor: 'rgba(0,0,0,0.6)',
+                    },
+                }}
             >
-                {showThumbs ? 'Скрыть' : `Все размеры (${thumbEntries.length})`}
-            </Button>
-
-            {showThumbs && (
-                <Box sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 0.5,
-                    mt: 0.5,
-                    p: 0.5,
-                    bgcolor: 'grey.50',
-                    borderRadius: 1,
-                }}>
-                    {thumbEntries.map(([key, thumb]) => (
-                        <Tooltip
-                            key={key}
-                            title={`${thumb.config}${thumb.size ? ` (${thumb.size.mode})` : ''}`}
-                            arrow
-                        >
-                            <Box
-                                sx={{
-                                    position: 'relative',
-                                    width: 60,
-                                    height: 50,
-                                    borderRadius: 0.5,
-                                    overflow: 'hidden',
-                                    border: '1px solid',
-                                    borderColor: 'divider',
-                                    cursor: 'pointer',
-                                    transition: 'transform 0.2s',
-                                    '&:hover': {
-                                        transform: 'scale(1.05)',
-                                        borderColor: 'primary.main',
-                                    },
-                                }}
-                                onClick={() => window.open(thumb.url, '_blank')}
-                            >
-                                <CardMedia
-                                    component="img"
-                                    image={thumb.url}
-                                    alt={`Thumb ${key}`}
-                                    sx={{
-                                        width: '100%',
-                                        height: '100%',
-                                        objectFit: 'cover',
-                                    }}
-                                />
-                            </Box>
-                        </Tooltip>
-                    ))}
-                </Box>
-            )}
-        </Box>
+                <GalleryIcon sx={{ fontSize: '0.85rem' }} />
+            </IconButton>
+        </>
     );
 }
 
 /**
  * Отдельный компонент для перетаскиваемого изображения.
- * Оборачивает ImageListItem в div с ref для корректной работы @dnd-kit.
+ * Показывает первый thumb вместо оригинала, оригинал открывается по клику.
  */
 function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
+    const [showThumbs, setShowThumbs] = useState(false);
+
     const {
         attributes,
         listeners,
@@ -131,15 +97,11 @@ function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
         position: 'relative',
     };
 
-    // Проверяем, есть ли thumbs для этого изображения
     const hasThumbs = image.thumbs && Object.keys(image.thumbs).length > 0;
-
-    // Берем первый thumb (индекс 0) для отображения
     const displayThumb = hasThumbs ? image.thumbs[0] : null;
-
-    // URL для отображения: первый thumb или оригинал
     const displayUrl = displayThumb?.url || image.url;
     const originalUrl = image.url;
+    const thumbEntries = hasThumbs ? Object.entries(image.thumbs) : [];
 
     return (
         <div ref={setNodeRef} style={style} {...attributes}>
@@ -156,20 +118,27 @@ function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
                     },
                 }}
             >
-                <Box sx={{ position: 'relative', height: 200 }}>
+                {/* Контейнер изображения */}
+                <Box sx={{
+                    position: 'relative',
+                    height: 160,
+                    overflow: 'hidden',
+                }}>
                     <CardMedia
                         component="img"
-                        height="200"
+                        height="160"
                         image={displayUrl}
                         alt={image.name || 'Image'}
                         sx={{
                             objectFit: 'cover',
                             cursor: 'pointer',
+                            width: '100%',
+                            height: '100%',
                         }}
                         onClick={() => window.open(originalUrl, '_blank')}
                     />
 
-                    {/* Индикатор, что показан thumb */}
+                    {/* Индикатор размера thumb */}
                     {displayThumb && (
                         <Box
                             sx={{
@@ -185,6 +154,8 @@ function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
                                 display: 'flex',
                                 alignItems: 'center',
                                 gap: 0.3,
+                                zIndex: 2,
+                                pointerEvents: 'none',
                             }}
                         >
                             <GalleryIcon sx={{ fontSize: '0.8rem' }} />
@@ -192,97 +163,175 @@ function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
                         </Box>
                     )}
 
-                    <ImageListItemBar
+                    {/* Кнопки действий сверху */}
+                    <Box
                         sx={{
-                            background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0) 100%)',
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            display: 'flex',
+                            justifyContent: 'flex-end',
+                            alignItems: 'flex-start',
+                            p: 0.5,
+                            background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)',
+                            zIndex: 2,
                         }}
-                        position="top"
-                        actionIcon={
-                            <Box sx={{ display: 'flex', gap: 0.5, pr: 1 }}>
-                                {/* Drag handle */}
-                                <IconButton
-                                    {...listeners}
+                    >
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <IconButton
+                                {...listeners}
+                                sx={{
+                                    color: 'white',
+                                    cursor: 'grab',
+                                    '&:active': { cursor: 'grabbing' },
+                                    padding: 0.5,
+                                }}
+                                size="small"
+                            >
+                                <DragIndicatorIcon fontSize="small" />
+                            </IconButton>
+
+                            {originalUrl && (
+                                <Tooltip title="Открыть оригинал">
+                                    <IconButton
+                                        sx={{ color: 'white', padding: 0.5 }}
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.open(originalUrl, '_blank');
+                                        }}
+                                    >
+                                        <OpenIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            )}
+
+                            <IconButton
+                                sx={{ color: 'white', padding: 0.5 }}
+                                size="small"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onRemove(image.id);
+                                }}
+                            >
+                                <DeleteIcon fontSize="small" />
+                            </IconButton>
+                        </Box>
+                    </Box>
+
+                    {/* Кнопка размеров */}
+                    {hasThumbs && (
+                        <IconButton
+                            size="small"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setShowThumbs(!showThumbs);
+                            }}
+                            sx={{
+                                position: 'absolute',
+                                bottom: 4,
+                                right: 4,
+                                zIndex: 2,
+                                bgcolor: 'rgba(0,0,0,0.4)',
+                                color: 'white',
+                                width: 24,
+                                height: 24,
+                                padding: 0,
+                                '&:hover': {
+                                    bgcolor: 'rgba(0,0,0,0.6)',
+                                },
+                            }}
+                        >
+                            <GalleryIcon sx={{ fontSize: '0.85rem' }} />
+                        </IconButton>
+                    )}
+                </Box>
+
+                {/* Панель с миниатюрами - отдельно от изображения */}
+                {showThumbs && hasThumbs && (
+                    <Box
+                        sx={{
+                            display: 'flex',
+                            gap: 0.5,
+                            p: 0.5,
+                            bgcolor: 'grey.50',
+                            borderTop: '1px solid',
+                            borderColor: 'divider',
+                            overflowX: 'auto',
+                            '&::-webkit-scrollbar': {
+                                height: 4,
+                            },
+                            '&::-webkit-scrollbar-thumb': {
+                                backgroundColor: 'rgba(0,0,0,0.2)',
+                                borderRadius: 2,
+                            },
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {thumbEntries.map(([key, thumb]) => (
+                            <Tooltip
+                                key={key}
+                                title={`${thumb.config}${thumb.size ? ` (${thumb.size.mode})` : ''}`}
+                                arrow
+                            >
+                                <Box
                                     sx={{
-                                        color: 'white',
-                                        cursor: 'grab',
-                                        '&:active': { cursor: 'grabbing' },
+                                        position: 'relative',
+                                        minWidth: 60,
+                                        height: 48,
+                                        borderRadius: 0.5,
+                                        overflow: 'hidden',
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        cursor: 'pointer',
+                                        transition: 'transform 0.2s, border-color 0.2s',
+                                        flexShrink: 0,
+                                        '&:hover': {
+                                            transform: 'scale(1.05)',
+                                            borderColor: 'primary.main',
+                                        },
                                     }}
-                                    size="small"
-                                >
-                                    <DragIndicatorIcon fontSize="small" />
-                                </IconButton>
-
-                                {/* Кнопка просмотра оригинала */}
-                                {originalUrl && (
-                                    <Tooltip title="Открыть оригинал">
-                                        <IconButton
-                                            sx={{ color: 'white' }}
-                                            size="small"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                window.open(originalUrl, '_blank');
-                                            }}
-                                        >
-                                            <OpenIcon fontSize="small" />
-                                        </IconButton>
-                                    </Tooltip>
-                                )}
-
-                                <IconButton
-                                    sx={{ color: 'white' }}
-                                    size="small"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        onRemove(image.id);
+                                        window.open(thumb.url, '_blank');
                                     }}
                                 >
-                                    <DeleteIcon fontSize="small" />
-                                </IconButton>
-                            </Box>
-                        }
-                        actionPosition="right"
-                    />
-                </Box>
-
-                {/* Информация об изображении */}
-                <Box sx={{ p: 1 }}>
-                    <Stack spacing={0.5}>
-                        <Typography variant="caption" fontWeight="medium" noWrap>
-                            {image.name || 'Изображение'}
-                        </Typography>
-
-                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                            <Chip
-                                label={image.isNew ? 'Новое' : 'Существующее'}
-                                size="small"
-                                color={image.isNew ? 'success' : 'default'}
-                                variant="outlined"
-                                sx={{ height: 20, fontSize: '0.65rem' }}
-                            />
-                            {hasThumbs && (
-                                <Chip
-                                    icon={<GalleryIcon sx={{ fontSize: '0.7rem !important' }} />}
-                                    label={`${Object.keys(image.thumbs).length} разм.`}
-                                    size="small"
-                                    color="primary"
-                                    variant="outlined"
-                                    sx={{ height: 20, fontSize: '0.65rem' }}
-                                />
-                            )}
-                        </Stack>
-                    </Stack>
-
-                    {/* Отображение всех миниатюр */}
-                    <ThumbnailsPreview
-                        image={image}
-                        thumbs={image.thumbs}
-                    />
-                </Box>
+                                    <CardMedia
+                                        component="img"
+                                        image={thumb.url}
+                                        alt={`Thumb ${key}`}
+                                        sx={{
+                                            width: '100%',
+                                            height: '100%',
+                                            objectFit: 'cover',
+                                        }}
+                                    />
+                                    <Box
+                                        sx={{
+                                            position: 'absolute',
+                                            bottom: 0,
+                                            left: 0,
+                                            right: 0,
+                                            bgcolor: 'rgba(0,0,0,0.6)',
+                                            color: 'white',
+                                            fontSize: '0.6rem',
+                                            textAlign: 'center',
+                                            py: 0.2,
+                                            lineHeight: 1,
+                                        }}
+                                    >
+                                        {thumb.config}
+                                    </Box>
+                                </Box>
+                            </Tooltip>
+                        ))}
+                    </Box>
+                )}
             </Paper>
         </div>
     );
 }
-
 
 /**
  * Компонент галереи изображений с поддержкой:
@@ -524,7 +573,7 @@ export default function GalleryInput({
                         <Box
                             sx={{
                                 display: 'grid',
-                                gridTemplateColumns: 'repeat(3, 1fr)',
+                                gridTemplateColumns: 'repeat(5, 1fr)',  // Сетка
                                 gap: 1.5,
                                 mb: 2,
                             }}
