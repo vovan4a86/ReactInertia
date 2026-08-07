@@ -45,7 +45,10 @@ export default function SettingsFields({ settings, onSave }) {
     };
 
     const handleFieldChange = (settingId, value) => {
-        setValues(prev => ({ ...prev, [settingId]: value }));
+        setValues(prev => {
+            console.log('Updating setting:', settingId, 'with value:', value);
+            return { ...prev, [settingId]: value };
+        });
     };
 
     const handleFileChange = (key, file) => {
@@ -64,7 +67,16 @@ export default function SettingsFields({ settings, onSave }) {
         e.preventDefault();
         setSaving(true);
 
+        // Правильный способ логирования FormData
+        console.log('Current values:', values);
+        console.log('Current files:', files);
+
         const formData = new FormData();
+
+        console.log('FormData entries before send:');
+        for (let [key, val] of formData.entries()) {
+            console.log(key, val);
+        }
 
         // Добавляем ВСЕ значения настроек
         Object.entries(values).forEach(([settingId, value]) => {
@@ -130,6 +142,15 @@ export default function SettingsFields({ settings, onSave }) {
                         });
                     }
                 }
+            } else if (typeof value === 'object' && value !== null) {
+                // БЛОК для обработки обычных объектов (type 4 DataFields)
+                Object.entries(value).forEach(([field, fieldVal]) => {
+                    if (fieldVal !== null && fieldVal !== undefined) {
+                        formData.append(`settings[${settingId}][${field}]`, fieldVal);
+                    } else {
+                        formData.append(`settings[${settingId}][${field}]`, '');
+                    }
+                });
             } else {
                 formData.append(`settings[${settingId}]`, value);
             }
@@ -156,7 +177,7 @@ export default function SettingsFields({ settings, onSave }) {
         await onSave(formData);
         setSaving(false);
 
-        // После сохранения очищаем files
+         // После сохранения очищаем files
         setFiles({});
     };
 

@@ -113,7 +113,7 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
                 <DataFields
                     setting={setting}
                     name={fieldName}
-                    value={value || {}}
+                    value={typeof value === 'object' && value !== null ? value : {}}
                     onChange={onChange}
                     onFileChange={onFileChange}
                     getFileUrl={getFileUrl}

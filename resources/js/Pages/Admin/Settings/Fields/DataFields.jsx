@@ -1,9 +1,8 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
     Box,
     Typography,
     Chip,
-    useTheme
 } from '@mui/material';
 import TextFieldInput from './TextFieldInput';
 import TextareaInput from './TextareaInput';
@@ -30,8 +29,13 @@ const FIELD_TYPE_LABELS = {
 };
 
 export default function DataFields({ setting, name, value, onChange, onFileChange, getFileUrl }) {
-    const theme = useTheme();
     const fields = setting.params?.fields || {};
+
+    // Добавляем отладку
+    useEffect(() => {
+        console.log('DataFields received value:', value);
+        console.log('DataFields fields:', fields);
+    }, [value, fields]);
 
     if (Object.keys(fields).length === 0) {
         return (
@@ -43,7 +47,12 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
 
     const handleFieldChange = (field, val) => {
         if (typeof val === 'string' && val.startsWith('settings[')) return;
-        onChange({ ...value, [field]: val });
+        const newValue = {
+            ...(value || {}),
+            [field]: val
+        };
+
+        onChange(newValue);
     };
 
     const handleFileChange = (field) => (key, file) => {

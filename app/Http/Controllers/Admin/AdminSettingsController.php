@@ -6,6 +6,7 @@ use App\Helpers\SettingsThumb;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -254,6 +255,7 @@ class AdminSettingsController
         if ($id) {
             $setting->update($data);
             $message = 'Настройка обновлена';
+            \Debugbar::log($data);
         } else {
             $order = Setting::where('setting_group_id', $data['setting_group_id'])->max('order') ?? 0;
             $data['order'] = $order + 1;
@@ -322,6 +324,7 @@ class AdminSettingsController
                 break;
 
             case 4: // Data with possible files
+                Log::info($setting);
                 $this->processStructuredData($setting, $value, $request);
                 break;
 
@@ -375,6 +378,8 @@ class AdminSettingsController
         if (!is_array($value)) {
             return;
         }
+
+        Log::info($setting);
 
         $params = $setting->params ?? [];
         $fields = $params['fields'] ?? [];
