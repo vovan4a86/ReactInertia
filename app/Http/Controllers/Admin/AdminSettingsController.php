@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Helpers\SettingsThumb;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Intervention\Image\ImageManager;
@@ -116,6 +118,73 @@ class AdminSettingsController
         ]);
     }
 
+    /**
+     * Получить данные о миниатюрах для галереи
+     */
+    protected function getGalleryThumbsData(Setting $setting): array
+    {
+        if ($setting->type !== 7) {
+            return [];
+        }
+
+        $images = is_string($setting->value)
+            ? json_decode($setting->value, true)
+            : $setting->value;
+
+        $images = $images ?? [];
+
+        if (empty($images)) {
+            return [];
+        }
+
+        $thumbsConfig = SettingsThumb::parseThumbsConfig($setting->params['thumbs'] ?? '');
+
+        if (empty($thumbsConfig)) {
+            return [];
+        }
+
+        $result = [];
+        $storage = Storage::disk(Setting::UPLOAD_DISK);
+
+        foreach ($images as $index => $imagePath) {
+            if (is_string($imagePath) && !empty($imagePath)) {
+                $fullPath = Setting::UPLOAD_DIR . '/' . $imagePath;
+
+                // Проверяем существование оригинального файла
+                if (!$storage->exists($fullPath)) {
+                    continue;
+                }
+
+                // Получаем thumbs для каждого изображения
+                $thumbs = [];
+                foreach ($thumbsConfig as $key => $config) {
+                    $thumbPath = SettingsThumb::url($fullPath, $key);
+
+                    // Если thumb не существует, пробуем создать
+                    if (!$storage->exists($thumbPath)) {
+                        SettingsThumb::make($fullPath, $thumbsConfig);
+                    }
+
+                    if ($storage->exists($thumbPath)) {
+                        $thumbs[$key] = [
+                            'url' => $storage->url($thumbPath),
+                            'config' => $config,
+                        ];
+                    }
+                }
+
+                $result[] = [
+                    'original' => $storage->url($fullPath),
+                    'path' => $fullPath,
+                    'name' => basename($imagePath),
+                    'thumbs' => $thumbs,
+                ];
+            }
+        }
+
+        return $result;
+    }
+
     public function storeSetting(Request $request)
     {
         return $this->saveSetting($request);
@@ -151,12 +220,6 @@ class AdminSettingsController
 
         foreach ($settings as $setting) {
             $value = $settingsData[$setting->id] ?? null;
-
-            \Log::info('🔵 Controller: Starting save', [
-                'request_all' => $request->all(),
-                'request_files' => $request->allFiles(),
-                'settings_data' => $request->input('settings'),
-            ]);
 
             $this->processSettingValue($setting, $value, $request);
         }
@@ -334,7 +397,7 @@ class AdminSettingsController
         }
 
         // Remove empty elements
-        $value = array_filter($value, function($item) {
+        $value = array_filter($value, function ($item) {
             return $item !== null && $item !== '';
         });
 
@@ -371,11 +434,15 @@ class AdminSettingsController
         }
 
         // Remove empty rows
-        $value = array_filter($value, function($row) {
-            if (!is_array($row)) return false;
-            return !empty(array_filter($row, function($val) {
+        $value = array_filter($value, function ($row) {
+            if (!is_array($row)) {
+                return false;
+            }
+            return !empty(
+            array_filter($row, function ($val) {
                 return $val !== null && $val !== '';
-            }));
+            })
+            );
         });
 
         // Process files in each row
@@ -395,26 +462,9 @@ class AdminSettingsController
      */
     protected function processGallery(Setting $setting, array $value, Request $request): void
     {
-        \Log::info('🖼️ processGallery: START', [
-            'setting_id' => $setting->id,
-            'setting_code' => $setting->code,
-            'value' => $value,
-            'value_type' => gettype($value),
-            'existing_value' => $setting->value,
-            'existing_value_type' => gettype($setting->value),
-            'all_files' => array_keys($request->allFiles()),
-            'settings_files' => $request->file('settings'),
-            'request_settings' => $request->input('settings'),
-        ]);
-
         $existingFiles = is_string($setting->value)
             ? json_decode($setting->value, true) ?? []
             : (is_array($setting->value) ? $setting->value : []);
-
-        \Log::info('🖼️ processGallery: Existing files', [
-            'existingFiles' => $existingFiles,
-            'count' => count($existingFiles),
-        ]);
 
         $processedFiles = [];
 
@@ -422,56 +472,23 @@ class AdminSettingsController
         foreach ($value as $index => $item) {
             $fileInputName = "settings.{$setting->id}.{$index}";
 
-            \Log::info('🖼️ processGallery: Processing item', [
-                'index' => $index,
-                'item' => $item,
-                'item_type' => gettype($item),
-                'isMarker' => $this->isFileUploadMarker($item),
-                'fileInputName' => $fileInputName,
-                'hasFile' => $request->hasFile($fileInputName),
-            ]);
-
             // Проверяем, является ли значение маркером файла
             if ($this->isFileUploadMarker($item)) {
                 // Пробуем найти файл по маркеру
                 if ($request->hasFile($fileInputName)) {
                     $file = $request->file($fileInputName);
 
-                    \Log::info('🖼️ processGallery: New file found', [
-                        'index' => $index,
-                        'originalName' => $file->getClientOriginalName(),
-                        'size' => $file->getSize(),
-                        'mimeType' => $file->getMimeType(),
-                    ]);
-
                     $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-
-                    \Log::info('🖼️ processGallery: Generated filename', [
-                        'fileName' => $fileName,
-                    ]);
 
                     $this->storeFile($file, $fileName);
 
                     // Delete old file if replacing
                     if (isset($existingFiles[$index])) {
-                        \Log::info('🖼️ processGallery: Deleting old file', [
-                            'oldFile' => $existingFiles[$index],
-                        ]);
                         $this->deleteFile($existingFiles[$index]);
                     }
 
                     $processedFiles[$index] = $fileName;
-
-                    \Log::info('🖼️ processGallery: File processed', [
-                        'index' => $index,
-                        'fileName' => $fileName,
-                    ]);
                 } else {
-                    \Log::warning('🖼️ processGallery: Marker found but no file', [
-                        'index' => $index,
-                        'marker' => $item,
-                        'fileInputName' => $fileInputName,
-                    ]);
                     // Сохраняем старый файл, если он есть
                     if (isset($existingFiles[$index])) {
                         $processedFiles[$index] = $existingFiles[$index];
@@ -479,16 +496,7 @@ class AdminSettingsController
                 }
             } elseif (is_string($item) && !empty($item) && !$this->isFileUploadMarker($item)) {
                 // Это существующий файл (путь к файлу)
-                \Log::info('🖼️ processGallery: Keeping existing file', [
-                    'index' => $index,
-                    'file' => $item,
-                ]);
                 $processedFiles[$index] = $item;
-            } else {
-                \Log::info('🖼️ processGallery: Skipping item', [
-                    'index' => $index,
-                    'item' => $item,
-                ]);
             }
         }
 
@@ -497,19 +505,10 @@ class AdminSettingsController
         if (isset($allFiles['settings'][$setting->id])) {
             $settingFiles = $allFiles['settings'][$setting->id];
 
-            \Log::info('🖼️ processGallery: Checking files in request', [
-                'settingFiles' => array_keys($settingFiles),
-            ]);
-
             foreach ($settingFiles as $fileKey => $file) {
                 if ($file instanceof \Illuminate\Http\UploadedFile) {
                     // Проверяем, не обработан ли уже этот индекс
                     if (!isset($processedFiles[$fileKey])) {
-                        \Log::info('🖼️ processGallery: Processing additional file from request', [
-                            'fileKey' => $fileKey,
-                            'originalName' => $file->getClientOriginalName(),
-                        ]);
-
                         $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
                         $this->storeFile($file, $fileName);
 
@@ -532,45 +531,28 @@ class AdminSettingsController
         $existingFlat = array_values($existingFiles);
         $filesToDelete = array_diff($existingFlat, $finalFiles);
 
-        \Log::info('🖼️ processGallery: Files to delete', [
-            'existingFiles' => $existingFlat,
-            'finalFiles' => $finalFiles,
-            'filesToDelete' => $filesToDelete,
-        ]);
-
         foreach ($filesToDelete as $deletedFile) {
-            \Log::info('🖼️ processGallery: Deleting file', [
-                'file' => $deletedFile,
-            ]);
             $this->deleteFile($deletedFile);
         }
 
         $finalValue = json_encode($finalFiles);
-        \Log::info('🖼️ processGallery: FINAL RESULT', [
-            'finalValue' => $finalValue,
-            'finalFiles' => $finalFiles,
-            'count' => count($finalFiles),
-        ]);
 
         $setting->value = $finalValue;
         $setting->save();
 
-        \Log::info('🖼️ processGallery: Saved to database', [
-            'setting_id' => $setting->id,
-            'value' => $setting->value,
-        ]);
+        // Генерируем thumbs для новых изображений
+        $this->generateSettingsThumbsForSetting($setting);
     }
 
-    protected function processNestedFiles(array $data, array $params, Request $request, Setting $setting, array $oldData): array
-    {
+    protected function processNestedFiles(
+        array $data,
+        array $params,
+        Request $request,
+        Setting $setting,
+        array $oldData
+    ): array {
         // Получаем все файлы из запроса
         $allFiles = $request->allFiles();
-
-        \Log::info('processNestedFiles started', [
-            'data_keys' => array_keys($data),
-            'old_data_keys' => array_keys($oldData),
-            'files_count' => count($allFiles)
-        ]);
 
         foreach ($data as $key => $value) {
             // Пропускаем системные ключи
@@ -603,17 +585,7 @@ class AdminSettingsController
                         }
 
                         $data[$key] = $fileName;
-
-                        \Log::info('File saved successfully', [
-                            'key' => $key,
-                            'file_name' => $fileName,
-                        ]);
                     } catch (\Exception $e) {
-                        \Log::error('File save error', [
-                            'key' => $key,
-                            'error' => $e->getMessage(),
-                        ]);
-
                         // В случае ошибки сохраняем старый файл
                         $oldFile = $oldData[$key] ?? null;
                         if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
@@ -626,16 +598,56 @@ class AdminSettingsController
                     $data[$key] = ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile))
                         ? $oldFile
                         : null;
-
-                    \Log::info('File not found, keeping old', [
-                        'key' => $key,
-                        'result' => $data[$key],
-                    ]);
                 }
             }
         }
 
         return $data;
+    }
+
+    /**
+     * Generate thumbnails for setting gallery
+     */
+    protected function generateSettingsThumbsForSetting(Setting $setting): void
+    {
+        if ($setting->type !== 7) {
+            return;
+        }
+
+        $thumbsConfig = SettingsThumb::parseThumbsConfig($setting->params['thumbs'] ?? '');
+
+        if (empty($thumbsConfig)) {
+            return;
+        }
+
+        $images = json_decode($setting->value, true) ?? [];
+
+        foreach ($images as $imagePath) {
+            if (is_string($imagePath) && !empty($imagePath)) {
+                SettingsThumb::make($imagePath, $thumbsConfig);
+            }
+        }
+    }
+
+    /**
+     * Delete file and all its thumbnails
+     */
+    protected function deleteFile(?string $filename): void
+    {
+        if (empty($filename)) {
+            return;
+        }
+
+        $disk = Storage::disk('public');
+        $path = Setting::getFilePath($filename);
+
+        // Delete all thumbnails first
+        SettingsThumb::delete($path);
+
+        // Delete original file
+        if ($disk->exists($path)) {
+            $disk->delete($path);
+        }
     }
 
     /**
@@ -682,7 +694,9 @@ class AdminSettingsController
 
     protected function isAssociativeArray(array $arr): bool
     {
-        if ([] === $arr) return false;
+        if ([] === $arr) {
+            return false;
+        }
         return array_keys($arr) !== range(0, count($arr) - 1);
     }
 
@@ -739,22 +753,6 @@ class AdminSettingsController
         }
 
         return $path;
-    }
-
-    /**
-     * Delete file from storage
-     */
-    protected function deleteFile(?string $fileName): void
-    {
-        if (empty($fileName)) {
-            return;
-        }
-
-        $filePath = Setting::getFilePath($fileName);
-
-        if (Storage::disk(Setting::UPLOAD_DISK)->exists($filePath)) {
-            Storage::disk(Setting::UPLOAD_DISK)->delete($filePath);
-        }
     }
 
     /**
@@ -846,8 +844,112 @@ class AdminSettingsController
                 );
             }
 
+            // Add thumbs data for gallery type (7)
+            if ($setting->type === 7 && !empty($setting->params['thumbs'])) {
+                $data['thumbs_data'] = $this->generateThumbsData(
+                    $data['value'],
+                    $setting->params['thumbs']
+                );
+                $data['thumbs_config'] = SettingsThumb::parseThumbsConfig($setting->params['thumbs']);
+            }
+
             return $data;
         })->toArray();
+    }
+
+    /**
+     * Generate thumbs data for gallery images
+     *
+     * @param array $images Array of image paths
+     * @param string $thumbsConfigString Thumbs configuration string (e.g., "200x100, 400x200|cover")
+     * @return array
+     */
+    protected function generateThumbsData(array $images, string $thumbsConfigString): array
+    {
+        $thumbsConfig = SettingsThumb::parseThumbsConfig($thumbsConfigString);
+
+        if (empty($thumbsConfig) || empty($images)) {
+            return [];
+        }
+
+        $thumbsData = [];
+        $storage = Storage::disk(Setting::UPLOAD_DISK);
+
+        foreach ($images as $index => $imagePath) {
+            if (!is_string($imagePath) || empty($imagePath)) {
+                continue;
+            }
+
+            $fullPath = Setting::UPLOAD_DIR . '/' . $imagePath;
+
+            // Check if original file exists
+            if (!$storage->exists($fullPath)) {
+                continue;
+            }
+
+            // Generate thumbs for this image
+            $thumbs = $this->getOrCreateThumbs($fullPath, $thumbsConfig, $storage);
+
+            $thumbsData[$fullPath] = [
+                'original_url' => $storage->url($fullPath),
+                'path' => $fullPath,
+                'filename' => basename($imagePath),
+                'thumbs' => $thumbs,
+            ];
+        }
+
+        return $thumbsData;
+    }
+
+    /**
+     * Get or create thumbs for a single image
+     *
+     * @param string $imagePath Full path to original image
+     * @param array $thumbsConfig Array of thumb configurations
+     * @param \Illuminate\Contracts\Filesystem\Filesystem $storage
+     * @return array
+     */
+    protected function getOrCreateThumbs(string $imagePath, array $thumbsConfig, $storage): array
+    {
+        $thumbs = [];
+
+        foreach ($thumbsConfig as $key => $config) {
+            $thumbPath = SettingsThumb::url($imagePath, $key);
+
+            // If thumb doesn't exist, try to create it
+            if (!$storage->exists($thumbPath)) {
+                SettingsThumb::make($imagePath, $thumbsConfig);
+            }
+
+            if ($storage->exists($thumbPath)) {
+                $thumbs[$key] = [
+                    'url' => $storage->url($thumbPath),
+                    'config' => $config,
+                    'size' => $this->parseThumbSize($config),
+                ];
+            }
+        }
+
+        return $thumbs;
+    }
+
+    /**
+     * Parse thumb size from config string
+     *
+     * @param string $config Thumb config (e.g., "200x100" or "200x100|cover")
+     * @return array
+     */
+    protected function parseThumbSize(string $config): array
+    {
+        $parts = explode('|', $config);
+        $size = $parts[0];
+        $sizes = explode('x', $size);
+
+        return [
+            'width' => (int) ($sizes[0] ?? 0),
+            'height' => (int) ($sizes[1] ?? 0),
+            'mode' => $parts[1] ?? 'cover',
+        ];
     }
 
     /**
@@ -920,35 +1022,55 @@ class AdminSettingsController
 
         // Разрешенные атрибуты
         $allowedAttributes = [
-            'href', 'src', 'alt', 'title', 'target', 'rel',
-            'class', 'id', 'style', 'align', 'width', 'height',
-            'colspan', 'rowspan', 'data-type', 'data-checked',
-            'start', 'type', 'reversed', 'compact'
+            'href',
+            'src',
+            'alt',
+            'title',
+            'target',
+            'rel',
+            'class',
+            'id',
+            'style',
+            'align',
+            'width',
+            'height',
+            'colspan',
+            'rowspan',
+            'data-type',
+            'data-checked',
+            'start',
+            'type',
+            'reversed',
+            'compact'
         ];
 
         // Очищаем HTML
         $value = strip_tags($value, $allowedTags);
 
         // Дополнительная очистка атрибутов
-        $value = preg_replace_callback('/<([a-zA-Z][a-zA-Z0-9]*)\s+([^>]*)>/', function($matches) use ($allowedAttributes) {
-            $tag = $matches[1];
-            $attributes = $matches[2];
+        $value = preg_replace_callback(
+            '/<([a-zA-Z][a-zA-Z0-9]*)\s+([^>]*)>/',
+            function ($matches) use ($allowedAttributes) {
+                $tag = $matches[1];
+                $attributes = $matches[2];
 
-            // Оставляем только разрешенные атрибуты
-            $cleanedAttributes = '';
-            preg_match_all('/([a-zA-Z-]+)\s*=\s*["\']([^"\']*)["\']/', $attributes, $attrMatches);
+                // Оставляем только разрешенные атрибуты
+                $cleanedAttributes = '';
+                preg_match_all('/([a-zA-Z-]+)\s*=\s*["\']([^"\']*)["\']/', $attributes, $attrMatches);
 
-            foreach ($attrMatches[1] as $i => $attrName) {
-                if (in_array(strtolower($attrName), $allowedAttributes)) {
-                    $attrValue = $attrMatches[2][$i];
-                    // Дополнительная защита от XSS в атрибутах
-                    $attrValue = htmlspecialchars($attrValue, ENT_QUOTES, 'UTF-8');
-                    $cleanedAttributes .= " $attrName=\"$attrValue\"";
+                foreach ($attrMatches[1] as $i => $attrName) {
+                    if (in_array(strtolower($attrName), $allowedAttributes)) {
+                        $attrValue = $attrMatches[2][$i];
+                        // Дополнительная защита от XSS в атрибутах
+                        $attrValue = htmlspecialchars($attrValue, ENT_QUOTES, 'UTF-8');
+                        $cleanedAttributes .= " $attrName=\"$attrValue\"";
+                    }
                 }
-            }
 
-            return "<$tag$cleanedAttributes>";
-        }, $value);
+                return "<$tag$cleanedAttributes>";
+            },
+            $value
+        );
 
         return $value;
     }

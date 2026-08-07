@@ -8,12 +8,16 @@ import {
     ImageListItemBar,
     Paper,
     CardMedia,
+    Tooltip,
+    Chip,
+    Stack,
 } from '@mui/material';
 import {
     Add as AddIcon,
     Delete as DeleteIcon,
     DragIndicator as DragIndicatorIcon,
     OpenInNew as OpenIcon,
+    PhotoLibrary as GalleryIcon,
 } from '@mui/icons-material';
 import {
     DndContext,
@@ -32,10 +36,86 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 /**
+ * Компонент для отображения миниатюр изображения
+ */
+function ThumbnailsPreview({ image, thumbs }) {
+    const [showThumbs, setShowThumbs] = useState(false);
+
+    if (!thumbs || Object.keys(thumbs).length === 0) {
+        return null;
+    }
+
+    const thumbEntries = Object.entries(thumbs);
+
+    return (
+        <Box sx={{ mt: 0.5 }}>
+            <Button
+                size="small"
+                variant="text"
+                onClick={() => setShowThumbs(!showThumbs)}
+                sx={{ fontSize: '0.7rem', minWidth: 'auto', px: 1 }}
+            >
+                {showThumbs ? 'Скрыть' : `Все размеры (${thumbEntries.length})`}
+            </Button>
+
+            {showThumbs && (
+                <Box sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 0.5,
+                    mt: 0.5,
+                    p: 0.5,
+                    bgcolor: 'grey.50',
+                    borderRadius: 1,
+                }}>
+                    {thumbEntries.map(([key, thumb]) => (
+                        <Tooltip
+                            key={key}
+                            title={`${thumb.config}${thumb.size ? ` (${thumb.size.mode})` : ''}`}
+                            arrow
+                        >
+                            <Box
+                                sx={{
+                                    position: 'relative',
+                                    width: 60,
+                                    height: 50,
+                                    borderRadius: 0.5,
+                                    overflow: 'hidden',
+                                    border: '1px solid',
+                                    borderColor: 'divider',
+                                    cursor: 'pointer',
+                                    transition: 'transform 0.2s',
+                                    '&:hover': {
+                                        transform: 'scale(1.05)',
+                                        borderColor: 'primary.main',
+                                    },
+                                }}
+                                onClick={() => window.open(thumb.url, '_blank')}
+                            >
+                                <CardMedia
+                                    component="img"
+                                    image={thumb.url}
+                                    alt={`Thumb ${key}`}
+                                    sx={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                    }}
+                                />
+                            </Box>
+                        </Tooltip>
+                    ))}
+                </Box>
+            )}
+        </Box>
+    );
+}
+
+/**
  * Отдельный компонент для перетаскиваемого изображения.
  * Оборачивает ImageListItem в div с ref для корректной работы @dnd-kit.
  */
-function SortableImage({ id, image, onRemove, isDragging }) {
+function SortableImage({ id, image, onRemove, isDragging, thumbsConfig }) {
     const {
         attributes,
         listeners,
@@ -51,86 +131,165 @@ function SortableImage({ id, image, onRemove, isDragging }) {
         position: 'relative',
     };
 
+    // Проверяем, есть ли thumbs для этого изображения
+    const hasThumbs = image.thumbs && Object.keys(image.thumbs).length > 0;
+
+    // Берем первый thumb (индекс 0) для отображения
+    const displayThumb = hasThumbs ? image.thumbs[0] : null;
+
+    // URL для отображения: первый thumb или оригинал
+    const displayUrl = displayThumb?.url || image.url;
+    const originalUrl = image.url;
+
     return (
         <div ref={setNodeRef} style={style} {...attributes}>
-            <ImageListItem sx={{ width: '100%', height: 200 }}>
-                <CardMedia
-                    component="img"
-                    height="200"
-                    image={image.url}
-                    alt={image.name || 'Image'}
-                    sx={{
-                        objectFit: 'cover',
-                        cursor: 'pointer',
-                        borderRadius: 1,
-                    }}
-                    onClick={() => window.open(image.url, '_blank')}
-                />
+            <Paper
+                elevation={0}
+                sx={{
+                    border: '1px solid',
+                    borderColor: hasThumbs ? 'primary.light' : 'divider',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    transition: 'border-color 0.2s',
+                    '&:hover': {
+                        borderColor: 'primary.main',
+                    },
+                }}
+            >
+                <Box sx={{ position: 'relative', height: 200 }}>
+                    <CardMedia
+                        component="img"
+                        height="200"
+                        image={displayUrl}
+                        alt={image.name || 'Image'}
+                        sx={{
+                            objectFit: 'cover',
+                            cursor: 'pointer',
+                        }}
+                        onClick={() => window.open(originalUrl, '_blank')}
+                    />
 
-                <ImageListItemBar
-                    sx={{
-                        background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0) 100%)',
-                        borderRadius: 1,
-                    }}
-                    position="top"
-                    actionIcon={
-                        <Box sx={{ display: 'flex', gap: 0.5, pr: 1 }}>
-                            {/* Drag handle - только на иконке, чтобы не мешать кликам */}
-                            <IconButton
-                                {...listeners}
-                                sx={{
-                                    color: 'white',
-                                    cursor: 'grab',
-                                    '&:active': { cursor: 'grabbing' },
-                                }}
-                                size="small"
-                            >
-                                <DragIndicatorIcon fontSize="small" />
-                            </IconButton>
+                    {/* Индикатор, что показан thumb */}
+                    {displayThumb && (
+                        <Box
+                            sx={{
+                                position: 'absolute',
+                                top: 8,
+                                left: 8,
+                                bgcolor: 'rgba(25, 118, 210, 0.85)',
+                                color: 'white',
+                                fontSize: '0.65rem',
+                                px: 0.8,
+                                py: 0.3,
+                                borderRadius: 1,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.3,
+                            }}
+                        >
+                            <GalleryIcon sx={{ fontSize: '0.8rem' }} />
+                            {displayThumb.config || 'thumb'}
+                        </Box>
+                    )}
 
-                            {image.url && (
+                    <ImageListItemBar
+                        sx={{
+                            background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0) 100%)',
+                        }}
+                        position="top"
+                        actionIcon={
+                            <Box sx={{ display: 'flex', gap: 0.5, pr: 1 }}>
+                                {/* Drag handle */}
+                                <IconButton
+                                    {...listeners}
+                                    sx={{
+                                        color: 'white',
+                                        cursor: 'grab',
+                                        '&:active': { cursor: 'grabbing' },
+                                    }}
+                                    size="small"
+                                >
+                                    <DragIndicatorIcon fontSize="small" />
+                                </IconButton>
+
+                                {/* Кнопка просмотра оригинала */}
+                                {originalUrl && (
+                                    <Tooltip title="Открыть оригинал">
+                                        <IconButton
+                                            sx={{ color: 'white' }}
+                                            size="small"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                window.open(originalUrl, '_blank');
+                                            }}
+                                        >
+                                            <OpenIcon fontSize="small" />
+                                        </IconButton>
+                                    </Tooltip>
+                                )}
+
                                 <IconButton
                                     sx={{ color: 'white' }}
                                     size="small"
                                     onClick={(e) => {
                                         e.stopPropagation();
-                                        window.open(image.url, '_blank');
+                                        onRemove(image.id);
                                     }}
                                 >
-                                    <OpenIcon fontSize="small" />
+                                    <DeleteIcon fontSize="small" />
                                 </IconButton>
-                            )}
+                            </Box>
+                        }
+                        actionPosition="right"
+                    />
+                </Box>
 
-                            <IconButton
-                                sx={{ color: 'white' }}
+                {/* Информация об изображении */}
+                <Box sx={{ p: 1 }}>
+                    <Stack spacing={0.5}>
+                        <Typography variant="caption" fontWeight="medium" noWrap>
+                            {image.name || 'Изображение'}
+                        </Typography>
+
+                        <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
+                            <Chip
+                                label={image.isNew ? 'Новое' : 'Существующее'}
                                 size="small"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onRemove(image.id);
-                                }}
-                            >
-                                <DeleteIcon fontSize="small" />
-                            </IconButton>
-                        </Box>
-                    }
-                    actionPosition="right"
-                />
+                                color={image.isNew ? 'success' : 'default'}
+                                variant="outlined"
+                                sx={{ height: 20, fontSize: '0.65rem' }}
+                            />
+                            {hasThumbs && (
+                                <Chip
+                                    icon={<GalleryIcon sx={{ fontSize: '0.7rem !important' }} />}
+                                    label={`${Object.keys(image.thumbs).length} разм.`}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                    sx={{ height: 20, fontSize: '0.65rem' }}
+                                />
+                            )}
+                        </Stack>
+                    </Stack>
 
-                <ImageListItemBar
-                    title={image.name || 'Изображение'}
-                    subtitle={image.isNew ? 'Новое' : 'Существующее'}
-                    sx={{ borderRadius: '0 0 4px 4px' }}
-                />
-            </ImageListItem>
+                    {/* Отображение всех миниатюр */}
+                    <ThumbnailsPreview
+                        image={image}
+                        thumbs={image.thumbs}
+                    />
+                </Box>
+            </Paper>
         </div>
     );
 }
+
 
 /**
  * Компонент галереи изображений с поддержкой:
  * - Множественной загрузки
  * - Drag-and-drop перетаскивания
  * - Предпросмотра новых файлов
+ * - Отображения миниатюр (thumbs)
  */
 export default function GalleryInput({
                                          name,
@@ -138,11 +297,12 @@ export default function GalleryInput({
                                          onChange,
                                          onFileChange,
                                          fileUrls = [],
+                                         thumbsData = {}, // Новый пропс для данных о миниатюрах
+                                         thumbsConfig = [], // Новый пропс для конфигурации миниатюр
                                      }) {
     const fileInputRef = useRef(null);
     const [previews, setPreviews] = useState({});
     const [activeDragId, setActiveDragId] = useState(null);
-    const idCounterRef = useRef(0);
 
     // Локальное состояние для немедленного отклика при перетаскивании
     const [localValue, setLocalValue] = useState(() => Array.isArray(value) ? value : []);
@@ -155,15 +315,14 @@ export default function GalleryInput({
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
-                distance: 8, // Минимальное расстояние для начала перетаскивания
+                distance: 8,
             },
         })
     );
 
     /**
      * Формирует массив объектов изображений для рендера.
-     * Ключевой момент: URL ищется по имени файла, а не по индексу,
-     * что позволяет сохранять правильные URL при перетаскивании.
+     * Включает информацию о миниатюрах.
      */
     const images = useMemo(() => {
         const items = Array.isArray(localValue) ? localValue : [];
@@ -183,17 +342,18 @@ export default function GalleryInput({
             }
         });
 
-        items.forEach((item) => {
-            let id, url, name, isNew;
+        items.forEach((item, index) => {
+            let id, url, name, isNew, thumbs;
 
             if (item instanceof File) {
-                // Новый файл: ID стабилен благодаря имени и размеру
+                // Новый файл
                 id = `file-${item.name}-${item.size}`;
                 url = previews[item.name] || null;
                 name = item.name;
                 isNew = true;
+                thumbs = null; // У новых файлов еще нет миниатюр
             } else if (typeof item === 'string' && !item.startsWith('settings.')) {
-                // Существующий файл: ID стабилен благодаря пути
+                // Существующий файл
                 id = `existing-${item}`;
                 const fileName = item.split('/').pop();
 
@@ -212,6 +372,26 @@ export default function GalleryInput({
 
                 name = fileName || item;
                 isNew = false;
+
+                // Получаем миниатюры из переданных данных
+                thumbs = thumbsData[item] || thumbsData[fileName] || null;
+
+                // Если thumbs не переданы, но есть конфигурация, формируем URL'ы
+                if (!thumbs && thumbsConfig.length > 0 && url) {
+                    thumbs = {};
+                    const baseName = name.replace(/\.[^/.]+$/, '');
+                    const extension = name.split('.').pop();
+
+                    thumbsConfig.forEach((config, key) => {
+                        const size = config.split('|')[0];
+                        const thumbFileName = `${baseName}_thumb_${key}.${extension}`;
+                        const thumbPath = url.replace(name, `thumbs/${thumbFileName}`);
+                        thumbs[key] = {
+                            url: thumbPath,
+                            config: config,
+                        };
+                    });
+                }
             } else {
                 return; // Пропускаем маркеры и пустые строки
             }
@@ -219,19 +399,24 @@ export default function GalleryInput({
             // Гарантируем уникальность ID
             let uniqueId = id;
             while (usedIds.has(uniqueId)) {
-                uniqueId = `${id}-${idCounterRef.current++}`;
+                uniqueId = `${id}-${Math.random()}`;
             }
             usedIds.add(uniqueId);
 
-            result.push({ id: uniqueId, url, name, isNew });
+            result.push({
+                id: uniqueId,
+                url,
+                name,
+                isNew,
+                thumbs, // Добавляем информацию о миниатюрах
+            });
         });
 
         return result;
-    }, [localValue, fileUrls, previews]);
+    }, [localValue, fileUrls, previews, thumbsData, thumbsConfig]);
 
     /**
      * Добавление новых изображений.
-     * Создает preview через FileReader и добавляет файлы в массив.
      */
     const handleAddImages = useCallback((e) => {
         const files = Array.from(e.target.files || []);
@@ -260,8 +445,8 @@ export default function GalleryInput({
         const currentValue = Array.isArray(localValue) ? localValue : [];
         const updatedValue = [...currentValue, ...files];
 
-        setLocalValue(updatedValue); // Обновляем локально
-        onChange(updatedValue); // И уведомляем родителя
+        setLocalValue(updatedValue);
+        onChange(updatedValue);
 
         // Уведомляем родителя о новых файлах для FormData
         files.forEach((file, i) => {
@@ -292,23 +477,20 @@ export default function GalleryInput({
             });
         }
 
-        setLocalValue(updatedValue); // Обновляем локально
+        setLocalValue(updatedValue);
         const fileKey = `${name}[${imageIndex}]`;
-        onChange(updatedValue); // И уведомляем родителя
+        onChange(updatedValue);
         onFileChange(fileKey, null);
     }, [localValue, name, onChange, onFileChange, images]);
 
     /**
      * Обработчик завершения перетаскивания.
-     * Использует arrayMove для перестановки элементов.
      */
     const handleDragEnd = useCallback((event) => {
         const { active, over } = event;
         setActiveDragId(null);
 
         if (!over || active.id === over.id) return;
-
-        const currentValue = Array.isArray(localValue) ? [...localValue] : [];
 
         const oldIndex = images.findIndex(img => img.id === active.id);
         const newIndex = images.findIndex(img => img.id === over.id);
@@ -317,14 +499,10 @@ export default function GalleryInput({
             const currentValue = Array.isArray(localValue) ? [...localValue] : [];
             const newValue = arrayMove(currentValue, oldIndex, newIndex);
 
-            setLocalValue(newValue); // Сначала локально для мгновенного отклика
-            onChange(newValue);      // Затем уведомляем родителя
+            setLocalValue(newValue);
+            onChange(newValue);
         }
     }, [localValue, images, onChange]);
-
-    const handleDragCancel = useCallback(() => {
-        setActiveDragId(null);
-    }, []);
 
     const sortableIds = images.map(img => img.id);
 
@@ -358,6 +536,7 @@ export default function GalleryInput({
                                     image={image}
                                     onRemove={handleRemove}
                                     isDragging={activeDragId === image.id}
+                                    thumbsConfig={thumbsConfig}
                                 />
                             ))}
                         </Box>
@@ -383,9 +562,15 @@ export default function GalleryInput({
                     variant="outlined"
                     sx={{ p: 3, textAlign: 'center', mb: 2 }}
                 >
+                    <GalleryIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
                     <Typography color="textSecondary">
                         Нет изображений. Нажмите "Добавить" для загрузки.
                     </Typography>
+                    {thumbsConfig.length > 0 && (
+                        <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mt: 0.5 }}>
+                            После загрузки будут автоматически созданы миниатюры: {thumbsConfig.join(', ')}
+                        </Typography>
+                    )}
                 </Paper>
             )}
 
@@ -418,7 +603,7 @@ export default function GalleryInput({
             </Box>
 
             <Typography variant="caption" color="textSecondary" sx={{ mt: 0.5, display: 'block' }}>
-                Поддерживаются форматы: JPG, PNG, GIF, WebP. Можно перетаскивать для изменения порядка.
+                Поддерживаются форматы: JPG, PNG, GIF, WebP, AVIF. Можно перетаскивать для изменения порядка.
             </Typography>
         </Box>
     );

@@ -2,10 +2,12 @@
 
 namespace App\Models;
 
+use App\Helpers\SettingsThumb;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class Setting extends Model
 {
@@ -23,6 +25,7 @@ class Setting extends Model
 
     const UPLOAD_DISK = 'public';
     const UPLOAD_DIR = 'uploads/settings';
+    const IMAGE_QUALITY = 90;
 
     public static $types = [
         0 => 'Текстовое поле',
@@ -163,5 +166,107 @@ class Setting extends Model
     public function group()
     {
         return $this->belongsTo(SettingGroup::class, 'setting_group_id');
+    }
+
+    /**
+     * Get thumb URL for gallery image
+     *
+     * @param string|int $index Index of image in gallery
+     * @param string|int $thumbKey Key of thumb configuration (0, 1, 2, etc.)
+     * @return string|null
+     */
+    public function thumb(string|int $index, string|int $thumbKey = 0): ?string
+    {
+        // Only for gallery type
+        if ($this->type !== 7) {
+            return null;
+        }
+
+        // Get images array
+        $images = json_decode($this->value, true);
+
+        if (!is_array($images) || !isset($images[$index])) {
+            return null;
+        }
+
+        $imagePath = $images[$index];
+
+        if (!is_string($imagePath) || empty($imagePath)) {
+            return null;
+        }
+
+        // Parse thumbs configuration from params
+        $thumbsConfig = SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
+
+        if (empty($thumbsConfig)) {
+            return null;
+        }
+
+        // Convert thumbKey to array key
+        if (!isset($thumbsConfig[$thumbKey])) {
+            return null;
+        }
+
+        return SettingsThumb::get($imagePath, $thumbKey, $thumbsConfig);
+    }
+
+    /**
+     * Get all thumbs for gallery image
+     *
+     * @param string|int $index Index of image in gallery
+     * @return array
+     */
+    public function thumbs(string|int $index): array
+    {
+        if ($this->type !== 7) {
+            return [];
+        }
+
+        $images = json_decode($this->value, true);
+
+        if (!is_array($images) || !isset($images[$index])) {
+            return [];
+        }
+
+        $imagePath = $images[$index];
+
+        if (!is_string($imagePath) || empty($imagePath)) {
+            return [];
+        }
+
+        $thumbsConfig = SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
+
+        return SettingsThumb::getAll($imagePath, $thumbsConfig);
+    }
+
+    /**
+     * Get all images with their thumbs for gallery
+     *
+     * @return array
+     */
+    public function getGalleryWithSettingsThumbsAttribute(): array
+    {
+        if ($this->type !== 7) {
+            return [];
+        }
+
+        $images = json_decode($this->value, true) ?? [];
+        $thumbsConfig = SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
+
+        $result = [];
+
+        foreach ($images as $index => $imagePath) {
+            if (is_string($imagePath) && !empty($imagePath)) {
+                $storage = Storage::disk('public');
+
+                $result[] = [
+                    'original' => $storage->url($imagePath),
+                    'path' => $imagePath,
+                    'thumbs' => SettingsThumb::getAll($imagePath, $thumbsConfig),
+                ];
+            }
+        }
+
+        return $result;
     }
 }

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import TextFieldInput from './TextFieldInput';
 import TextareaInput from './TextareaInput';
 import EditorInput from './EditorInput';
@@ -46,6 +46,28 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
 
         return null;
     };
+
+    // Конфигурация миниатюр
+    const thumbsConfig = useMemo(() => {
+        return setting?.thumbs_config || [];
+    }, [setting?.thumbs_config]);
+
+    // Получаем данные о миниатюрах из gallery_with_thumbs
+    const thumbsData = useMemo(() => {
+        if (!setting?.thumbs_data) {
+            return {};
+        }
+
+        // Преобразуем thumbs_data в формат, ожидаемый GalleryInput
+        const data = {};
+        Object.entries(setting.thumbs_data).forEach(([path, info]) => {
+            if (info.thumbs && Object.keys(info.thumbs).length > 0) {
+                data[path] = info.thumbs;
+            }
+        });
+
+        return data;
+    }, [setting?.thumbs_data]);
 
     switch (setting.type) {
         case 0:
@@ -128,6 +150,8 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
                     onChange={onChange}
                     onFileChange={onFileChange}
                     fileUrls={setting.file_urls || []}
+                    thumbsData={thumbsData}      // Передаем данные о миниатюрах
+                    thumbsConfig={thumbsConfig}  // Передаем конфигурацию миниатюр
                 />
             );
 
