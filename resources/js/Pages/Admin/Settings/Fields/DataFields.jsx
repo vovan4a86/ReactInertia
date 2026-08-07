@@ -56,8 +56,9 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
     };
 
     const handleFileChange = (field) => (key, file) => {
-        const fileKey = `${name}[${field}]`;
-        onFileChange(fileKey, file);
+        // const fileKey = `${name}[${field}]`;
+        // onFileChange(fileKey, file);
+        onFileChange(key, file);
     };
 
     return (
@@ -121,7 +122,7 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
                                 {params.type === 3 && (
                                     <FileInput
                                         {...commonProps}
-                                        fileUrl={getFileUrl(value[field], setting.file_urls, field)}
+                                        fileUrl={getFileUrl(value?.[field], setting.file_urls, field)}
                                         onFileChange={handleFileChange(field)}
                                     />
                                 )}

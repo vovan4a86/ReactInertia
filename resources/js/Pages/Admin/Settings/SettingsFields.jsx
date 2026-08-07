@@ -145,6 +145,12 @@ export default function SettingsFields({ settings, onSave }) {
             } else if (typeof value === 'object' && value !== null) {
                 // БЛОК для обработки обычных объектов (type 4 DataFields)
                 Object.entries(value).forEach(([field, fieldVal]) => {
+                    // Проверяем, не является ли значение файлом (хотя файлы должны быть в files)
+                    if (fieldVal instanceof File) {
+                        // Не добавляем файлы как значения, они будут в files
+                        return;
+                    }
+
                     if (fieldVal !== null && fieldVal !== undefined) {
                         formData.append(`settings[${settingId}][${field}]`, fieldVal);
                     } else {
@@ -156,23 +162,36 @@ export default function SettingsFields({ settings, onSave }) {
             }
         });
 
-        // Add files - ВАЖНО: используем скобочную нотацию, такую же как в values
+        // Добавляем файлы
+        console.log('Processing files:', Object.keys(files));
         Object.entries(files).forEach(([key, file]) => {
             if (file instanceof File) {
-                // Конвертируем ключ из точечной нотации в скобочную
+                console.log(`Adding file: key=${key}, name=${file.name}, size=${file.size}`);
                 let formKey = key;
                 if (key.includes('.')) {
-                    // settings.12.0 -> settings[12][0]
-                    formKey = key.replace(/\./g, '][');
-                    formKey = formKey.replace(/^(.*?)\[/, '$1['); // убираем лишнюю скобку в начале
-                    formKey = formKey.replace(/\]\[$/, ']'); // убираем лишнюю скобку в конце
-                    // Правильная конвертация: settings.12.0 -> settings[12][0]
                     const parts = key.split('.');
                     formKey = parts[0] + '[' + parts.slice(1).join('][') + ']';
+                    console.log(`Converted key: ${key} -> ${formKey}`);
                 }
                 formData.append(formKey, file);
             }
         });
+
+        // Итоговая отладка
+        console.log('=== ИТОГОВЫЙ FormData ===');
+        let hasEntries = false;
+        for (let [key, val] of formData.entries()) {
+            hasEntries = true;
+            if (val instanceof File) {
+                console.log(`${key}: File(${val.name}, ${val.size} bytes)`);
+            } else {
+                console.log(`${key}: ${val}`);
+            }
+        }
+        if (!hasEntries) {
+            console.log('FormData ПУСТОЙ!');
+        }
+
 
         await onSave(formData);
         setSaving(false);

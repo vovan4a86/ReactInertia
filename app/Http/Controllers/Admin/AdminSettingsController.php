@@ -255,7 +255,6 @@ class AdminSettingsController
         if ($id) {
             $setting->update($data);
             $message = 'Настройка обновлена';
-            \Debugbar::log($data);
         } else {
             $order = Setting::where('setting_group_id', $data['setting_group_id'])->max('order') ?? 0;
             $data['order'] = $order + 1;
@@ -324,7 +323,6 @@ class AdminSettingsController
                 break;
 
             case 4: // Data with possible files
-                Log::info($setting);
                 $this->processStructuredData($setting, $value, $request);
                 break;
 
@@ -375,20 +373,103 @@ class AdminSettingsController
      */
     protected function processStructuredData(Setting $setting, mixed $value, Request $request): void
     {
+        // Если value пришло как JSON строка
+        if (is_string($value)) {
+            $value = json_decode($value, true) ?? [];
+        }
+
         if (!is_array($value)) {
+            Log::warning("Value is not array for setting {$setting->id}", [
+                'value' => $value,
+                'type' => gettype($value)
+            ]);
             return;
         }
 
-        Log::info($setting);
+        // Получаем файлы из запроса
+        $files = $request->file("settings.{$setting->id}", []);
+
+        Log::info("Processing type 4 setting", [
+            'setting_id' => $setting->id,
+            'value' => $value,
+            'files_keys' => array_keys($files),
+            'files_details' => array_map(function($file) {
+                return [
+                    'name' => $file->getClientOriginalName(),
+                    'size' => $file->getSize(),
+                    'is_valid' => $file->isValid(),
+                ];
+            }, $files),
+            'all_files_structure' => array_keys($request->allFiles()),
+        ]);
 
         $params = $setting->params ?? [];
         $fields = $params['fields'] ?? [];
         $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
 
-        // Обрабатываем файлы в структуре данных
-        $processedValue = $this->processNestedFiles($value, $fields, $request, $setting, $oldValue);
+        // Обрабатываем файлы
+        foreach ($fields as $key => $fieldConfig) {
+            $fieldType = $fieldConfig['type'] ?? null;
 
-        $setting->value = json_encode($processedValue);
+            // Если это файловое поле (type 3)
+            if ($fieldType === 3) {
+                Log::info("Processing file field: {$key}", [
+                    'exists_in_files' => isset($files[$key]),
+                    'file' => isset($files[$key]) ? $files[$key]->getClientOriginalName() : null,
+                ]);
+
+                $file = $files[$key] ?? null;
+
+                if ($file instanceof \Illuminate\Http\UploadedFile && $file->isValid()) {
+                    try {
+                        // Удаляем старый файл
+                        $oldFile = $oldValue[$key] ?? null;
+                        if ($oldFile && is_string($oldFile)) {
+                            $this->deleteFile($oldFile);
+                            Log::info("Deleted old file: {$oldFile}");
+                        }
+
+                        // Сохраняем новый
+                        $extension = $file->getClientOriginalExtension();
+                        $fileName = $this->generateUniqueFileName($setting, $extension);
+
+                        $path = $this->storeFile($file, $fileName);
+
+                        $value[$key] = $fileName;
+
+                        Log::info("File saved successfully", [
+                            'field' => $key,
+                            'file_name' => $fileName,
+                            'path' => $path,
+                        ]);
+                    } catch (\Exception $e) {
+                        Log::error("Error saving file", [
+                            'field' => $key,
+                            'error' => $e->getMessage(),
+                            'trace' => $e->getTraceAsString(),
+                        ]);
+                        // Оставляем старый файл
+                        $value[$key] = $oldValue[$key] ?? null;
+                    }
+                } else {
+                    // Оставляем старый файл
+                    $oldFile = $oldValue[$key] ?? null;
+                    if ($oldFile && is_string($oldFile)) {
+                        $value[$key] = $oldFile;
+                        Log::info("Keeping old file for {$key}: {$oldFile}");
+                    } else {
+                        Log::info("No file for {$key}, setting null");
+                        $value[$key] = null;
+                    }
+                }
+            }
+        }
+
+        Log::info("Final value for setting {$setting->id}", [
+            'value' => $value,
+        ]);
+
+        $setting->value = json_encode($value);
         $setting->save();
     }
 
@@ -1006,7 +1087,6 @@ class AdminSettingsController
 
         return $data;
     }
-
 
     /**
      * Санитизация HTML контента (разрешаем безопасные теги)

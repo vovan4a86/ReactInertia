@@ -115,7 +115,10 @@ export default function FieldRenderer({ setting, value, onChange, onFileChange }
                     name={fieldName}
                     value={typeof value === 'object' && value !== null ? value : {}}
                     onChange={onChange}
-                    onFileChange={onFileChange}
+                    onFileChange={(key, file) => {
+                        // Прокидываем файл наверх как есть
+                        onFileChange(key, file);
+                    }}
                     getFileUrl={getFileUrl}
                 />
             );
