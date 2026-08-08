@@ -64,7 +64,8 @@ class AdminSettingsController
         $group = SettingGroup::findOrFail($id);
         $group->update($data);
 
-        return back()->with('success', 'Группа обновлена');
+        return redirect()->route('admin.settings.groupItems', $id)
+            ->with('success', 'Группа обновлена');
     }
 
     public function destroyGroup(int $id)
@@ -88,33 +89,39 @@ class AdminSettingsController
 
     public function editSetting(Request $request, ?int $id = null)
     {
-        $setting = $id ? Setting::findOrFail($id) : new Setting([
-            'setting_group_id' => $request->input('setting_group_id'),
-            'type' => 0,
-            'params' => [],
-        ]);
+        $setting = $id
+            ? Setting::findOrFail($id)
+            : new Setting([
+                'setting_group_id' => $request->input('setting_group_id'),
+                'type' => 0,
+                'params' => [],
+            ]);
 
         $groups = SettingGroup::where('page_id', 0)->orderBy('order')->get();
 
-        // Всегда возвращаем главную страницу, но с данными для модалки
-        return Inertia::render('Admin/Settings/Index', [
-            // Данные для основной страницы
-            'groups' => SettingGroup::where('page_id', 0)->orderBy('order')->get(),
-            'activeGroup' => $request->input('setting_group_id')
-                ? SettingGroup::find($request->input('setting_group_id'))
-                : null,
-            'settings' => $request->input('setting_group_id')
-                ? Setting::where('setting_group_id', $request->input('setting_group_id'))->get()
-                : [],
+        // Получаем текущие данные страницы
+        $activeGroup = $request->input('setting_group_id')
+            ? SettingGroup::find($request->input('setting_group_id'))
+            : null;
 
-            // Данные для модального окна
+        $settings = $request->input('setting_group_id')
+            ? Setting::where('setting_group_id', $request->input('setting_group_id'))->get()
+            : [];
+
+        return Inertia::render('Admin/Settings/Index', [
+            // Сохраняем текущее состояние страницы
+            'groups' => SettingGroup::where('page_id', 0)->orderBy('order')->get(),
+            'activeGroup' => $activeGroup,
+            'settings' => $settings,
+
+            // Добавляем данные для модального окна
             'modalData' => [
                 'open' => true,
                 'component' => 'Admin/Settings/Edit',
                 'props' => [
                     'setting' => $setting,
                     'groups' => $groups,
-                    'types' => Setting::$types,
+                    'types' => Setting::$types ?? [],
                 ]
             ]
         ]);
@@ -259,7 +266,8 @@ class AdminSettingsController
 
         Setting::clearCache();
 
-        return back()->with('success', $message);
+        return redirect()->route('admin.settings.groupItems', $data['setting_group_id'])
+            ->with('success', $message);
     }
 
     public function saveSettings(Request $request)

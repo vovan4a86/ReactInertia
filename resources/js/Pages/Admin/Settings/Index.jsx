@@ -35,14 +35,16 @@ export default function SettingsIndex() {
 
     const handleOpenSettings = () => {
         if (activeGroup?.id) {
-            openModal(route('admin.settings.edit', {setting_group_id: activeGroup.id}));
-        } else {
-            openModal(route('admin.settings.edit'));
+            // Используем прямой URL для проверки
+            const url = `/admin/settings/edit?setting_group_id=${activeGroup.id}`;
+            openModal(url);
         }
     };
 
     useEffect(() => {
+        console.log('Index useEffect - modalData from props:', modalData);
         if (modalData) {
+            console.log('Setting modal from props');
             setModalFromProps(modalData);
         } else {
             setModalFromProps(null);

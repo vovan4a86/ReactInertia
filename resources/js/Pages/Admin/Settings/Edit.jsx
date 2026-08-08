@@ -74,31 +74,47 @@ export default function Edit({setting, groups, types}) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        setProcessing(true);
 
+        setProcessing(true);
+        setErrors({});
+
+        // Определяем URL и метод
         const isNew = !formData.id;
         const url = isNew
-            ? '/admin/settings/setting'
-            : `/admin/settings/setting/${formData.id}`;
-        const method = isNew ? 'post' : 'put';
+            ? route('admin.settings.store')
+            : route('admin.settings.update', { id: formData.id });
 
-        const dataToSend = {
-            ...formData,
-            order: parseInt(formData.order) || 0, // Преобразуем строку в число
-        };
+        // Для PUT запроса через Inertia добавляем _method
+        const submitData = { ...formData };
+        if (!isNew) {
+            submitData._method = 'PUT';
+        }
 
-        router[method](url, dataToSend, {
-            onSuccess: () => {
-                setTimeout(() => closeModal(), 1000);
-            },
-            onError: (errs) => {
-                setErrors(errs);
-            },
-            onFinish: () => {
+        router.post(url, submitData, {
+            forceFormData: true, // Отправляем как FormData
+            onSuccess: (page) => {
                 setProcessing(false);
+                closeModal(); // Закрываем модальное окно
+
+                // Обновляем данные на странице
+                router.reload({
+                    only: ['groups', 'activeGroup', 'settings'],
+                    preserveState: true,
+                    preserveScroll: true,
+                });
+            },
+            onError: (errors) => {
+                setProcessing(false);
+                setErrors(errors);
+                console.error('Validation errors:', errors);
             },
         });
     };
+
+    const handleCancel = () => {
+        closeModal();
+    };
+
 
     const isNew = !formData.id;
     const showParams = [4, 6].includes(formData.type);
@@ -281,7 +297,7 @@ export default function Edit({setting, groups, types}) {
                 >
                     <Button
                         variant="outlined"
-                        onClick={() => closeModal()}
+                        onClick={handleCancel}
                         disabled={processing}
                         size="small"
                     >

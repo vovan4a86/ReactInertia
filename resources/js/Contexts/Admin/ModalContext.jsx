@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { router } from '@inertiajs/react';
-import ModalRenderer from '@admin-components/Modal/ModalRenderer.jsx';
 
 const ModalContext = createContext();
 
@@ -16,17 +15,33 @@ export const ModalProvider = ({ children }) => {
     const [modalData, setModalData] = useState(null);
 
     const openModal = useCallback((url) => {
-        // Просто делаем обычный Inertia-переход
+        // Делаем запрос с preserveState, чтобы не перезагружать страницу
+        console.log('openModal called with URL:', url);
+
         router.get(url, {}, {
-            preserveState: false, // Важно! Обновляем страницу
+            preserveState: true,  // Сохраняем состояние страницы
             preserveScroll: true,
+            onSuccess: (page) => {
+                console.log('Response props:', page.props);
+                if (page.props.modalData) {
+                    console.log('Setting modal data:', page.props.modalData);
+                    setModalData(page.props.modalData);
+                }
+            },
+            onError: (errors) => {
+                console.error('Error loading modal:', errors);
+            },
         });
     }, []);
 
     const closeModal = useCallback(() => {
-        // Возвращаемся на индекс без модалки
-        router.get('/admin/settings', {}, {
-            preserveState: false,
+        // Просто очищаем данные модального окна
+        setModalData(null);
+
+        // Опционально: обновляем данные страницы (список настроек)
+        router.reload({
+            only: ['groups', 'activeGroup', 'settings'],
+            preserveState: true,
             preserveScroll: true,
         });
     }, []);
@@ -46,4 +61,3 @@ export const ModalProvider = ({ children }) => {
         </ModalContext.Provider>
     );
 };
-
