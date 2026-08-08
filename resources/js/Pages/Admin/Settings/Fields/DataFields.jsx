@@ -31,12 +31,6 @@ const FIELD_TYPE_LABELS = {
 export default function DataFields({ setting, name, value, onChange, onFileChange, getFileUrl }) {
     const fields = setting.params?.fields || {};
 
-    // Добавляем отладку
-    useEffect(() => {
-        console.log('DataFields received value:', value);
-        console.log('DataFields fields:', fields);
-    }, [value, fields]);
-
     if (Object.keys(fields).length === 0) {
         return (
             <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: 'center' }}>

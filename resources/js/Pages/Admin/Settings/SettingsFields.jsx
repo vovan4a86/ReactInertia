@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, {useState, useEffect} from 'react';
+import {router} from '@inertiajs/react';
 import {
     Box,
     Button,
@@ -7,11 +8,12 @@ import {
     CircularProgress,
     IconButton,
 } from '@mui/material';
-import { Save as SaveIcon, Edit as EditIcon } from '@mui/icons-material';
+import {Save as SaveIcon, Edit as EditIcon, Delete as DeleteIcon} from '@mui/icons-material';
 import FieldRenderer from './Fields/FieldRenderer';
 import {useModal} from "@/Contexts/Admin/ModalContext.jsx";
+import {useDialog} from '@/Contexts/Admin/DialogContext.jsx';
 
-export default function SettingsFields({ settings, onSave }) {
+export default function SettingsFields({settings, onSave}) {
     // Инициализируем values всеми текущими значениями настроек
     const [values, setValues] = useState(() => {
         const initialValues = {};
@@ -23,12 +25,13 @@ export default function SettingsFields({ settings, onSave }) {
     const [files, setFiles] = useState({});
     const [saving, setSaving] = useState(false);
 
-    const { openModal } = useModal();
+    const {openModal} = useModal();
+    const {confirm} = useDialog();
 
     // Обновляем values при изменении settings
     useEffect(() => {
         setValues(prev => {
-            const newValues = { ...prev };
+            const newValues = {...prev};
             settings.forEach(setting => {
                 // Сохраняем существующие значения, если они есть
                 if (!(setting.id in newValues) || newValues[setting.id] === undefined) {
@@ -40,20 +43,46 @@ export default function SettingsFields({ settings, onSave }) {
     }, [settings]);
 
     const handleEditSettings = (settingId) => {
-        const url = route('admin.settings.edit', { id: settingId });
+        const url = route('admin.settings.edit', {id: settingId});
         openModal(url);
     };
 
+    const handleDeleteSetting = async (settingId) => {
+        // Используем кастомный диалог
+        // confirm() возвращает Promise
+        // Без await переменная result получает сам объект Promise (который всегда truthy)
+        const result = await confirm({
+            title: 'Удаление настройки',
+            message: 'Удалить настройку и все значения? Это действие нельзя отменить.',
+            confirmText: 'Удалить',
+            cancelText: 'Отмена',
+            confirmColor: 'error',
+        });
+
+        if (!result) return;
+
+        const url = route('admin.settings.setting.delete', {id: settingId});
+
+        router.delete(url, {
+            onSuccess: () => {
+                //
+            },
+            onError: (errors) => {
+                //console.error(errors);
+            },
+        });
+
+    }
+
     const handleFieldChange = (settingId, value) => {
         setValues(prev => {
-            console.log('Updating setting:', settingId, 'with value:', value);
-            return { ...prev, [settingId]: value };
+            return {...prev, [settingId]: value};
         });
     };
 
     const handleFileChange = (key, file) => {
         setFiles(prev => {
-            const newFiles = { ...prev };
+            const newFiles = {...prev};
             if (file) {
                 newFiles[key] = file;
             } else {
@@ -196,7 +225,7 @@ export default function SettingsFields({ settings, onSave }) {
         await onSave(formData);
         setSaving(false);
 
-         // После сохранения очищаем files
+        // После сохранения очищаем files
         setFiles({});
     };
 
@@ -208,7 +237,7 @@ export default function SettingsFields({ settings, onSave }) {
         <Box component="form" onSubmit={handleSubmit}>
             {settings.map((setting, index) => (
                 <React.Fragment key={setting.id}>
-                    <Box sx={{ px: 3, py: 2 }}>
+                    <Box sx={{px: 3, py: 2}}>
                         {/* Setting Header */}
                         <Box sx={{
                             display: 'flex',
@@ -226,17 +255,29 @@ export default function SettingsFields({ settings, onSave }) {
                                     </Typography>
                                 )}
                             </Box>
-                            <IconButton
-                                size="small"
-                                onClick={() => handleEditSettings(setting.id)}
-                                sx={{ ml: 2, flexShrink: 0 }}
-                            >
-                                <EditIcon fontSize="small" />
-                            </IconButton>
+                            <Box>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => handleEditSettings(setting.id)}
+                                    sx={{ml: 2, flexShrink: 0}}
+                                >
+                                    <EditIcon fontSize="small"/>
+                                </IconButton>
+                                <IconButton
+                                    size="small"
+                                    onClick={() => handleDeleteSetting(setting.id)}
+                                    sx={{
+                                        color: 'error.main',
+                                        '&:hover': {bgcolor: 'error.lighter'},
+                                    }}
+                                >
+                                    <DeleteIcon fontSize="small"/>
+                                </IconButton>
+                            </Box>
                         </Box>
 
                         {/* Field Renderer */}
-                        <Box sx={{ mt: 1 }}>
+                        <Box sx={{mt: 1}}>
                             <FieldRenderer
                                 setting={setting}
                                 value={values[setting.id] !== undefined ? values[setting.id] : setting.value}
@@ -250,13 +291,13 @@ export default function SettingsFields({ settings, onSave }) {
                             <Typography
                                 variant="caption"
                                 color="textSecondary"
-                                sx={{ mt: 1, display: 'block' }}
+                                sx={{mt: 1, display: 'block'}}
                             >
                                 {setting.description}
                             </Typography>
                         )}
                     </Box>
-                    {index < settings.length - 1 && <Divider />}
+                    {index < settings.length - 1 && <Divider/>}
                 </React.Fragment>
             ))}
 
@@ -271,7 +312,7 @@ export default function SettingsFields({ settings, onSave }) {
                 <Button
                     type="submit"
                     variant="contained"
-                    startIcon={saving ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
+                    startIcon={saving ? <CircularProgress size={20} color="inherit"/> : <SaveIcon/>}
                     size="large"
                     disabled={saving}
                 >

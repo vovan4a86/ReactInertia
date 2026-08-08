@@ -47,6 +47,7 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::get('/edit/{id?}', [AdminSettingsController::class, 'editSetting'])->name('edit');
         Route::post('/setting', [AdminSettingsController::class, 'storeSetting'])->name('store');
         Route::put('/setting/{id}', [AdminSettingsController::class, 'updateSetting'])->name('update');
+        Route::delete('/setting/{id}', [AdminSettingsController::class, 'destroySetting'])->name('setting.delete');
 
         Route::post('/clear-value/{id}', [AdminSettingsController::class, 'clearValue'])->name('clearValue');
         Route::post('/save', [AdminSettingsController::class, 'saveSettings'])->name('save');

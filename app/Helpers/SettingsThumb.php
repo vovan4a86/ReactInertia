@@ -3,6 +3,7 @@
 namespace App\Helpers;
 
 use App\Models\Setting;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Drivers\Imagick\Driver;
 use Intervention\Image\Exceptions\InvalidArgumentException;
@@ -137,7 +138,11 @@ class SettingsThumb
         $disk = 'public';
         $storage = Storage::disk($disk);
 
+        Log::info($originalPath);
+
         $pathParts = pathinfo($originalPath);
+
+        Log::info($pathParts);
 
         $pattern = self::$dir . '/' .
             $pathParts['dirname'] . '/' .

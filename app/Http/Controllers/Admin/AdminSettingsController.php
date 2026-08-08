@@ -82,7 +82,8 @@ class AdminSettingsController
 
         Setting::clearCache();
 
-        return back()->with('success', 'Группа удалена');
+        return redirect()->route('admin.settings.index')
+            ->with('success', 'Группа удалена');
     }
 
     public function editSetting(Request $request, ?int $id = null)
@@ -194,6 +195,16 @@ class AdminSettingsController
     public function updateSetting(Request $request, int $id)
     {
         return $this->saveSetting($request, $id);
+    }
+
+    public function destroySetting(int $id) {
+        $setting = Setting::findOrFail($id);
+
+        $this->deleteSettingFiles($setting);
+        $setting->delete();
+
+        return redirect()->route('admin.settings.index')
+            ->with('success', 'Настройка удалена');
     }
 
     public function clearValue(int $id)
@@ -379,10 +390,6 @@ class AdminSettingsController
         }
 
         if (!is_array($value)) {
-            Log::warning("Value is not array for setting {$setting->id}", [
-                'value' => $value,
-                'type' => gettype($value)
-            ]);
             return;
         }
 
@@ -402,11 +409,6 @@ class AdminSettingsController
                 $currentValue = $value[$key] ?? null;
                 $oldFile = $oldValue[$key] ?? null;
 
-                Log::info("Processing file field: {$key}", [
-                    'current_value' => $currentValue,
-                    'old_file' => $oldFile,
-                ]);
-
                 // Проверяем, является ли значение маркером файла (используем тот же метод, что и в processListData)
                 $isMarker = $this->isFileUploadMarker($currentValue);
 
@@ -419,7 +421,6 @@ class AdminSettingsController
                             // Удаляем старый файл если есть
                             if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
                                 $this->deleteFile($oldFile);
-                                Log::info("Deleted old file: {$oldFile}");
                             }
 
                             // Сохраняем новый файл
@@ -428,15 +429,7 @@ class AdminSettingsController
                             $this->storeFile($file, $fileName);
                             $value[$key] = $fileName;
 
-                            Log::info("File saved successfully", [
-                                'field' => $key,
-                                'file_name' => $fileName,
-                            ]);
                         } catch (\Exception $e) {
-                            Log::error("Error saving file", [
-                                'field' => $key,
-                                'error' => $e->getMessage(),
-                            ]);
                             // В случае ошибки сохраняем старый файл
                             if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
                                 $value[$key] = $oldFile;
@@ -448,10 +441,8 @@ class AdminSettingsController
                         // Файл не найден в запросе - сохраняем старый если есть
                         if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
                             $value[$key] = $oldFile;
-                            Log::info("Keeping old file for {$key}: {$oldFile}");
                         } else {
                             $value[$key] = null;
-                            Log::info("No file for {$key}, setting null");
                         }
                     }
                 } else {
@@ -460,23 +451,16 @@ class AdminSettingsController
                         // Файл был удален (значение null или пустая строка)
                         if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
                             $this->deleteFile($oldFile);
-                            Log::info("Deleted file (cleared): {$oldFile}");
                         }
                         $value[$key] = null;
                     } elseif ($currentValue === $oldFile) {
                         // Значение не изменилось - оставляем как есть
-                        Log::info("File unchanged for {$key}");
                     } else {
                         // Новое значение - обрабатываем как обычно
-                        Log::info("New value for {$key}: {$currentValue}");
                     }
                 }
             }
         }
-
-        Log::info("Final value for setting {$setting->id}", [
-            'value' => $value,
-        ]);
 
         $setting->value = json_encode($value);
         $setting->save();
@@ -725,27 +709,6 @@ class AdminSettingsController
     }
 
     /**
-     * Delete file and all its thumbnails
-     */
-    protected function deleteFile(?string $filename): void
-    {
-        if (empty($filename)) {
-            return;
-        }
-
-        $disk = Storage::disk('public');
-        $path = Setting::getFilePath($filename);
-
-        // Delete all thumbnails first
-        SettingsThumb::delete($path);
-
-        // Delete original file
-        if ($disk->exists($path)) {
-            $disk->delete($path);
-        }
-    }
-
-    /**
      * Извлекает файл из структуры, созданной Laravel
      * Пример маркера: settings[7][0][field_1785819796375]
      * Структура: ['settings' => ['7' => [['field_1785819796375' => UploadedFile]]]]
@@ -808,11 +771,16 @@ class AdminSettingsController
             case 4:
             case 5:
             case 6:
-            case 7:
                 $values = is_string($setting->value)
                     ? json_decode($setting->value, true) ?? []
                     : [];
                 $this->deleteFilesRecursive($values);
+                break;
+            case 7:
+                $values = is_string($setting->value)
+                    ? json_decode($setting->value, true) ?? []
+                    : [];
+                $this->deleteFilesRecursive($values, true);
                 break;
         }
     }
@@ -820,14 +788,37 @@ class AdminSettingsController
     /**
      * Recursively delete files from array structure
      */
-    protected function deleteFilesRecursive(array $data): void
+    protected function deleteFilesRecursive(array $data, $withThumbs = null): void
     {
         foreach ($data as $item) {
             if (is_array($item)) {
-                $this->deleteFilesRecursive($item);
+                $this->deleteFilesRecursive($item, $withThumbs);
             } elseif (is_string($item) && !empty($item)) {
-                $this->deleteFile($item);
+                $this->deleteFile($item, $withThumbs);
             }
+        }
+    }
+
+    /**
+     * Delete file and all its thumbnails
+     */
+    protected function deleteFile(?string $filename, $withThumbs = false): void
+    {
+        if (empty($filename)) {
+            return;
+        }
+
+        $disk = Storage::disk('public');
+        $path = Setting::getFilePath($filename);
+
+        // Delete all thumbnails first
+        if($withThumbs) {
+            SettingsThumb::delete($path);
+        }
+
+        // Delete original file
+        if ($disk->exists($path)) {
+            $disk->delete($path);
         }
     }
 
@@ -942,7 +933,7 @@ class AdminSettingsController
             // Add thumbs data for gallery type (7)
             if ($setting->type === 7 && !empty($setting->params['thumbs'])) {
                 $data['thumbs_data'] = $this->generateThumbsData(
-                    $data['value'],
+                    $data['value'] ?? [],
                     $setting->params['thumbs']
                 );
                 $data['thumbs_config'] = SettingsThumb::parseThumbsConfig($setting->params['thumbs']);

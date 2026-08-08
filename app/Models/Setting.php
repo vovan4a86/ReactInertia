@@ -79,7 +79,6 @@ class Setting extends Model
 
     public function getFileUrlAttribute(): ?array
     {
-        Log::info('123');
         $value = $this->value;
 
         if (empty($value)) {

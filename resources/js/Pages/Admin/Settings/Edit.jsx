@@ -245,7 +245,7 @@ export default function Edit({setting, groups, types}) {
                                 value={formData.params?.thumbs || ''}
                                 onChange={(e) => handleThumbsChange(e.target.value)}
                                 error={!!errors['params.thumbs']}
-                                helperText={errors['params.thumbs'] || 'Параметр thumbs для галереи'}
+                                helperText={errors['params.thumbs'] || 'Размеры эскизов (200x100, 400x200|resize)'}
                                 size="small"
                                 placeholder="Введите значение для thumbs"
                             />

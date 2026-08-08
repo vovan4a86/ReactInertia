@@ -97,6 +97,8 @@ export default function SettingsIndex() {
 
     const handleDeleteGroup = async (groupId) => {
         // Используем кастомный диалог
+        // confirm() возвращает Promise
+        // Без await переменная result получает сам объект Promise (который всегда truthy)
         const result = await confirm({
             title: 'Удаление группы',
             message: 'Удалить группу и все настройки? Это действие нельзя отменить.',
