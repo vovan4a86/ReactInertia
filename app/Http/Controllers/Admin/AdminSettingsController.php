@@ -346,6 +346,9 @@ class AdminSettingsController
                 break;
 
             case 7: // Gallery
+                if (is_string($value)) {
+                    $value = json_decode($value, true);
+                }
                 $this->processGallery($setting, $value ?? [], $request);
                 break;
         }
@@ -541,6 +544,16 @@ class AdminSettingsController
      */
     protected function processGallery(Setting $setting, array $value, Request $request): void
     {
+        // Явно приводим к массиву, если пришла строка
+        if (is_string($value)) {
+            $value = json_decode($value, true) ?? [];
+        }
+
+        // Дополнительная защита: если после декодирования не массив - создаем пустой
+        if (!is_array($value)) {
+            $value = [];
+        }
+
         $existingFiles = is_string($setting->value)
             ? json_decode($setting->value, true) ?? []
             : (is_array($setting->value) ? $setting->value : []);
@@ -563,7 +576,7 @@ class AdminSettingsController
 
                     // Delete old file if replacing
                     if (isset($existingFiles[$index])) {
-                        $this->deleteFile($existingFiles[$index]);
+                        $this->deleteFile($existingFiles[$index], true);
                     }
 
                     $processedFiles[$index] = $fileName;
@@ -593,7 +606,7 @@ class AdminSettingsController
 
                         // Delete old file if exists
                         if (isset($existingFiles[$fileKey])) {
-                            $this->deleteFile($existingFiles[$fileKey]);
+                            $this->deleteFile($existingFiles[$fileKey], true);
                         }
 
                         $processedFiles[$fileKey] = $fileName;
@@ -611,7 +624,7 @@ class AdminSettingsController
         $filesToDelete = array_diff($existingFlat, $finalFiles);
 
         foreach ($filesToDelete as $deletedFile) {
-            $this->deleteFile($deletedFile);
+            $this->deleteFile($deletedFile, true);
         }
 
         $finalValue = json_encode($finalFiles);

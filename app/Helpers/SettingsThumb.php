@@ -138,14 +138,11 @@ class SettingsThumb
         $disk = 'public';
         $storage = Storage::disk($disk);
 
-        Log::info($originalPath);
-
         $pathParts = pathinfo($originalPath);
 
-        Log::info($pathParts);
-
-        $pattern = self::$dir . '/' .
-            $pathParts['dirname'] . '/' .
+        // Правильный путь: uploads/settings/thumbs/setting_16_xxx_thumb_*.jpg
+        $pattern = $pathParts['dirname'] . '/' .
+            self::$dir . '/' .
             $pathParts['filename'] .
             self::$postfix . '*.' .
             $pathParts['extension'];
