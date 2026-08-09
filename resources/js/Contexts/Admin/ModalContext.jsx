@@ -16,15 +16,11 @@ export const ModalProvider = ({ children }) => {
 
     const openModal = useCallback((url) => {
         // Делаем запрос с preserveState, чтобы не перезагружать страницу
-        console.log('openModal called with URL:', url);
-
         router.get(url, {}, {
             preserveState: true,  // Сохраняем состояние страницы
             preserveScroll: true,
             onSuccess: (page) => {
-                console.log('Response props:', page.props);
                 if (page.props.modalData) {
-                    console.log('Setting modal data:', page.props.modalData);
                     setModalData(page.props.modalData);
                 }
             },

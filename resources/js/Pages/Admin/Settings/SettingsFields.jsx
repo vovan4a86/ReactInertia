@@ -97,15 +97,15 @@ export default function SettingsFields({settings, onSave}) {
         setSaving(true);
 
         // Правильный способ логирования FormData
-        console.log('Current values:', values);
-        console.log('Current files:', files);
+/*        console.log('Current values:', values);
+        console.log('Current files:', files);*/
 
         const formData = new FormData();
 
-        console.log('FormData entries before send:');
-        for (let [key, val] of formData.entries()) {
-            console.log(key, val);
-        }
+        // console.log('FormData entries before send:');
+        // for (let [key, val] of formData.entries()) {
+        //     console.log(key, val);
+        // }
 
         // Добавляем ВСЕ значения настроек
         Object.entries(values).forEach(([settingId, value]) => {
@@ -192,30 +192,21 @@ export default function SettingsFields({settings, onSave}) {
         });
 
         // Добавляем файлы
-        console.log('Processing files:', Object.keys(files));
         Object.entries(files).forEach(([key, file]) => {
             if (file instanceof File) {
-                console.log(`Adding file: key=${key}, name=${file.name}, size=${file.size}`);
                 let formKey = key;
                 if (key.includes('.')) {
                     const parts = key.split('.');
                     formKey = parts[0] + '[' + parts.slice(1).join('][') + ']';
-                    console.log(`Converted key: ${key} -> ${formKey}`);
                 }
                 formData.append(formKey, file);
             }
         });
 
         // Итоговая отладка
-        console.log('=== ИТОГОВЫЙ FormData ===');
         let hasEntries = false;
         for (let [key, val] of formData.entries()) {
             hasEntries = true;
-            if (val instanceof File) {
-                console.log(`${key}: File(${val.name}, ${val.size} bytes)`);
-            } else {
-                console.log(`${key}: ${val}`);
-            }
         }
         if (!hasEntries) {
             console.log('FormData ПУСТОЙ!');

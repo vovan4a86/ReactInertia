@@ -42,9 +42,7 @@ export default function SettingsIndex() {
     };
 
     useEffect(() => {
-        console.log('Index useEffect - modalData from props:', modalData);
         if (modalData) {
-            console.log('Setting modal from props');
             setModalFromProps(modalData);
         } else {
             setModalFromProps(null);

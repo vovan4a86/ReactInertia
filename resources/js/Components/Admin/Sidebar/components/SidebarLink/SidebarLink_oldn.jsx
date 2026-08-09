@@ -94,7 +94,6 @@ export default function SidebarLink({
     const active = isLinkActive(link);
     const hasChildren = link.children && link.children.length > 0;
     const isExpanded = expandedGroups.includes(link.id);
-    console.log(hasChildren);
 
     if (!hasChildren)
         return (

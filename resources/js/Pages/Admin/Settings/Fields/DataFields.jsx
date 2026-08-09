@@ -53,7 +53,6 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
             [field]: val
         };
 
-        console.log('DataFields handleFieldChange:', { field, val, newValue });
         onChange(newValue);
     };
 
