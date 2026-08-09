@@ -63,12 +63,23 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::post('/save', [AdminSettingsController::class, 'saveSettings'])->name('save');
     });
 
-    Route::get('/pages', [AdminPageController::class, 'index'])->name('admin.pages');
-    Route::get('/api/pages/{page}', [AdminPageController::class, 'show'])->name('admin.pages.show');
-    Route::post('/api/pages', [AdminPageController::class, 'store'])->name('admin.pages.store');
-    Route::put('/api/pages/{page}', [AdminPageController::class, 'update'])->name('admin.pages.update');
-    Route::delete('/api/pages/{page}', [AdminPageController::class, 'destroy'])->name('admin.pages.destroy');
-    Route::put('/api/pages/reorder', [AdminPageController::class, 'reorder'])->name('admin.pages.reorder');
+    // Страницы
+    Route::prefix('pages')->name('pages.')->group(function () {
+        Route::get('/', [AdminPageController::class, 'index'])->name('index');
+    });
+
+    // API для страниц
+    Route::prefix('api/pages')->name('pages.')->group(function () {
+        // Этот маршрут ДОЛЖЕН быть перед {page}
+        // иначе Laravel будет пытаться найти страницу с id "reorder"
+        Route::put('/reorder', [AdminPageController::class, 'reorder'])->name('reorder');
+
+        Route::get('/parents', [AdminPageController::class, 'parents'])->name('parents');
+        Route::post('/', [AdminPageController::class, 'store'])->name('store');
+        Route::get('/{page}', [AdminPageController::class, 'show'])->name('show');
+        Route::put('/{page}', [AdminPageController::class, 'update'])->name('update');
+        Route::delete('/{page}', [AdminPageController::class, 'destroy'])->name('destroy');
+    });
 
     Route::resource('articles', AdminArticleController::class);
 

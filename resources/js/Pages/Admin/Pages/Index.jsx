@@ -1,8 +1,6 @@
-// resources/js/Pages/Admin/Pages/Index.jsx
-
 import React, {useState, useEffect, useRef} from 'react';
 import { router } from '@inertiajs/react';
-import { Box, Grid, Paper, Typography, CircularProgress, Button } from '@mui/material';
+import {Box, Grid, Paper, Typography, CircularProgress, Button, Link, Breadcrumbs} from '@mui/material';
 import { Tree } from 'react-arborist';
 import PageForm from './PageForm';
 import TreeNode from './TreeNode';
@@ -13,10 +11,10 @@ const AdminPages = ({ treeData = [] }) => {
     const [pageData, setPageData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [treeDataState, setTreeDataState] = useState([]);
+    const [createKey, setCreateKey] = useState(0); // Добавляем счетчик для ключа
 
     const treeContainerRef = useRef(null);
     const [treeHeight, setTreeHeight] = useState(600);
-
 
     // Инициализируем данные при загрузке
     useEffect(() => {
@@ -42,6 +40,30 @@ const AdminPages = ({ treeData = [] }) => {
         return () => window.removeEventListener('resize', updateHeight);
     }, []);
 
+    const getBreadcrumbs = (page, treeData) => {
+        if (!page) return [];
+
+        const breadcrumbs = [];
+
+        const findPath = (nodes, targetId, path = []) => {
+            for (const node of nodes) {
+                const currentPath = [...path, { id: node.id, title: node.title }];
+
+                if (node.id === targetId) {
+                    return currentPath;
+                }
+
+                if (node.children && node.children.length > 0) {
+                    const found = findPath(node.children, targetId, currentPath);
+                    if (found) return found;
+                }
+            }
+            return null;
+        };
+
+        const path = findPath(treeData, page.id);
+        return path || [{ id: page.id, title: page.title }];
+    };
 
     const handleSelect = (nodes) => {
         if (nodes.length > 0) {
@@ -84,7 +106,6 @@ const AdminPages = ({ treeData = [] }) => {
                     return true;
                 });
 
-                // Рекурсивно обрабатываем children
                 return filtered.map(node => {
                     if (node.children && node.children.length > 0) {
                         return {
@@ -124,7 +145,6 @@ const AdminPages = ({ treeData = [] }) => {
                 };
                 updatedData = addToParent(updatedData);
             } else {
-                // Добавляем на корневой уровень
                 const newIndex = Math.min(index, updatedData.length);
                 updatedData.splice(newIndex, 0, draggedNode);
             }
@@ -132,75 +152,88 @@ const AdminPages = ({ treeData = [] }) => {
             return updatedData;
         });
 
-        // Отправляем на сервер
-        router.put('/admin/api/pages/reorder', {
+        // Отправляем на сервер через POST с _method=PUT
+        router.post('/admin/api/pages/reorder', {
             id: dragIds[0],
             parent_id: parentId,
             order: index,
+            _method: 'PUT',
         }, {
             preserveScroll: true,
-            preserveState: true,
+            preserveState: false,
+            onSuccess: (page) => {
+                console.log('Reorder successful');
+                if (page.props.treeData) {
+                    setTreeDataState(page.props.treeData);
+                }
+            },
             onError: (errors) => {
                 console.error('Reorder error:', errors);
-                // Возвращаем исходное состояние
                 setTreeDataState([...treeData]);
             },
         });
     };
 
     const handleCreate = (parentId = null) => {
-        router.post('/admin/api/pages', {
-            title: 'New Page',
-            parent_id: parentId,
-            order: 0,
-        }, {
-            preserveScroll: true,
-            preserveState: true,
-            onSuccess: (response) => {
-                const newPage = response.props.page;
-                console.log('Created page:', newPage);
+        console.log('create:', parentId);
 
-                setTreeDataState(prevData => {
-                    const newData = JSON.parse(JSON.stringify(prevData));
-                    const newNode = {
-                        id: newPage.id,
-                        title: newPage.title,
-                        slug: newPage.slug,
-                        is_active: newPage.is_active,
-                        children: []
-                    };
+        // Увеличиваем счетчик для создания нового ключа
+        const newCreateKey = createKey + 1;
+        setCreateKey(newCreateKey);
 
-                    if (parentId) {
-                        const addChild = (nodes) => {
-                            return nodes.map(node => {
-                                if (node.id === parentId) {
-                                    return {
-                                        ...node,
-                                        children: [...(node.children || []), newNode]
-                                    };
-                                }
-                                if (node.children && node.children.length > 0) {
-                                    return {
-                                        ...node,
-                                        children: addChild(node.children)
-                                    };
-                                }
-                                return node;
-                            });
-                        };
-                        return addChild(newData);
-                    } else {
-                        return [...newData, newNode];
-                    }
+        // Сначала загружаем список родителей
+        fetch('/admin/api/pages/parents')
+            .then(response => response.json())
+            .then(parentsData => {
+                // Создаем новую страницу с правильным parent_id
+                const newPage = {
+                    id: null,
+                    title: '',
+                    slug: '',
+                    content: '',
+                    parent_id: parentId || '',
+                    is_active: true,
+                    meta_title: '',
+                    meta_description: '',
+                    template: 'default',
+                };
+
+                // Устанавливаем все данные сразу
+                setPageData({
+                    page: newPage,
+                    parents: parentsData.parents || [],
+                    isNew: true,
+                    createKey: newCreateKey // Добавляем ключ в данные
                 });
 
-                setSelectedPage({ id: newPage.id });
-                setPageData({ page: newPage, parents: [] });
-            },
-            onError: (errors) => {
-                console.error('Create error:', errors);
-            },
-        });
+                // Сбрасываем selectedPage
+                setSelectedPage({ id: null, parentId: parentId });
+            })
+            .catch(error => {
+                console.error('Error fetching parents:', error);
+
+                // Даже при ошибке открываем форму
+                const newPage = {
+                    id: null,
+                    title: '',
+                    slug: '',
+                    content: '',
+                    parent_id: parentId || '',
+                    is_active: true,
+                    meta_title: '',
+                    meta_description: '',
+                    template: 'default',
+                };
+
+                setPageData({
+                    page: newPage,
+                    parents: [],
+                    isNew: true,
+                    createKey: newCreateKey
+                });
+
+                setSelectedPage({ id: null, parentId: parentId });
+            });
     };
 
     const handleDelete = (pageId) => {
@@ -238,6 +271,14 @@ const AdminPages = ({ treeData = [] }) => {
         });
     };
 
+    // Генерируем ключ для PageForm
+    const getFormKey = () => {
+        if (pageData?.isNew) {
+            return `new-${pageData.createKey || createKey}`;
+        }
+        return pageData?.page?.id || 'empty';
+    };
+
     if (treeDataState.length === 0) {
         return (
             <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -251,20 +292,55 @@ const AdminPages = ({ treeData = [] }) => {
 
     return (
         <AdminLayout>
-            <Box>
-                <Typography variant="h4" gutterBottom>
-                    Менеджер страниц
-                </Typography>
+            <Box sx={{ mr: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h4">
+                        Менеджер страниц
+                    </Typography>
+
+                    {selectedPage && (
+                        <Breadcrumbs aria-label="breadcrumb">
+                            <Link
+                                underline="hover"
+                                color="inherit"
+                                href="/admin/pages"
+                            >
+                                Страницы
+                            </Link>
+                            {getBreadcrumbs(selectedPage, treeDataState).map((item, index, arr) => {
+                                const isLast = index === arr.length - 1;
+                                return isLast ? (
+                                    <Typography key={item.id} color="text.primary">
+                                        {item.title}
+                                    </Typography>
+                                ) : (
+                                    <Link
+                                        key={item.id}
+                                        underline="hover"
+                                        color="inherit"
+                                        href="#"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            handleSelect([{ id: item.id }]);
+                                        }}
+                                    >
+                                        {item.title}
+                                    </Link>
+                                );
+                            })}
+                        </Breadcrumbs>
+                    )}
+                </Box>
 
                 <Grid container spacing={3} sx={{ height: 'calc(100vh - 150px)', flexWrap: 'nowrap' }}>
-                    {/* Tree Panel - Fixed 3 columns */}
+                    {/* Tree Panel */}
                     <Grid
                         item
                         md={3}
                         sx={{
                             height: '100%',
-                            width: '25%', // Явно задаем ширину
-                            flex: '0 0 25%', // Запрещаем расти и сжиматься
+                            width: '25%',
+                            flex: '0 0 25%',
                             display: 'flex',
                             flexDirection: 'column'
                         }}
@@ -276,7 +352,7 @@ const AdminPages = ({ treeData = [] }) => {
                                 overflow: 'auto',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                width: '100%' // Растягиваем на всю ширину Grid item
+                                width: '100%'
                             }}
                         >
                             <Box sx={{ mb: 2, flexShrink: 0 }}>
@@ -316,14 +392,14 @@ const AdminPages = ({ treeData = [] }) => {
                         </Paper>
                     </Grid>
 
-                    {/* Form Panel - Fixed 9 columns */}
+                    {/* Form Panel */}
                     <Grid
                         item
                         md={9}
                         sx={{
                             height: '100%',
-                            width: '75%', // Явно задаем ширину
-                            flex: '0 0 75%', // Запрещаем расти и сжиматься
+                            width: '75%',
+                            flex: '0 0 75%',
                             display: 'flex',
                             flexDirection: 'column'
                         }}
@@ -333,7 +409,7 @@ const AdminPages = ({ treeData = [] }) => {
                                 p: 3,
                                 height: '100%',
                                 overflow: 'auto',
-                                width: '100%' // Растягиваем на всю ширину Grid item
+                                width: '100%'
                             }}
                         >
                             {loading ? (
@@ -349,8 +425,10 @@ const AdminPages = ({ treeData = [] }) => {
                                 </Box>
                             ) : pageData ? (
                                 <PageForm
+                                    key={getFormKey()}
                                     page={pageData.page}
                                     parents={pageData.parents}
+                                    isNew={pageData.isNew || false}
                                 />
                             ) : (
                                 <Box

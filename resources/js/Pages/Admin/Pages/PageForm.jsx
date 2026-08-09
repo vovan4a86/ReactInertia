@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useForm } from '@inertiajs/react';
+import React, { useState, useEffect } from 'react';
+import { useForm, router } from '@inertiajs/react';
 import {
     Box,
     Typography,
@@ -12,20 +12,17 @@ import {
     MenuItem,
     FormControlLabel,
     Switch,
-    Divider,
-    Alert,
     Tabs,
     Tab,
-    Paper
 } from '@mui/material';
-import { Save } from '@mui/icons-material';
+import {Add, Save} from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
 import FormHelperText from "@mui/material/FormHelperText";
 
-const PageForm = ({ page, parents }) => {
+const PageForm = ({ page, parents, isNew = false }) => {
     const [activeTab, setActiveTab] = useState(0);
 
-    const { data, setData, put, processing, errors, recentlySuccessful } = useForm({
+    const { data, setData, post, put, processing, errors, reset } = useForm({
         title: page.title || '',
         slug: page.slug || '',
         content: page.content || '',
@@ -35,6 +32,22 @@ const PageForm = ({ page, parents }) => {
         meta_description: page.meta_description || '',
         template: page.template || 'default',
     });
+
+    // Сбрасываем форму при изменении страницы
+    useEffect(() => {
+        reset();
+        setData({
+            title: page?.title || '',
+            slug: page?.slug || '',
+            content: page?.content || '',
+            parent_id: page?.parent_id || '',
+            is_active: page?.is_active !== undefined ? page.is_active : true,
+            meta_title: page?.meta_title || '',
+            meta_description: page?.meta_description || '',
+            template: page?.template || 'default',
+        });
+        setActiveTab(0); // Сбрасываем на первую вкладку
+    }, [page?.id, isNew]);
 
     const handleChange = (field) => (event) => {
         setData(field, event.target.value);
@@ -54,19 +67,40 @@ const PageForm = ({ page, parents }) => {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        put(`/admin/api/pages/${page.id}`, {
-            preserveScroll: true,
-            onSuccess: () => {
-                console.log('Page updated successfully');
-            },
-        });
+
+        if (isNew) {
+            // Создание новой страницы
+            post('/admin/api/pages', {
+                preserveScroll: true,
+                onSuccess: (response) => {
+                    console.log('Page created successfully:', response);
+                    // Обновляем страницу для отображения нового дерева
+                    router.reload({ only: ['treeData'] });
+                },
+                onError: (errors) => {
+                    console.error('Error creating page:', errors);
+                }
+            });
+        } else {
+            // Обновление существующей страницы
+            put(`/admin/api/pages/${page.id}`, {
+                preserveScroll: true,
+                onSuccess: () => {
+                    console.log('Page updated successfully');
+                },
+                onError: (errors) => {
+                    console.error('Error updating page:', errors);
+                }
+            });
+        }
     };
 
     const handleTitleChange = (event) => {
         const title = event.target.value;
         setData('title', title);
 
-        if (!data.slug || data.slug === slugify(data.title)) {
+        // Автоматически генерируем slug только если он пустой или совпадает с предыдущим
+        if (!data.slug || data.slug === slugify(page?.title || '')) {
             setData('slug', slugify(title));
         }
     };
@@ -81,12 +115,14 @@ const PageForm = ({ page, parents }) => {
             .replace(/--+/g, '-');
     };
 
+    console.log('PageForm render:', { page, parents, isNew, data });
+
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
-                    {page.title}
+                    {isNew ? 'Новая страница' : page?.title || 'Редактирование страницы'}
                 </Typography>
                 <FormControlLabel
                     control={
@@ -265,10 +301,10 @@ const PageForm = ({ page, parents }) => {
                 <Button
                     type="submit"
                     variant="contained"
-                    startIcon={<Save />}
+                    startIcon={isNew ? <Add /> : <Save />}
                     disabled={processing}
                 >
-                    {processing ? 'Сохранение...' : 'Сохранить'}
+                    {processing ? 'Сохранение...' : isNew ? 'Создать' : 'Сохранить'}
                 </Button>
             </Box>
         </Box>

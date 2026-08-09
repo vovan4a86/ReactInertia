@@ -168,7 +168,13 @@ class AdminPageController extends Controller
             }
         }
 
-        return response()->json(['message' => 'Порядок изменен']);
+        return redirect()->back()->with('success', 'Порядок изменен');
     }
 
+    public function parents()
+    {
+        return response()->json([
+            'parents' => Page::select('id', 'title')->get()
+        ]);
+    }
 }

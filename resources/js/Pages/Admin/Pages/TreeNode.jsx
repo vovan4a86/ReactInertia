@@ -27,6 +27,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
     return (
         <Box
             style={style}
+            ref={dragHandle} // ВАЖНО: привязываем dragHandle к корневому элементу
             sx={{
                 display: 'flex',
                 alignItems: 'center',
@@ -34,6 +35,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                 border: '1px solid transparent',
                 borderRadius: 1,
                 transition: 'all 0.2s ease',
+                cursor: 'pointer',
                 '&:hover': {
                     backgroundColor: 'action.hover',
                 },
@@ -45,6 +47,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                     },
                 }),
             }}
+            onClick={handleTitleClick}
         >
             {/* Drag Handle */}
             <Box
@@ -58,7 +61,6 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                         opacity: 1
                     }
                 }}
-                {...(dragHandle ? dragHandle() : {})}
             >
                 <DragIndicator fontSize="small" />
             </Box>
@@ -108,6 +110,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                         opacity: 1
                     }
                 }}
+                onClick={(e) => e.stopPropagation()}
             >
                 <IconButton
                     size="small"
@@ -115,7 +118,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                         e.stopPropagation();
                         onAddChild(data.id);
                     }}
-                    title="Add child page"
+                    title="Добавить страницу"
                 >
                     <Add fontSize="small" />
                 </IconButton>
@@ -129,7 +132,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                             onSelect([{ id: data.id }]);
                         }
                     }}
-                    title="Edit page"
+                    title="Редактировать страницу"
                 >
                     <Edit fontSize="small" />
                 </IconButton>
@@ -141,7 +144,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                         onDelete(data.id);
                     }}
                     color="error"
-                    title="Delete page"
+                    title="Удалить страницу"
                 >
                     <Delete fontSize="small" />
                 </IconButton>
