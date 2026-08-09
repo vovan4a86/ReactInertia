@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useForm } from '@inertiajs/react';
 import {
     Box,
@@ -19,6 +19,8 @@ import {
     Paper
 } from '@mui/material';
 import { Save } from '@mui/icons-material';
+import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
+import FormHelperText from "@mui/material/FormHelperText";
 
 const PageForm = ({ page, parents }) => {
     const [activeTab, setActiveTab] = useState(0);
@@ -107,15 +109,14 @@ const PageForm = ({ page, parents }) => {
                 sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
             >
                 <Tab label="Параметры" />
-                <Tab label="SEO" />
-                <Tab label="Контент" />
+                <Tab label="Текст" />
             </Tabs>
 
             {/* Tab Content */}
             <Box sx={{ flex: 1, overflow: 'auto' }}>
                 {/* Параметры Tab */}
                 {activeTab === 0 && (
-                    <Grid container spacing={2} sx={{ pt: 2 }}>
+                    <Grid container spacing={2} sx={{ pt: 2 }} direction="column">
                         <Grid item xs={12}>
                             <TextField
                                 fullWidth
@@ -141,6 +142,34 @@ const PageForm = ({ page, parents }) => {
                             />
                         </Grid>
 
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                label="Meta Title"
+                                value={data.meta_title}
+                                onChange={handleChange('meta_title')}
+                                error={!!errors.meta_title}
+                                helperText={errors.meta_title}
+                                size="small"
+                                slotProps={{ inputLabel: {shrink: true} }}
+                            />
+                        </Grid>
+
+                        <Grid item xs={12}>
+                            <TextField
+                                fullWidth
+                                label="Meta Description"
+                                value={data.meta_description}
+                                onChange={handleChange('meta_description')}
+                                error={!!errors.meta_description}
+                                helperText={errors.meta_description}
+                                multiline
+                                rows={4}
+                                size="small"
+                                slotProps={{ inputLabel: {shrink: true} }}
+                            />
+                        </Grid>
+
                         <Grid item xs={12} sm={6}>
                             <FormControl fullWidth error={!!errors.template} size="small">
                                 <InputLabel>Шаблон</InputLabel>
@@ -148,7 +177,8 @@ const PageForm = ({ page, parents }) => {
                                     value={data.template}
                                     onChange={handleSelectChange('template')}
                                     label="Шаблон"
-                                    variant="outlined">
+                                    variant="outlined"
+                                >
                                     <MenuItem value="default">По умолчанию</MenuItem>
                                     <MenuItem value="home">Главная</MenuItem>
                                     <MenuItem value="contact">Контакты</MenuItem>
@@ -169,6 +199,7 @@ const PageForm = ({ page, parents }) => {
                                     value={data.parent_id}
                                     onChange={handleSelectChange('parent_id')}
                                     label="Родительская страница"
+                                    variant="outlined"
                                 >
                                     <MenuItem value="">Нет (Корневая)</MenuItem>
                                     {parents && parents.map((parent) => (
@@ -187,53 +218,35 @@ const PageForm = ({ page, parents }) => {
                     </Grid>
                 )}
 
-                {/* SEO Tab */}
-                {activeTab === 1 && (
-                    <Grid container spacing={2}>
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Meta Title"
-                                value={data.meta_title}
-                                onChange={handleChange('meta_title')}
-                                error={!!errors.meta_title}
-                                helperText={errors.meta_title || "Заголовок для поисковиков"}
-                                size="small"
-                            />
-                        </Grid>
-
-                        <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Meta Description"
-                                value={data.meta_description}
-                                onChange={handleChange('meta_description')}
-                                error={!!errors.meta_description}
-                                helperText={errors.meta_description || "Описание для поисковиков"}
-                                multiline
-                                rows={4}
-                                size="small"
-                            />
-                        </Grid>
-                    </Grid>
-                )}
-
                 {/* Контент Tab */}
-                {activeTab === 2 && (
-                    <Box>
-                        <TextField
-                            fullWidth
-                            label="Содержание"
-                            value={data.content}
-                            onChange={handleChange('content')}
-                            error={!!errors.content}
-                            helperText={errors.content}
-                            multiline
-                            rows={20}
-                            size="small"
-                            sx={{ fontFamily: 'monospace' }}
-                        />
-                    </Box>
+                {activeTab === 1 && (
+                    <Grid container spacing={2} sx={{ pt: 2 }} direction="column">
+                        <FormControl fullWidth variant="outlined">
+                            <InputLabel shrink>Содержание</InputLabel>
+                            <Box
+                                sx={{
+                                    mt: 1,
+                                    '& .MuiInputBase-root': {
+                                        borderRadius: 1,
+                                        border: '1px solid',
+                                        borderColor: errors.content ? 'error.main' : 'rgba(0, 0, 0, 0.23)',
+                                        '&:hover': {
+                                            borderColor: 'text.primary'
+                                        }
+                                    }
+                                }}
+                            >
+                                {/* Ваш RichEdit компонент */}
+                                <RichTextEditor
+                                    value={data.content}
+                                    onChange={handleChange('content')}
+                                />
+                            </Box>
+                            {errors.content && (
+                                <FormHelperText error>{errors.content}</FormHelperText>
+                            )}
+                        </FormControl>
+                    </Grid>
                 )}
             </Box>
 
