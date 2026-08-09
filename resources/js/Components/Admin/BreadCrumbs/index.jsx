@@ -44,6 +44,7 @@ const BreadCrumbs = () => {
         'edit': 'Редактирование',
         'group': 'Группа',
         'items': 'Элементы',
+        'pages': 'Структура сайта'
     };
 
   const renderBreadCrumbs = () => {
@@ -195,4 +196,5 @@ const BreadCrumbs = () => {
     </Widget>
   );
 };
+
 export default BreadCrumbs;

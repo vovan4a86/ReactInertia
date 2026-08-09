@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminArticleController;
 use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminPageController;
 use App\Http\Controllers\Admin\AdminProfileController;
 use App\Http\Controllers\Admin\AdminSettingsController;
 use App\Http\Controllers\Admin\AdminUserController;
@@ -62,7 +63,12 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::post('/save', [AdminSettingsController::class, 'saveSettings'])->name('save');
     });
 
-
+    Route::get('/pages', [AdminPageController::class, 'index'])->name('admin.pages');
+    Route::get('/api/pages/{page}', [AdminPageController::class, 'show'])->name('admin.pages.show');
+    Route::post('/api/pages', [AdminPageController::class, 'store'])->name('admin.pages.store');
+    Route::put('/api/pages/{page}', [AdminPageController::class, 'update'])->name('admin.pages.update');
+    Route::delete('/api/pages/{page}', [AdminPageController::class, 'destroy'])->name('admin.pages.destroy');
+    Route::put('/api/pages/reorder', [AdminPageController::class, 'reorder'])->name('admin.pages.reorder');
 
     Route::resource('articles', AdminArticleController::class);
 

@@ -36,6 +36,15 @@ const sidebarConfig = [
     { id: 'divider-1', divider: true },
 
     {
+        id: 'pages',
+        label: 'Структура сайта',
+        link: '/admin/pages',
+        route: 'admin.pages',
+        icon: CategoryIcon,
+        // permission: 'view-users', // Только для админов с таким правом
+    },
+
+    {
         id: 'users',
         label: 'Пользователи',
         link: '/admin/users',

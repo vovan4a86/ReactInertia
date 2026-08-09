@@ -1,2 +1,15 @@
 @import "tailwindcss";
 @import "./fonts.css";
+
+.react-arborist-tree {
+    --row-height: 36px;
+}
+
+.react-arborist-tree [role="treeitem"] {
+    outline: none !important;
+}
+
+.react-arborist-tree [role="treeitem"]:focus-visible {
+    outline: 2px solid #1976d2 !important;
+    outline-offset: -2px;
+}
