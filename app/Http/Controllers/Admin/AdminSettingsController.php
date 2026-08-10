@@ -6,10 +6,10 @@ use App\Helpers\SettingsThumb;
 use App\Models\Setting;
 use App\Models\SettingGroup;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
+use Intervention\Image\Drivers\Gd\Driver;
 use Intervention\Image\ImageManager;
 
 class AdminSettingsController
@@ -879,9 +879,7 @@ class AdminSettingsController
                 $quality = 100;
 
                 // Можно также указать драйвер через enum
-                $manager = new ImageManager(
-                    driver: \Intervention\Image\Drivers\Gd\Driver::class
-                );
+                $manager = new ImageManager(new Driver());
 
                 $image = $manager->decode($fullPath);
 

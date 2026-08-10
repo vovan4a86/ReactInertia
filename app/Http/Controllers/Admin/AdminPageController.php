@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Page;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -54,6 +55,7 @@ class AdminPageController extends Controller
             'meta_title' => 'nullable|string|max:255',
             'meta_description' => 'nullable|string',
             'template' => 'nullable|string',
+            'images' => 'nullable|array', // Добавляем валидацию для изображений
         ]);
 
         if (empty($validated['slug'])) {
@@ -67,7 +69,6 @@ class AdminPageController extends Controller
             $validated['slug'] = $originalSlug . '-' . $counter;
             $counter++;
         }
-
 
         $page = Page::create($validated);
 
@@ -105,11 +106,28 @@ class AdminPageController extends Controller
             'meta_title' => 'nullable|string|max:255',
             'meta_description' => 'nullable|string',
             'template' => 'nullable|string',
+            'images' => 'nullable|array', // Добавляем валидацию для изображений
+            'deleted_images' => 'nullable|array', // Индексы удаленных изображений
         ]);
 
         if (empty($validated['slug'])) {
             $validated['slug'] = Str::slug($validated['title']);
         }
+
+        // Обработка удаления изображений
+        if (!empty($validated['deleted_images'])) {
+            $currentImages = $page->images ?? [];
+            foreach ($validated['deleted_images'] as $index) {
+                if (isset($currentImages[$index])) {
+                    $page->deleteImage($currentImages[$index]);
+                    unset($currentImages[$index]);
+                }
+            }
+            $validated['images'] = array_values($currentImages);
+        }
+
+        // Убираем deleted_images из данных для сохранения
+        unset($validated['deleted_images']);
 
         $page->update($validated);
 
@@ -183,5 +201,112 @@ class AdminPageController extends Controller
         return response()->json([
             'parents' => Page::select('id', 'title')->get()
         ]);
+    }
+
+    /**
+     * HasImages
+     * Загрузка изображений через Inertia
+     */
+    public function uploadImages(Request $request, Page $page)
+    {
+        $request->validate([
+            'images' => 'required|array',
+            'images.*' => 'required|image|max:10240',
+        ]);
+
+        $uploadedImages = [];
+
+        foreach ($request->file('images') as $file) {
+            $imageData = $page->uploadImage($file);
+            if ($imageData) {
+                $uploadedImages[] = $imageData;
+            }
+        }
+        // Добавляем новые изображения к существующим
+        $existingImages = $page->images ?? [];
+        $allImages = array_merge($existingImages, $uploadedImages);
+
+        $page->update(['images' => $allImages]);
+
+        // Формируем ответ с URL для предпросмотра
+        $imagesWithUrls = collect($allImages)->map(function ($image) use ($page) {
+            if (is_string($image)) {
+                return [
+                    'url' => Storage::disk('public')->url($image),
+                    'thumbnail' => Storage::disk('public')->url($image),
+                ];
+            }
+
+            return [
+                'id' => $image['original'] ?? uniqid(),
+                'url' => $page->getImageUrl($image, 'medium'),
+                'thumbnail' => $page->getImageUrl($image, 'thumb'),
+                'large' => $page->getImageUrl($image, 'large'),
+                'original' => Storage::disk('public')->url($image['original'] ?? ''),
+                'meta' => $image['meta'] ?? [],
+            ];
+        });
+
+
+        if ($request->wantsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Изображения загружены',
+                'images' => $imagesWithUrls,
+            ]);
+        }
+
+        return redirect()->back()->with([
+            'success' => 'Изображения загружены',
+            'uploaded_images' => $imagesWithUrls,
+        ]);
+    }
+
+    /**
+     * Удаление изображения
+     */
+    public function deleteImage(Request $request, Page $page)
+    {
+        $request->validate([
+            'image_index' => 'required|integer',
+        ]);
+
+        $images = $page->images ?? [];
+        $index = $request->input('image_index');
+
+        if (!isset($images[$index])) {
+            return redirect()->back()->with('error', 'Изображение не найдено');
+        }
+
+        $page->deleteImage($images[$index]);
+        unset($images[$index]);
+        $page->update(['images' => array_values($images)]);
+
+        return redirect()->back()->with('success', 'Изображение удалено');
+    }
+
+    /**
+     * Переупорядочивание изображений
+     */
+    public function reorderImages(Request $request, Page $page)
+    {
+        $request->validate([
+            'order' => 'required|array',
+            'order.*' => 'required|integer|min:0',
+        ]);
+
+        $images = $page->images ?? [];
+        $newOrder = $request->input('order');
+
+        $orderedImages = [];
+        foreach ($newOrder as $index) {
+            if (isset($images[$index])) {
+                $orderedImages[] = $images[$index];
+            }
+        }
+
+        $page->update(['images' => $orderedImages]);
+
+        return redirect()->back()->with('success', 'Порядок изображений обновлен');
     }
 }

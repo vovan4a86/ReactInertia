@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useForm, router } from '@inertiajs/react';
 import {
     Box,
@@ -15,11 +15,11 @@ import {
     Tabs,
     Tab,
     IconButton,
+    FormHelperText,
 } from '@mui/material';
-import {Add, Save} from '@mui/icons-material';
+import {Add, Save, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
-import FormHelperText from "@mui/material/FormHelperText";
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 
 const PageForm = ({ page, parents, isNew = false }) => {
     const [activeTab, setActiveTab] = useState(0);
@@ -33,6 +33,8 @@ const PageForm = ({ page, parents, isNew = false }) => {
         meta_title: page.meta_title || '',
         meta_description: page.meta_description || '',
         template: page.template || 'default',
+        images: page.images || [], // Добавляем images в форму
+        deleted_images: [], // Индексы удаленных изображений
     });
 
     // Сбрасываем форму при изменении страницы
@@ -47,6 +49,8 @@ const PageForm = ({ page, parents, isNew = false }) => {
             meta_title: page?.meta_title || '',
             meta_description: page?.meta_description || '',
             template: page?.template || 'default',
+            images: page?.images || [],
+            deleted_images: [],
         });
         setActiveTab(0); // Сбрасываем на первую вкладку
     }, [page?.id, isNew]);
@@ -106,6 +110,12 @@ const PageForm = ({ page, parents, isNew = false }) => {
         }
     };
 
+    // Обработчик изменений изображений
+    const handleImagesChange = useCallback((images, deletedImages) => {
+        setData('images', images);
+        setData('deleted_images', deletedImages);
+    }, [setData]);
+
     const slugify = (text) => {
         return text
             .toString()
@@ -115,8 +125,6 @@ const PageForm = ({ page, parents, isNew = false }) => {
             .replace(/[^\w-]+/g, '')
             .replace(/--+/g, '-');
     };
-
-    console.log('PageForm render:', { page, parents, isNew, data });
 
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -162,6 +170,7 @@ const PageForm = ({ page, parents, isNew = false }) => {
             >
                 <Tab label="Параметры" />
                 <Tab label="Текст" />
+                <Tab label="Изображения" />
             </Tabs>
 
             {/* Tab Content */}
@@ -299,6 +308,34 @@ const PageForm = ({ page, parents, isNew = false }) => {
                             )}
                         </FormControl>
                     </Grid>
+                )}
+
+                {/* Изображения Tab */}
+                {activeTab === 2 && (
+                    <Box sx={{ pt: 2 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                            Изображения страницы
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                            Поддерживаются форматы JPEG, PNG, GIF, WebP. Максимальный размер: 10MB.
+                            Изображения автоматически конвертируются в WebP и создаются миниатюры разных размеров.
+                        </Typography>
+
+                        <ImageUploader
+                            images={data.images}
+                            pageId={page.id}
+                            uploadUrl={`/admin/pages/${page.id}/upload-images`}
+                            maxImages={10}
+                            multiple={true}
+                            onChange={handleImagesChange}
+                        />
+
+                        {errors.images && (
+                            <Typography color="error" variant="caption" sx={{ mt: 1, display: 'block' }}>
+                                {errors.images}
+                            </Typography>
+                        )}
+                    </Box>
                 )}
             </Box>
 

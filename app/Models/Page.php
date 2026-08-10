@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Traits\HasImages;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -10,26 +12,48 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Page extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, SoftDeletes, HasImages;
 
     protected $fillable = [
-      'title',
-      'slug',
-      'content',
-      'parent_id',
-      'order',
-      'is_active',
-      'meta_title',
-      'meta_description',
-      'template',
+        'title',
+        'slug',
+        'content',
+        'parent_id',
+        'order',
+        'is_active',
+        'meta_title',
+        'meta_description',
+        'template',
+        'images',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'order' => 'integer',
+        'images' => 'array',
     ];
 
-    protected $appends = ['url'];
+    /**
+     * Переопределяем конфигурацию для страниц
+     */
+    protected function getImageConfig(): array
+    {
+        return [
+            'disk' => 'public',
+            'path' => 'uploads/pages', // Свой путь для страниц
+            'formats' => ['original', 'webp'],
+            'thumbs' => [
+                'thumb' => ['width' => 100, 'height' => 100],
+                'small' => ['width' => 300, 'height' => 200],
+                'medium' => ['width' => 600, 'height' => 400],
+                'large' => ['width' => 1200, 'height' => 800],
+            ],
+            'quality' => 80,
+            'max_file_size' => 10240,
+        ];
+    }
+
+    protected $appends = ['url', 'getImagesWithUrls'];
 
     public function parent(): BelongsTo
     {
@@ -50,7 +74,7 @@ class Page extends Model
 
     public function getUrlAttribute(): string
     {
-        return '/'. $this->alias;
+        return '/' . $this->alias;
     }
 
     // Рекурсивное получение всех потомков
@@ -61,7 +85,7 @@ class Page extends Model
     }
 
     // Получение дерева
-    public static function getTree()
+    public static function getTree(): Collection
     {
         return self::with('descendants')
             ->whereNull('parent_id')

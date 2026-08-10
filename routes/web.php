@@ -68,6 +68,16 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::get('/', [AdminPageController::class, 'index'])->name('index');
     });
 
+    // Дополнительные маршруты для работы с изображениями
+    Route::post('pages/{page}/upload-images', [AdminPageController::class, 'uploadImages'])
+        ->name('pages.upload-images');
+
+    Route::post('pages/{page}/delete-image', [AdminPageController::class, 'deleteImage'])
+        ->name('pages.delete-image');
+
+    Route::post('pages/{page}/reorder-images', [AdminPageController::class, 'reorderImages'])
+        ->name('pages.reorder-images');
+
     // API для страниц
     Route::prefix('api/pages')->name('pages.')->group(function () {
         // Этот маршрут ДОЛЖЕН быть перед {page}
