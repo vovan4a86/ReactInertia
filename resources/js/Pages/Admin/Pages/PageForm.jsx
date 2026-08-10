@@ -14,10 +14,12 @@ import {
     Switch,
     Tabs,
     Tab,
+    IconButton,
 } from '@mui/material';
 import {Add, Save} from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
 import FormHelperText from "@mui/material/FormHelperText";
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 const PageForm = ({ page, parents, isNew = false }) => {
     const [activeTab, setActiveTab] = useState(0);
@@ -123,7 +125,22 @@ const PageForm = ({ page, parents, isNew = false }) => {
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
                     {isNew ? 'Новая страница' : page?.title || 'Редактирование страницы'}
+                    {page?.url && (
+                        <IconButton
+                            component="a"
+                            href={page.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            size="small"
+                            color="primary"
+                            title="Открыть страницу на сайте"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <OpenInNewIcon fontSize="small" />
+                        </IconButton>
+                    )}
                 </Typography>
+
                 <FormControlLabel
                     control={
                         <Switch

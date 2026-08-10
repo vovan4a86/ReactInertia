@@ -29,6 +29,8 @@ class Page extends Model
         'order' => 'integer',
     ];
 
+    protected $appends = ['url'];
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(Page::class, 'parent_id');
@@ -44,6 +46,11 @@ class Page extends Model
     {
         return $this->hasMany(Page::class, 'parent_id')
             ->with('allChildren');
+    }
+
+    public function getUrlAttribute(): string
+    {
+        return '/'. $this->alias;
     }
 
     // Рекурсивное получение всех потомков

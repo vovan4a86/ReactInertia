@@ -300,13 +300,6 @@ const AdminPages = ({ treeData = [] }) => {
 
                     {selectedPage && (
                         <Breadcrumbs aria-label="breadcrumb">
-                            <Link
-                                underline="hover"
-                                color="inherit"
-                                href="/admin/pages"
-                            >
-                                Страницы
-                            </Link>
                             {getBreadcrumbs(selectedPage, treeDataState).map((item, index, arr) => {
                                 const isLast = index === arr.length - 1;
                                 return isLast ? (

@@ -36,6 +36,9 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                 borderRadius: 1,
                 transition: 'all 0.2s ease',
                 cursor: 'pointer',
+                '&.tree-node-row:hover .action-buttons': {
+                    opacity: 1
+                },
                 '&:hover': {
                     backgroundColor: 'action.hover',
                 },
@@ -47,6 +50,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                     },
                 }),
             }}
+            className="tree-node-row"
             onClick={handleTitleClick}
         >
             {/* Drag Handle */}
@@ -91,7 +95,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
 
                 {!data.is_active && (
                     <Chip
-                        label="Draft"
+                        label="Черновик"
                         size="small"
                         color="warning"
                         sx={{ height: 20, fontSize: '0.7rem' }}
@@ -101,14 +105,12 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
 
             {/* Action Buttons */}
             <Box
+                className="action-buttons"
                 sx={{
                     display: 'flex',
                     gap: 0.5,
                     opacity: 0,
                     transition: 'opacity 0.2s ease',
-                    '.MuiBox-root:hover &': {
-                        opacity: 1
-                    }
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
