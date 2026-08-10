@@ -18,8 +18,15 @@ class AdminPageController extends Controller
             return $page->toTreeNode();
         })->values()->toArray(); // Добавляем values() для сброса ключей
 
+        // Получаем все страницы с родителями для списка
+        $pagesData = Page::with('parent')
+            ->orderBy('order')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         return Inertia::render('Admin/Pages/Index', [
             'treeData' => $treeData,
+            'pagesData' => $pagesData,
         ]);
     }
 

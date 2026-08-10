@@ -4,14 +4,19 @@ import {Box, Grid, Paper, Typography, CircularProgress, Button, Link, Breadcrumb
 import { Tree } from 'react-arborist';
 import PageForm from './PageForm';
 import TreeNode from './TreeNode';
+import PagesList from './PagesList';
 import AdminLayout from "@/Layouts/Admin/AdminLayout.jsx";
 
-const AdminPages = ({ treeData = [] }) => {
+const AdminPages = ({ treeData = [], pagesData = [] }) => {
     const [selectedPage, setSelectedPage] = useState(null);
     const [pageData, setPageData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [treeDataState, setTreeDataState] = useState([]);
     const [createKey, setCreateKey] = useState(0); // Добавляем счетчик для ключа
+
+    const [allPages, setAllPages] = useState(pagesData || []);
+    const [pagesLoading, setPagesLoading] = useState(false);
+    const [pagesError, setPagesError] = useState(null);
 
     const treeContainerRef = useRef(null);
     const [treeHeight, setTreeHeight] = useState(600);
@@ -24,6 +29,31 @@ const AdminPages = ({ treeData = [] }) => {
             console.error('No tree data received or invalid format:', treeData);
         }
     }, [treeData]);
+
+    // Загрузка всех страниц для списка
+    useEffect(() => {
+        if (!selectedPage && pagesData && pagesData.length > 0) {
+            setAllPages(pagesData);
+        } else if (!selectedPage) {
+            fetchAllPages();
+        }
+    }, [selectedPage]);
+
+    const fetchAllPages = async () => {
+        setPagesLoading(true);
+        setPagesError(null);
+        try {
+            const response = await fetch('/admin/api/pages');
+            if (!response.ok) throw new Error('Failed to fetch pages');
+            const data = await response.json();
+            setAllPages(data.pages || []);
+        } catch (error) {
+            console.error('Error fetching all pages:', error);
+            setPagesError('Не удалось загрузить список страниц');
+        } finally {
+            setPagesLoading(false);
+        }
+    };
 
     // Высота дерева
     useEffect(() => {
@@ -237,31 +267,26 @@ const AdminPages = ({ treeData = [] }) => {
     };
 
     const handleDelete = (pageId) => {
-        if (!confirm('Are you sure you want to delete this page?')) return;
+        if (!confirm('Вы уверены что хотите удалить страницу?')) return;
 
         router.delete(`/admin/api/pages/${pageId}`, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
                 setTreeDataState(prevData => {
-                    const newData = JSON.parse(JSON.stringify(prevData));
-
                     const removeNode = (nodes) => {
                         return nodes
                             .filter(node => node.id !== pageId)
-                            .map(node => {
-                                if (node.children && node.children.length > 0) {
-                                    return {
-                                        ...node,
-                                        children: removeNode(node.children)
-                                    };
-                                }
-                                return node;
-                            });
+                            .map(node => ({
+                                ...node,
+                                children: node.children ? removeNode(node.children) : []
+                            }));
                     };
-
-                    return removeNode(newData);
+                    return removeNode([...prevData]);
                 });
+
+                // Обновляем список всех страниц
+                setAllPages(prevPages => prevPages.filter(p => p.id !== pageId));
 
                 if (selectedPage?.id === pageId) {
                     setSelectedPage(null);
@@ -269,6 +294,27 @@ const AdminPages = ({ treeData = [] }) => {
                 }
             },
         });
+    };
+
+    // Обработчики для PagesList
+    const handleEditFromList = (page) => {
+        handleSelect([{ id: page.id }]);
+    };
+
+    const handleDeleteFromList = (pageId) => {
+        handleDelete(pageId);
+    };
+
+    const handleCreateChildFromList = (parentId) => {
+        handleCreate(parentId);
+    };
+
+    // Функция для обновления allPages после создания/обновления страницы
+    const handlePageSaved = () => {
+        // Обновляем список всех страниц
+        fetchAllPages();
+        // Также нужно обновить дерево
+        // Это можно сделать через Inertia.reload или перезапросить данные
     };
 
     // Генерируем ключ для PageForm
@@ -422,19 +468,21 @@ const AdminPages = ({ treeData = [] }) => {
                                     page={pageData.page}
                                     parents={pageData.parents}
                                     isNew={pageData.isNew || false}
+                                    onSaved={handlePageSaved}
                                 />
                             ) : (
-                                <Box
-                                    sx={{
-                                        display: 'flex',
-                                        justifyContent: 'center',
-                                        alignItems: 'center',
-                                        height: '100%'
-                                    }}
-                                >
-                                    <Typography color="text.secondary">
-                                        Выберите страницу для редактирования
+                                <Box sx={{ height: '100%' }}>
+                                    <Typography variant="h6" gutterBottom>
+                                        Все страницы
                                     </Typography>
+                                    <PagesList
+                                        pages={allPages}
+                                        loading={pagesLoading}
+                                        error={pagesError}
+                                        onEdit={handleEditFromList}
+                                        onDelete={handleDeleteFromList}
+                                        onCreateChild={handleCreateChildFromList}
+                                    />
                                 </Box>
                             )}
                         </Paper>

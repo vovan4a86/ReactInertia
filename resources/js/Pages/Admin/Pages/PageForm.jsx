@@ -75,7 +75,6 @@ const PageForm = ({ page, parents, isNew = false }) => {
             post('/admin/api/pages', {
                 preserveScroll: true,
                 onSuccess: (response) => {
-                    console.log('Page created successfully:', response);
                     // Обновляем страницу для отображения нового дерева
                     router.reload({ only: ['treeData'] });
                 },
