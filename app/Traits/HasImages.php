@@ -167,7 +167,8 @@ trait HasImages
      */
     protected function getStorageUrl(string $path): string
     {
-        return Storage::disk($this->getImageConfig()['disk'])->url($path);
+        return $path;
+//        return Storage::disk($this->getImageConfig()['disk'])->url($path);
     }
 
     /**
@@ -196,26 +197,41 @@ trait HasImages
     {
         if (!$imageData) return null;
 
-        if (isset($imageData['thumbs']) && is_array($imageData['thumbs'])) {
-            // Для webp формата ищем ключ с суффиксом _webp
-            if ($format === 'webp') {
-                $webpKey = $size . '_webp';
-                if (isset($imageData['thumbs'][$webpKey])) {
-                    return $this->getStorageUrl($imageData['thumbs'][$webpKey]);
-                }
-            }
+        $relativePath = $this->getRelativePath($imageData, $size);
 
-            if (isset($imageData['thumbs'][$size])) {
-                return $this->getStorageUrl($imageData['thumbs'][$size]);
-            }
+        if ($relativePath) {
+            return $this->getStorageUrl($relativePath);
         }
 
-        if ($format === 'webp' && isset($imageData['webp'])) {
-            return $this->getStorageUrl($imageData['webp']);
+        return null;
+    }
+
+    /**
+     * Получить относительный путь к изображению
+     */
+    private function getRelativePath(array $imageData, string $size): ?string
+    {
+        if (!$imageData) return null;
+
+        // Ищем webp версию
+        $webpKey = $size . '_webp';
+        if (isset($imageData['thumbs'][$webpKey])) {
+            return $imageData['thumbs'][$webpKey];
         }
 
-        if (isset($imageData['original'])) {
-            return $this->getStorageUrl($imageData['original']);
+        // Ищем оригинальный формат в thumbs
+        if (isset($imageData['thumbs'][$size])) {
+            return $imageData['thumbs'][$size];
+        }
+
+        // Ищем webp в корне
+        if ($size === 'medium' && isset($imageData['webp'])) {
+            return $imageData['webp'];
+        }
+
+        // Ищем original
+        if ($size === 'medium' && isset($imageData['original'])) {
+            return $imageData['original'];
         }
 
         return null;
@@ -235,13 +251,14 @@ trait HasImages
         return collect($images)->map(function ($image) {
             return [
                 'id' => $image['original'] ?? uniqid(),
-                'url' => $this->getImageUrl($image, 'medium'),
-                'thumb' => $this->getImageUrl($image, 'thumb'),
-                'small' => $this->getImageUrl($image, 'small'),
-                'medium' => $this->getImageUrl($image, 'medium'),
-                'large' => $this->getImageUrl($image, 'large'),
-                'original' => isset($image['original']) ? $this->getStorageUrl($image['original']) : null,
-                'webp' => isset($image['webp']) ? $this->getStorageUrl($image['webp']) : null,
+                // Возвращаем ОТНОСИТЕЛЬНЫЕ пути, как они хранятся в БД
+                'url' => $image['url'] ?? $this->getImageUrl($image, 'medium'),
+                'thumb' => $image['thumb'] ?? $this->getRelativePath($image, 'thumb'),
+                'small' => $image['small'] ?? $this->getRelativePath($image, 'small'),
+                'medium' => $image['medium'] ?? $this->getRelativePath($image, 'medium'),
+                'large' => $image['large'] ?? $this->getRelativePath($image, 'large'),
+                'original' => $image['original'] ?? null,
+                'webp' => $image['webp'] ?? null,
                 'meta' => $image['meta'] ?? [],
             ];
         })->values()->toArray();

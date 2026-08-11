@@ -38,6 +38,7 @@ class AdminPageController extends Controller
         // Получаем данные страницы с URL изображений
         $pageData = $page->toArray();
         $pageData['images'] = $page->getImagesWithUrls(); // Добавляем URL к изображениям
+        \Debugbar::log($pageData['images']);
 
         return response()->json([
             'page' => $pageData,

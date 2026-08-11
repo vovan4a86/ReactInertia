@@ -401,22 +401,46 @@ const ImageUploader = ({
         });
     }, [originalImages]);
 
+    const normalizeImagePath = (path) => {
+        if (!path) return '';
+        if (typeof path !== 'string') return path;
+
+        // Удаляем домен и /storage/ префикс, оставляя относительный путь
+        if (path.startsWith('http://') || path.startsWith('https://')) {
+            const url = new URL(path);
+            path = url.pathname;
+        }
+
+        // Удаляем /storage/ префикс если есть
+        if (path.startsWith('/storage/')) {
+            path = path.replace('/storage/', '');
+        } else if (path.startsWith('storage/')) {
+            path = path.replace('storage/', '');
+        }
+
+        // Удаляем начальный слеш
+        if (path.startsWith('/')) {
+            path = path.slice(1);
+        }
+
+        return path;
+    };
+
+
     // Получение URL изображения ДЛЯ ОТОБРАЖЕНИЯ
     const getDisplayUrl = useCallback((image, size = 'medium') => {
         if (!image) return '/placeholder.jpg';
 
-        // Если это строка (относительный путь) - для обратной совместимости
+        // Если это строка
         if (typeof image === 'string') {
-            if (image.startsWith('http')) return image;
             return image.startsWith('/') ? image : `/storage/${image}`;
         }
 
-        console.log(image);
-
-        // Для объекта с полной структурой
+        // Для объектов берем нужный размер
         if (image) {
             let path = null;
 
+            // Сначала ищем webp версии
             switch(size) {
                 case 'thumb':
                     path = image.thumb_webp || image.thumb;
@@ -431,27 +455,18 @@ const ImageUploader = ({
                     path = image.large_webp || image.large;
                     break;
                 default:
-                    path = image.medium_webp || image.medium;
+                    path = image.medium || image.url;
             }
 
             if (path) {
-                // Если путь уже абсолютный (начинается с http или /)
-                if (path.startsWith('http')) return path;
-                if (path.startsWith('/')) return path;
-                // Иначе добавляем /storage/
-                return `/storage/${path}`;
+                return path.startsWith('/') ? path : `/storage/${path}`;
             }
         }
 
-        // Fallback: пробуем другие поля
-        let path = image.webp || image.original || image.url;
-
-        if (!path) return '/placeholder.jpg';
-
-        if (path.startsWith('http')) return path;
-        if (path.startsWith('/')) return path;
-        return `/storage/${path}`;
+        return '/placeholder.jpg';
     }, []);
+
+
 
     // Активное изображение для DragOverlay
     const activeImage = useMemo(() => {

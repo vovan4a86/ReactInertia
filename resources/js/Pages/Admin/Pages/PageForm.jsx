@@ -37,6 +37,49 @@ const PageForm = ({ page, parents, isNew = false }) => {
         deleted_images: [], // Индексы удаленных изображений
     });
 
+    const normalizeImagePaths = (images) => {
+        if (!Array.isArray(images)) return [];
+
+        return images.map(image => {
+            if (typeof image === 'string') {
+                // Нормализуем строковый путь
+                let path = image;
+                if (path.startsWith('http://') || path.startsWith('https://')) {
+                    const url = new URL(path);
+                    path = url.pathname;
+                }
+                if (path.startsWith('/storage/')) {
+                    path = path.replace('/storage/', '');
+                }
+                return path.startsWith('/') ? path.slice(1) : path;
+            }
+
+            // Для объектов - нормализуем все поля с путями
+            const normalized = { ...image };
+            const pathFields = ['original', 'thumb', 'thumb_webp', 'small', 'small_webp',
+                'medium', 'medium_webp', 'large', 'large_webp', 'url'];
+
+            pathFields.forEach(field => {
+                if (normalized[field] && typeof normalized[field] === 'string') {
+                    let path = normalized[field];
+                    if (path.startsWith('http://') || path.startsWith('https://')) {
+                        const url = new URL(path);
+                        path = url.pathname;
+                    }
+                    if (path.startsWith('/storage/')) {
+                        path = path.replace('/storage/', '');
+                    }
+                    if (path.startsWith('/')) {
+                        path = path.slice(1);
+                    }
+                    normalized[field] = path;
+                }
+            });
+
+            return normalized;
+        });
+    };
+
     // Сбрасываем форму при изменении страницы
     useEffect(() => {
         reset();
@@ -49,7 +92,7 @@ const PageForm = ({ page, parents, isNew = false }) => {
             meta_title: page?.meta_title || '',
             meta_description: page?.meta_description || '',
             template: page?.template || 'default',
-            images: page?.images || [],
+            images: normalizeImagePaths(page?.images || []), // Нормализуем пути
             deleted_images: [],
         });
         setActiveTab(0); // Сбрасываем на первую вкладку
