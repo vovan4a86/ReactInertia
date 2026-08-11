@@ -29,7 +29,8 @@ const ImageUploader = ({
                            multiple = true,
                            onChange
                        }) => {
-    const [images, setImages] = useState(initialImages || []);
+    // Храним оригинальные данные изображений (относительные пути)
+    const [originalImages, setOriginalImages] = useState(initialImages || []);
     const [uploading, setUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState(null);
     const [deletedImages, setDeletedImages] = useState([]);
@@ -58,14 +59,14 @@ const ImageUploader = ({
     // Синхронизация с родительским компонентом
     useEffect(() => {
         if (onChange) {
-            onChange(images, deletedImages);
+            onChange(originalImages, deletedImages);
         }
-    }, [images, deletedImages]);
+    }, [originalImages, deletedImages]);
 
     // Обработка загрузки файлов через Inertia
     const handleUpload = useCallback(async (acceptedFiles) => {
-        if (!multiple && images.length >= 1) return;
-        if (multiple && images.length >= maxImages) return;
+        if (!multiple && originalImages.length >= 1) return;
+        if (multiple && originalImages.length >= maxImages) return;
 
         setUploading(true);
 
@@ -97,7 +98,7 @@ const ImageUploader = ({
                 const data = await response.json();
 
                 if (data.success && data.images) {
-                    setImages(data.images);
+                    setOriginalImages(data.images);
                     setNotification({
                         open: true,
                         message: data.message || `Загружено файлов: ${acceptedFiles.length}`,
@@ -122,7 +123,7 @@ const ImageUploader = ({
         } finally {
             setUploading(false);
         }
-    }, [images, multiple, maxImages, uploadUrl]);
+    }, [originalImages, multiple, maxImages, uploadUrl]);
 
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -131,15 +132,15 @@ const ImageUploader = ({
             'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp']
         },
         multiple: multiple,
-        maxFiles: maxImages - images.length,
+        maxFiles: maxImages - originalImages.length,
         disabled: uploading,
     });
 
     // Удаление изображения (помечаем для удаления)
     const handleDelete = (index) => {
         setDeletedImages(prev => [...prev, index]);
-        const newImages = images.filter((_, i) => i !== index);
-        setImages(newImages);
+        const newImages = originalImages.filter((_, i) => i !== index);
+        setOriginalImages(newImages);
         setNotification({
             open: true,
             message: 'Изображение будет удалено при сохранении',
@@ -147,36 +148,50 @@ const ImageUploader = ({
         });
     };
 
-    // Получение URL изображения
-    const getImageUrl = (image, size = 'medium') => {
+    // Получение URL изображения ТОЛЬКО ДЛЯ ОТОБРАЖЕНИЯ
+    const getDisplayUrl = (image, size = 'medium') => {
         if (!image) return '/placeholder.jpg';
 
-        if (typeof image === 'string') return image;
-
-        // Если есть прямые URL
-        if (image.thumbnail && size === 'thumb') return image.thumbnail;
-        if (image.small && size === 'small') return image.small;
-        if (image.large && size === 'large') return image.large;
-        if (image.url && size === 'medium') return image.url;
-
-        // Для обратной совместимости с данными из БД
-        if (image.thumbs) {
-            const webpKey = size + '_webp';
-            const path = image.thumbs[webpKey] || image.thumbs[size];
-            if (path) {
-                return '/storage/' + path;
+        // Если это строка (относительный путь)
+        if (typeof image === 'string') {
+            if (image.startsWith('http')) {
+                return image;
             }
+            // Формируем URL для отображения через /storage
+            return image.startsWith('/') ? image : `/storage/${image}`;
         }
 
-        // Прямые ссылки из БД
-        if (image.original) {
-            return '/storage/' + image.original;
-        }
-        if (image.webp) {
-            return '/storage/' + image.webp;
+        // Для объекта берем нужный размер
+        let path;
+        switch(size) {
+            case 'thumb':
+                path = image.thumb || image.thumb_webp;
+                break;
+            case 'small':
+                path = image.small || image.small_webp;
+                break;
+            case 'medium':
+                path = image.medium || image.medium_webp;
+                break;
+            case 'large':
+                path = image.large || image.large_webp;
+                break;
+            default:
+                path = image.medium || image.medium_webp;
         }
 
-        return image.url || '/placeholder.jpg';
+        // Если не нашли размер, берем webp или original
+        if (!path) {
+            path = image.webp || image.original;
+        }
+
+        if (!path) return '/placeholder.jpg';
+
+        // Формируем URL для отображения
+        if (path.startsWith('http')) {
+            return path;
+        }
+        return path.startsWith('/') ? path : `/storage/${path}`;
     };
 
     return (
@@ -224,19 +239,19 @@ const ImageUploader = ({
             </Box>
 
             {/* Счетчик изображений */}
-            {images.length > 0 && (
+            {originalImages.length > 0 && (
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                    Загружено: {images.length} из {maxImages}
+                    Загружено: {originalImages.length} из {maxImages}
                 </Typography>
             )}
 
             {/* Сетка изображений */}
-            {images.length > 0 && (
+            {originalImages.length > 0 && (
                 <ImageList cols={4} rowHeight={164} gap={8}>
-                    {images.map((image, index) => (
+                    {originalImages.map((image, index) => (
                         <ImageListItem key={image.id || index}>
                             <img
-                                src={getImageUrl(image, 'thumb')}
+                                src={getDisplayUrl(image, 'thumb')}
                                 alt={`Image ${index + 1}`}
                                 loading="lazy"
                                 style={{
@@ -274,7 +289,7 @@ const ImageUploader = ({
                                 actionPosition="right"
                             />
                             {/* Индикатор WebP */}
-                            {image.thumbnail?.includes('.webp') && (
+                            {image.thumb?.includes('.webp') && (
                                 <Box
                                     sx={{
                                         position: 'absolute',
@@ -296,7 +311,7 @@ const ImageUploader = ({
             )}
 
             {/* Пустое состояние */}
-            {images.length === 0 && !uploading && (
+            {originalImages.length === 0 && !uploading && (
                 <Box
                     sx={{
                         textAlign: 'center',
@@ -343,7 +358,7 @@ const ImageUploader = ({
                 open={notification.open}
                 autoHideDuration={4000}
                 onClose={() => setNotification({ ...notification, open: false })}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
             >
                 <Alert
                     onClose={() => setNotification({ ...notification, open: false })}

@@ -25,7 +25,7 @@ trait HasImages
                 'large' => ['width' => 1200, 'height' => 800],
             ],
             'quality' => 80,
-            'max_file_size' => 10240, // KB
+            'max_file_size' => 10240,
         ];
     }
 
@@ -124,28 +124,13 @@ trait HasImages
     }
 
     /**
-     * Загрузка нескольких изображений
-     */
-    public function uploadMultipleImages($files, array $options = []): array
-    {
-        $results = [];
-
-        foreach ($files as $file) {
-            $result = $this->uploadImage($file, $options);
-            if ($result) {
-                $results[] = $result;
-            }
-        }
-
-        return $results;
-    }
-
-    /**
      * Удаление изображения и всех его версий
      */
     public function deleteImage(?array $imageData): bool
     {
-        if (!$imageData) return false;
+        if (!$imageData) {
+            return false;
+        }
 
         try {
             $filesToDelete = [];
@@ -159,10 +144,16 @@ trait HasImages
             }
 
             if (!empty($imageData['thumbs'])) {
-                $filesToDelete = array_merge($filesToDelete, array_values($imageData['thumbs']));
+                foreach ($imageData['thumbs'] as $thumb) {
+                    if (is_string($thumb)) {
+                        $filesToDelete[] = $thumb;
+                    }
+                }
             }
 
-            Storage::disk($this->getImageConfig()['disk'])->delete($filesToDelete);
+            if (!empty($filesToDelete)) {
+                Storage::disk($this->getImageConfig()['disk'])->delete($filesToDelete);
+            }
 
             return true;
         } catch (\Exception $e) {
@@ -172,57 +163,88 @@ trait HasImages
     }
 
     /**
+     * Получение URL для изображения
+     */
+    protected function getStorageUrl(string $path): string
+    {
+        return Storage::disk($this->getImageConfig()['disk'])->url($path);
+    }
+
+    /**
+     * Получить URL первого изображения
+     */
+    public function getFirstImageUrl(?string $size = 'medium', string $format = 'webp'): ?string
+    {
+        $images = $this->images;
+        if (empty($images) || !is_array($images)) {
+            return null;
+        }
+
+        $firstImage = $images[0];
+
+        if (is_string($firstImage)) {
+            return $this->getStorageUrl($firstImage);
+        }
+
+        return $this->getImageUrl($firstImage, $size, $format);
+    }
+
+    /**
      * Получить URL изображения с учетом формата
      */
     public function getImageUrl(?array $imageData, string $size = 'medium', string $format = 'webp'): ?string
     {
         if (!$imageData) return null;
 
-        // Проверяем разные варианты ключей
-        $key = $format === 'webp' ? $size . '_webp' : $size;
+        if (isset($imageData['thumbs']) && is_array($imageData['thumbs'])) {
+            // Для webp формата ищем ключ с суффиксом _webp
+            if ($format === 'webp') {
+                $webpKey = $size . '_webp';
+                if (isset($imageData['thumbs'][$webpKey])) {
+                    return $this->getStorageUrl($imageData['thumbs'][$webpKey]);
+                }
+            }
 
-        // Ищем путь в разных местах
-        $path = $imageData['thumbs'][$key]
-            ?? $imageData['thumbs'][$size]
-            ?? $imageData[$format]
-            ?? $imageData['original']
-            ?? null;
-
-        if (!$path) {
-            return null;
+            if (isset($imageData['thumbs'][$size])) {
+                return $this->getStorageUrl($imageData['thumbs'][$size]);
+            }
         }
 
-        // Используем Storage для правильного URL
-        return Storage::disk('public')->url($path);
+        if ($format === 'webp' && isset($imageData['webp'])) {
+            return $this->getStorageUrl($imageData['webp']);
+        }
+
+        if (isset($imageData['original'])) {
+            return $this->getStorageUrl($imageData['original']);
+        }
+
+        return null;
     }
 
-    // Добавляем метод для получения всех изображений с URL
+    /**
+     * Получение всех изображений с URL
+     */
     public function getImagesWithUrls(): array
     {
         $images = $this->images ?? [];
 
-        return collect($images)->map(function ($image) {
-            if (is_string($image)) {
-                $url = Storage::disk('public')->url($image);
-                return [
-                    'url' => $url,
-                    'thumbnail' => $url,
-                    'large' => $url,
-                    'original' => $url,
-                ];
-            }
+        if (empty($images)) {
+            return [];
+        }
 
+        return collect($images)->map(function ($image) {
             return [
                 'id' => $image['original'] ?? uniqid(),
                 'url' => $this->getImageUrl($image, 'medium'),
-                'thumbnail' => $this->getImageUrl($image, 'thumb'),
+                'thumb' => $this->getImageUrl($image, 'thumb'),
                 'small' => $this->getImageUrl($image, 'small'),
+                'medium' => $this->getImageUrl($image, 'medium'),
                 'large' => $this->getImageUrl($image, 'large'),
-                'original' => Storage::disk('public')->url($image['original'] ?? ''),
-                'webp' => $image['webp'] ? Storage::disk('public')->url($image['webp']) : null,
+                'original' => isset($image['original']) ? $this->getStorageUrl($image['original']) : null,
+                'webp' => isset($image['webp']) ? $this->getStorageUrl($image['webp']) : null,
                 'meta' => $image['meta'] ?? [],
             ];
-        })->toArray();
+        })->values()->toArray();
     }
 
     /**

@@ -35,8 +35,12 @@ class AdminPageController extends Controller
     {
         $page->load('parent');
 
+        // Получаем данные страницы с URL изображений
+        $pageData = $page->toArray();
+        $pageData['images'] = $page->getImagesWithUrls(); // Добавляем URL к изображениям
+
         return response()->json([
-            'page' => $page,
+            'page' => $pageData,
             'parents' => Page::where('id', '!=', $page->id)
                 ->select('id', 'title')
                 ->get(),
@@ -73,7 +77,10 @@ class AdminPageController extends Controller
         $page = Page::create($validated);
 
         if ($request->wantsJson()) {
-            return response()->json($page, 201);
+            $pageData = $page->toArray();
+            $pageData['images'] = $page->getImagesWithUrls();
+
+            return response()->json($pageData, 201);
         }
 
         return redirect()->back()->with('success', 'Страница создана');
@@ -131,10 +138,16 @@ class AdminPageController extends Controller
 
         $page->update($validated);
 
-        if ($request->wantsJson()) {
-            return response()->json($page);
-        }
+        // Обновляем модель свежими данными
+        $page->refresh();
 
+        if ($request->wantsJson()) {
+            // Возвращаем страницу с URL изображений
+            $pageData = $page->toArray();
+            $pageData['images'] = $page->getImagesWithUrls();
+
+            return response()->json($pageData);
+        }
         return redirect()->back()->with('success', 'Страница обновлена');
     }
 
@@ -222,43 +235,21 @@ class AdminPageController extends Controller
                 $uploadedImages[] = $imageData;
             }
         }
-        // Добавляем новые изображения к существующим
+
         $existingImages = $page->images ?? [];
+
         $allImages = array_merge($existingImages, $uploadedImages);
 
+        // Сохраняем
         $page->update(['images' => $allImages]);
+        $page->refresh();
 
-        // Формируем ответ с URL для предпросмотра
-        $imagesWithUrls = collect($allImages)->map(function ($image) use ($page) {
-            if (is_string($image)) {
-                return [
-                    'url' => Storage::disk('public')->url($image),
-                    'thumbnail' => Storage::disk('public')->url($image),
-                ];
-            }
+        $imagesWithUrls = $page->getImagesWithUrls();
 
-            return [
-                'id' => $image['original'] ?? uniqid(),
-                'url' => $page->getImageUrl($image, 'medium'),
-                'thumbnail' => $page->getImageUrl($image, 'thumb'),
-                'large' => $page->getImageUrl($image, 'large'),
-                'original' => Storage::disk('public')->url($image['original'] ?? ''),
-                'meta' => $image['meta'] ?? [],
-            ];
-        });
-
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Изображения загружены',
-                'images' => $imagesWithUrls,
-            ]);
-        }
-
-        return redirect()->back()->with([
-            'success' => 'Изображения загружены',
-            'uploaded_images' => $imagesWithUrls,
+        return response()->json([
+            'success' => true,
+            'message' => 'Изображения загружены',
+            'images' => $imagesWithUrls,
         ]);
     }
 

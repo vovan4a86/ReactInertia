@@ -79,6 +79,10 @@ const PageForm = ({ page, parents, isNew = false }) => {
             post('/admin/api/pages', {
                 preserveScroll: true,
                 onSuccess: (response) => {
+                    // Обновляем изображения в форме после создания
+                    if (response.props?.page?.images) {
+                        setData('images', response.props.page.images);
+                    }
                     // Обновляем страницу для отображения нового дерева
                     router.reload({ only: ['treeData'] });
                 },
@@ -90,7 +94,13 @@ const PageForm = ({ page, parents, isNew = false }) => {
             // Обновление существующей страницы
             put(`/admin/api/pages/${page.id}`, {
                 preserveScroll: true,
-                onSuccess: () => {
+                onSuccess: (response) => {
+                    // Обновляем изображения в форме после обновления
+                    if (response.props?.page?.images) {
+                        setData('images', response.props.page.images);
+                        // Очищаем список удаленных изображений
+                        setData('deleted_images', []);
+                    }
                     console.log('Page updated successfully');
                 },
                 onError: (errors) => {

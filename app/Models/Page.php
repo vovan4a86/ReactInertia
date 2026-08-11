@@ -53,7 +53,7 @@ class Page extends Model
         ];
     }
 
-    protected $appends = ['url', 'getImagesWithUrls'];
+    protected $appends = ['url'];
 
     public function parent(): BelongsTo
     {
