@@ -1,26 +1,244 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { useForm, usePage } from '@inertiajs/react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePage } from '@inertiajs/react';
+import { useDropzone } from 'react-dropzone';
 import {
     Box,
-    Button,
-    IconButton,
     Typography,
-    LinearProgress,
-    ImageList,
-    ImageListItem,
-    ImageListItemBar,
+    IconButton,
     Dialog,
     DialogContent,
-    Alert,
     Snackbar,
+    Alert,
+    LinearProgress,
+    Button,
+    Tooltip,
+    Paper,
+    CardMedia
 } from '@mui/material';
 import {
-    CloudUpload as UploadIcon,
-    Delete as DeleteIcon,
+    Upload as UploadIcon,
     ZoomIn as ZoomIcon,
+    Delete as DeleteIcon,
+    DragIndicator as DragIndicatorIcon,
+    Add as AddIcon
 } from '@mui/icons-material';
-import { useDropzone } from 'react-dropzone';
+import {
+    DndContext,
+    closestCenter,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragOverlay
+} from '@dnd-kit/core';
+import {
+    arrayMove,
+    SortableContext,
+    useSortable,
+    rectSortingStrategy
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
+/**
+ * Отдельный компонент для перетаскиваемого изображения
+ */
+const SortableImage = ({ id, image, index, onDelete, onPreview, isDragging, getDisplayUrl }) => {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+    } = useSortable({ id });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.3 : 1,
+        position: 'relative',
+    };
+
+    const displayUrl = getDisplayUrl(image, 'thumb');
+    const largeUrl = getDisplayUrl(image, 'large');
+
+    return (
+        <div ref={setNodeRef} style={style} {...attributes}>
+            <Paper
+                elevation={0}
+                sx={{
+                    border: '1px solid',
+                    borderColor: isDragging ? 'primary.main' : 'divider',
+                    borderRadius: 1,
+                    overflow: 'hidden',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                    '&:hover': {
+                        borderColor: 'primary.main',
+                        boxShadow: '0 0 0 1px rgba(25, 118, 210, 0.3)',
+                    },
+                }}
+            >
+                {/* Контейнер изображения */}
+                <Box sx={{
+                    position: 'relative',
+                    height: 164,
+                    overflow: 'hidden',
+                }}>
+                    <CardMedia
+                        component="img"
+                        height="164"
+                        image={displayUrl}
+                        alt={`Image ${index + 1}`}
+                        sx={{
+                            objectFit: 'cover',
+                            cursor: 'pointer',
+                            width: '100%',
+                            height: '100%',
+                        }}
+                        onClick={() => onPreview(largeUrl)}
+                        onError={(e) => {
+                            e.target.src = '/placeholder.jpg';
+                        }}
+                    />
+
+                    {/* Кнопки действий сверху */}
+                    <Box
+                        sx={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            p: 0.5,
+                            background: 'linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, rgba(0,0,0,0) 100%)',
+                            zIndex: 2,
+                        }}
+                    >
+                        {/* Индикатор WebP */}
+                        {image?.thumbs?.thumb_webp && (
+                            <Box
+                                sx={{
+                                    bgcolor: 'success.main',
+                                    color: 'white',
+                                    px: 0.5,
+                                    py: 0.2,
+                                    borderRadius: 0.5,
+                                    fontSize: '0.65rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 0.3,
+                                }}
+                            >
+                                WebP
+                            </Box>
+                        )}
+
+                        <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+                            <Tooltip title="Переместить">
+                                <IconButton
+                                    {...listeners}
+                                    sx={{
+                                        color: 'white',
+                                        cursor: 'grab',
+                                        '&:active': { cursor: 'grabbing' },
+                                        padding: 0.5,
+                                    }}
+                                    size="small"
+                                >
+                                    <DragIndicatorIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+
+                            <Tooltip title="Предпросмотр">
+                                <IconButton
+                                    sx={{ color: 'white', padding: 0.5 }}
+                                    size="small"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        onPreview(largeUrl);
+                                    }}
+                                >
+                                    <ZoomIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+
+                            <Tooltip title="Удалить">
+                                <IconButton
+                                    sx={{ color: 'white', padding: 0.5 }}
+                                    size="small"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        // Передаем index, а не id
+                                        onDelete(index);
+                                    }}
+                                >
+                                    <DeleteIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
+                        </Box>
+                    </Box>
+                </Box>
+            </Paper>
+        </div>
+    );
+};
+
+/**
+ * Компонент Dropzone
+ */
+const DropzoneArea = ({ isDragActive, uploading, getRootProps, getInputProps, multiple, maxImages, currentCount }) => (
+    <Box
+        {...getRootProps()}
+        sx={{
+            border: '2px dashed',
+            borderColor: isDragActive ? 'primary.main' : 'grey.300',
+            borderRadius: 1,
+            p: 3,
+            mb: 2,
+            textAlign: 'center',
+            cursor: uploading ? 'not-allowed' : 'pointer',
+            opacity: uploading ? 0.7 : 1,
+            bgcolor: isDragActive ? 'action.hover' : 'transparent',
+            transition: 'all 0.2s',
+            '&:hover': {
+                borderColor: 'primary.main',
+                bgcolor: 'action.hover',
+            },
+        }}
+    >
+        <input {...getInputProps()} />
+        {uploading ? (
+            <Box>
+                <LinearProgress sx={{ mb: 1 }} />
+                <Typography variant="body2" color="text.secondary">
+                    Загрузка...
+                </Typography>
+            </Box>
+        ) : (
+            <>
+                <UploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
+                <Typography variant="body1" color="text.secondary">
+                    {isDragActive
+                        ? 'Отпустите файлы для загрузки'
+                        : 'Перетащите изображения сюда или кликните для выбора'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                    Поддерживаются JPEG, PNG, GIF, WebP • Макс. 10MB •
+                    {multiple ? ` Можно загрузить до ${maxImages} изображений` : ' Одно изображение'}
+                </Typography>
+                {currentCount >= maxImages && (
+                    <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.5 }}>
+                        Достигнут лимит изображений ({maxImages})
+                    </Typography>
+                )}
+            </>
+        )}
+    </Box>
+);
+
+/**
+ * Основной компонент ImageUploader
+ */
 const ImageUploader = ({
                            images: initialImages = [],
                            pageId,
@@ -29,14 +247,23 @@ const ImageUploader = ({
                            multiple = true,
                            onChange
                        }) => {
-    // Храним оригинальные данные изображений (относительные пути)
     const [originalImages, setOriginalImages] = useState(initialImages || []);
     const [uploading, setUploading] = useState(false);
     const [previewImage, setPreviewImage] = useState(null);
     const [deletedImages, setDeletedImages] = useState([]);
     const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
+    const [activeDragId, setActiveDragId] = useState(null);
 
     const { props } = usePage();
+
+    // Настройка сенсоров для DnD
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        })
+    );
 
     // Отслеживаем flash-сообщения от сервера
     useEffect(() => {
@@ -63,7 +290,12 @@ const ImageUploader = ({
         }
     }, [originalImages, deletedImages]);
 
-    // Обработка загрузки файлов через Inertia
+    // Массив уникальных ID для SortableContext (используем index, так как объекты могут не иметь id)
+    const sortableIds = useMemo(() => {
+        return originalImages.map((_, index) => `image-${index}`);
+    }, [originalImages]);
+
+    // Обработка загрузки файлов через fetch
     const handleUpload = useCallback(async (acceptedFiles) => {
         if (!multiple && originalImages.length >= 1) return;
         if (multiple && originalImages.length >= maxImages) return;
@@ -86,19 +318,19 @@ const ImageUploader = ({
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content,
                     'Accept': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest', // Добавляем этот заголовок
+                    'X-Requested-With': 'XMLHttpRequest',
                 },
                 body: formData,
             });
 
-            // Проверяем Content-Type ответа
             const contentType = response.headers.get('content-type');
 
             if (contentType && contentType.includes('application/json')) {
                 const data = await response.json();
 
                 if (data.success && data.images) {
-                    setOriginalImages(data.images);
+                    // Добавляем новые изображения к существующим
+                    setOriginalImages(prev => [...prev, ...data.images]);
                     setNotification({
                         open: true,
                         message: data.message || `Загружено файлов: ${acceptedFiles.length}`,
@@ -108,7 +340,6 @@ const ImageUploader = ({
                     throw new Error(data.message || 'Upload failed');
                 }
             } else {
-                // Если ответ не JSON, значит это редирект или ошибка
                 const text = await response.text();
                 console.error('Unexpected response:', text);
                 throw new Error('Server returned non-JSON response');
@@ -125,7 +356,6 @@ const ImageUploader = ({
         }
     }, [originalImages, multiple, maxImages, uploadUrl]);
 
-
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop: handleUpload,
         accept: {
@@ -133,11 +363,34 @@ const ImageUploader = ({
         },
         multiple: multiple,
         maxFiles: maxImages - originalImages.length,
-        disabled: uploading,
+        disabled: uploading || originalImages.length >= maxImages,
     });
 
-    // Удаление изображения (помечаем для удаления)
-    const handleDelete = (index) => {
+    // Обработчик завершения перетаскивания
+    const handleDragEnd = useCallback((event) => {
+        const { active, over } = event;
+        setActiveDragId(null);
+
+        if (!over || active.id === over.id) return;
+
+        const oldIndex = sortableIds.indexOf(active.id);
+        const newIndex = sortableIds.indexOf(over.id);
+
+        if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+            const newImages = arrayMove([...originalImages], oldIndex, newIndex);
+            setOriginalImages(newImages);
+            setNotification({
+                open: true,
+                message: 'Порядок изображений изменен. Не забудьте сохранить изменения.',
+                severity: 'success'
+            });
+        }
+    }, [originalImages, sortableIds]);
+
+    // Удаление изображения по индексу
+    const handleDelete = useCallback((index) => {
+        if (index < 0 || index >= originalImages.length) return;
+
         setDeletedImages(prev => [...prev, index]);
         const newImages = originalImages.filter((_, i) => i !== index);
         setOriginalImages(newImages);
@@ -146,168 +399,150 @@ const ImageUploader = ({
             message: 'Изображение будет удалено при сохранении',
             severity: 'info'
         });
-    };
+    }, [originalImages]);
 
-    // Получение URL изображения ТОЛЬКО ДЛЯ ОТОБРАЖЕНИЯ
-    const getDisplayUrl = (image, size = 'medium') => {
+    // Получение URL изображения ДЛЯ ОТОБРАЖЕНИЯ
+    const getDisplayUrl = useCallback((image, size = 'medium') => {
         if (!image) return '/placeholder.jpg';
 
-        // Если это строка (относительный путь)
+        // Если это строка (относительный путь) - для обратной совместимости
         if (typeof image === 'string') {
-            if (image.startsWith('http')) {
-                return image;
-            }
-            // Формируем URL для отображения через /storage
+            if (image.startsWith('http')) return image;
             return image.startsWith('/') ? image : `/storage/${image}`;
         }
 
-        // Для объекта берем нужный размер
-        let path;
-        switch(size) {
-            case 'thumb':
-                path = image.thumb || image.thumb_webp;
-                break;
-            case 'small':
-                path = image.small || image.small_webp;
-                break;
-            case 'medium':
-                path = image.medium || image.medium_webp;
-                break;
-            case 'large':
-                path = image.large || image.large_webp;
-                break;
-            default:
-                path = image.medium || image.medium_webp;
+        console.log(image);
+
+        // Для объекта с полной структурой
+        if (image) {
+            let path = null;
+
+            switch(size) {
+                case 'thumb':
+                    path = image.thumb_webp || image.thumb;
+                    break;
+                case 'small':
+                    path = image.small_webp || image.small;
+                    break;
+                case 'medium':
+                    path = image.medium_webp || image.medium;
+                    break;
+                case 'large':
+                    path = image.large_webp || image.large;
+                    break;
+                default:
+                    path = image.medium_webp || image.medium;
+            }
+
+            if (path) {
+                // Если путь уже абсолютный (начинается с http или /)
+                if (path.startsWith('http')) return path;
+                if (path.startsWith('/')) return path;
+                // Иначе добавляем /storage/
+                return `/storage/${path}`;
+            }
         }
 
-        // Если не нашли размер, берем webp или original
-        if (!path) {
-            path = image.webp || image.original;
-        }
+        // Fallback: пробуем другие поля
+        let path = image.webp || image.original || image.url;
 
         if (!path) return '/placeholder.jpg';
 
-        // Формируем URL для отображения
-        if (path.startsWith('http')) {
-            return path;
-        }
-        return path.startsWith('/') ? path : `/storage/${path}`;
-    };
+        if (path.startsWith('http')) return path;
+        if (path.startsWith('/')) return path;
+        return `/storage/${path}`;
+    }, []);
+
+    // Активное изображение для DragOverlay
+    const activeImage = useMemo(() => {
+        if (!activeDragId) return null;
+        const index = sortableIds.indexOf(activeDragId);
+        return index !== -1 ? originalImages[index] : null;
+    }, [activeDragId, sortableIds, originalImages]);
 
     return (
         <Box>
             {/* Dropzone */}
-            <Box
-                {...getRootProps()}
-                sx={{
-                    border: '2px dashed',
-                    borderColor: isDragActive ? 'primary.main' : 'grey.300',
-                    borderRadius: 1,
-                    p: 3,
-                    mb: 2,
-                    textAlign: 'center',
-                    cursor: uploading ? 'not-allowed' : 'pointer',
-                    opacity: uploading ? 0.7 : 1,
-                    '&:hover': {
-                        borderColor: 'primary.main',
-                        bgcolor: 'action.hover',
-                    },
-                }}
-            >
-                <input {...getInputProps()} />
-                {uploading ? (
-                    <Box>
-                        <LinearProgress sx={{ mb: 1 }} />
-                        <Typography variant="body2" color="text.secondary">
-                            Загрузка...
-                        </Typography>
-                    </Box>
-                ) : (
-                    <>
-                        <UploadIcon sx={{ fontSize: 48, color: 'text.secondary', mb: 1 }} />
-                        <Typography variant="body1" color="text.secondary">
-                            {isDragActive
-                                ? 'Отпустите файлы для загрузки'
-                                : 'Перетащите изображения сюда или кликните для выбора'}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                            Поддерживаются JPEG, PNG, GIF, WebP • Макс. 10MB •
-                            {multiple ? ` Можно загрузить до ${maxImages} изображений` : ' Одно изображение'}
-                        </Typography>
-                    </>
-                )}
-            </Box>
+            {originalImages.length < maxImages && (
+                <DropzoneArea
+                    isDragActive={isDragActive}
+                    uploading={uploading}
+                    getRootProps={getRootProps}
+                    getInputProps={getInputProps}
+                    multiple={multiple}
+                    maxImages={maxImages}
+                    currentCount={originalImages.length}
+                />
+            )}
 
             {/* Счетчик изображений */}
             {originalImages.length > 0 && (
-                <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
-                    Загружено: {originalImages.length} из {maxImages}
-                </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                        Загружено: {originalImages.length} из {maxImages}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                        🖱️ Перетаскивайте для изменения порядка
+                    </Typography>
+                </Box>
             )}
 
-            {/* Сетка изображений */}
+            {/* Сетка изображений с DnD */}
             {originalImages.length > 0 && (
-                <ImageList cols={4} rowHeight={164} gap={8}>
-                    {originalImages.map((image, index) => (
-                        <ImageListItem key={image.id || index}>
-                            <img
-                                src={getDisplayUrl(image, 'thumb')}
-                                alt={`Image ${index + 1}`}
-                                loading="lazy"
-                                style={{
-                                    height: 164,
-                                    width: '100%',
-                                    objectFit: 'cover',
-                                }}
-                                onError={(e) => {
-                                    e.target.src = '/placeholder.jpg';
-                                }}
-                            />
-                            <ImageListItemBar
-                                sx={{
-                                    background: 'linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.3) 70%, rgba(0,0,0,0) 100%)',
-                                }}
-                                position="top"
-                                actionIcon={
-                                    <Box>
-                                        <IconButton
-                                            sx={{ color: 'white' }}
-                                            onClick={() => setPreviewImage(getImageUrl(image, 'large'))}
-                                            size="small"
-                                        >
-                                            <ZoomIcon fontSize="small" />
-                                        </IconButton>
-                                        <IconButton
-                                            sx={{ color: 'white' }}
-                                            onClick={() => handleDelete(index)}
-                                            size="small"
-                                        >
-                                            <DeleteIcon fontSize="small" />
-                                        </IconButton>
-                                    </Box>
-                                }
-                                actionPosition="right"
-                            />
-                            {/* Индикатор WebP */}
-                            {image.thumb?.includes('.webp') && (
-                                <Box
-                                    sx={{
-                                        position: 'absolute',
-                                        bottom: 4,
-                                        left: 4,
-                                        bgcolor: 'success.main',
-                                        color: 'white',
-                                        px: 0.5,
-                                        borderRadius: 0.5,
-                                        fontSize: '0.65rem',
-                                    }}
-                                >
-                                    WebP
-                                </Box>
-                            )}
-                        </ImageListItem>
-                    ))}
-                </ImageList>
+                <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragStart={(e) => setActiveDragId(e.active.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragCancel={() => setActiveDragId(null)}
+                >
+                    <SortableContext items={sortableIds} strategy={rectSortingStrategy}>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gridTemplateColumns: {
+                                    xs: 'repeat(2, 1fr)',
+                                    sm: 'repeat(3, 1fr)',
+                                    md: 'repeat(4, 1fr)',
+                                    lg: 'repeat(5, 1fr)',
+                                },
+                                gap: 1.5,
+                                mb: 2,
+                            }}
+                        >
+                            {originalImages.map((image, index) => {
+                                const imageId = sortableIds[index];
+                                return (
+                                    <SortableImage
+                                        key={imageId}
+                                        id={imageId}
+                                        image={image}
+                                        index={index}
+                                        onDelete={handleDelete}
+                                        onPreview={setPreviewImage}
+                                        isDragging={activeDragId === imageId}
+                                        getDisplayUrl={getDisplayUrl}
+                                    />
+                                );
+                            })}
+                        </Box>
+                    </SortableContext>
+
+                    {/* Оверлей для перетаскиваемого изображения */}
+                    <DragOverlay>
+                        {activeImage ? (
+                            <Box sx={{ width: '100%', maxWidth: 250, opacity: 0.8 }}>
+                                <CardMedia
+                                    component="img"
+                                    height="160"
+                                    image={getDisplayUrl(activeImage, 'medium')}
+                                    alt="Dragging"
+                                    sx={{ objectFit: 'cover', borderRadius: 1, boxShadow: 3 }}
+                                />
+                            </Box>
+                        ) : null}
+                    </DragOverlay>
+                </DndContext>
             )}
 
             {/* Пустое состояние */}
@@ -322,9 +557,17 @@ const ImageUploader = ({
                         borderColor: 'grey.300',
                     }}
                 >
-                    <Typography variant="body2" color="text.secondary">
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                         Нет загруженных изображений
                     </Typography>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={() => document.querySelector('input[type="file"]')?.click()}
+                    >
+                        Загрузить изображения
+                    </Button>
                 </Box>
             )}
 
