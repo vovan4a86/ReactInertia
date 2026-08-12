@@ -156,15 +156,12 @@ const ImageUploader = ({
     // Инициализация из внешних данных
     useEffect(() => {
         if (!isInitialized && externalImages && externalImages.length > 0) {
-            console.log('🔵 INIT images:', externalImages);
-
             // Сохраняем все изображения (существующие + новые)
             setLocalImages([...externalImages]);
             setNewFiles([]);
             setDeletedImageIds([]);
             setIsInitialized(true);
         } else if (!isInitialized && (!externalImages || externalImages.length === 0)) {
-            console.log('🔵 INIT empty');
             setLocalImages([]);
             setNewFiles([]);
             setDeletedImageIds([]);
@@ -174,7 +171,6 @@ const ImageUploader = ({
 
     // Сброс инициализации при смене страницы
     useEffect(() => {
-        console.log('🔄 RESET for pageId:', pageId);
         setIsInitialized(false);
     }, [pageId]);
 
@@ -184,12 +180,6 @@ const ImageUploader = ({
             const imageOrder = images.map(img => {
                 if (img.isNew) return `new_${img.tempId}`;
                 return typeof img === 'object' ? (img.original || img.id) : img;
-            });
-
-            console.log('📤 NOTIFY PARENT:', {
-                order: imageOrder,
-                filesCount: files.length,
-                deleted: deleted
             });
 
             onChangeRef.current(imageOrder, files, deleted);
@@ -210,8 +200,6 @@ const ImageUploader = ({
 
     // Загрузка новых файлов
     const handleUpload = useCallback((acceptedFiles) => {
-        console.log('📤 ADDING files:', acceptedFiles.map(f => ({name: f.name, type: f.type, size: f.size})));
-
         if (localImages.length + acceptedFiles.length > maxImages) {
             setNotification({
                 open: true,
@@ -248,13 +236,6 @@ const ImageUploader = ({
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop: useCallback((acceptedFiles) => {
-            console.log('🔄 Dropzone received files:', acceptedFiles.map(f => ({
-                name: f.name,
-                type: f.type,
-                size: f.size,
-                isFile: f instanceof File,
-                constructor: f.constructor.name
-            })));
             handleUpload(acceptedFiles);
         }, [handleUpload]),
         accept: { 'image/*': ['.jpeg', '.jpg', '.png', '.gif', '.webp'] },
@@ -275,7 +256,6 @@ const ImageUploader = ({
 
         if (oldIndex !== -1 && newIndex !== -1) {
             const newImages = arrayMove([...localImages], oldIndex, newIndex);
-            console.log('🔄 REORDER:', { oldIndex, newIndex });
             setLocalImages(newImages);
 
             // Уведомляем родителя о новом порядке
@@ -286,8 +266,6 @@ const ImageUploader = ({
 
     // Удаление изображения
     const handleDelete = useCallback((index) => {
-        console.log('🗑️ DELETE index:', index);
-
         const imageToDelete = localImages[index];
         let updatedNewFiles = [...newFiles];
         let updatedDeletedImageIds = [...deletedImageIds];
@@ -313,45 +291,29 @@ const ImageUploader = ({
 
 
     const getDisplayUrl = useCallback((image, size = 'medium') => {
-        console.log('🔍 getDisplayUrl called with:', {
-            image: image,
-            isNew: image?.isNew,
-            hasTempUrl: !!image?.tempUrl,
-            hasFile: image?.file instanceof File,
-            type: typeof image,
-            isString: typeof image === 'string'
-        });
-
         if (!image) {
-            console.log('🔍 No image, returning placeholder');
             return '/placeholder.jpg';
         }
 
         // Для новых изображений с объектами
         if (image.isNew) {
-            console.log('🔍 New image object detected');
             if (image.tempUrl) {
-                console.log('🔍 Using tempUrl:', image.tempUrl);
                 return image.tempUrl;
             }
             if (image.file instanceof File) {
                 const url = URL.createObjectURL(image.file);
                 image.tempUrl = url;
-                console.log('🔍 Created new URL from file:', url);
                 return url;
             }
-            console.log('🔍 No tempUrl or file, returning placeholder');
             return '/placeholder.jpg';
         }
 
         // Для строковых ID новых изображений
         if (typeof image === 'string' && image.startsWith('new_')) {
             const tempId = image.replace('new_', '');
-            console.log('🔍 String new_ detected, tempId:', tempId);
 
             // Ищем в localImages
             const foundImage = localImages.find(img => img.isNew && img.tempId === tempId);
-            console.log('🔍 Found in localImages:', !!foundImage);
 
             if (foundImage) {
                 if (foundImage.tempUrl) return foundImage.tempUrl;
@@ -368,7 +330,6 @@ const ImageUploader = ({
         // Для обычных строковых путей
         if (typeof image === 'string') {
             const url = image.startsWith('/') ? image : `/storage/${image}`;
-            console.log('🔍 String path, returning:', url);
             return url;
         }
 
@@ -383,12 +344,10 @@ const ImageUploader = ({
         }
 
         if (!path) {
-            console.log('🔍 No path found in image object, returning placeholder');
             return '/placeholder.jpg';
         }
 
         const url = path.startsWith('/') ? path : `/storage/${path}`;
-        console.log('🔍 DB image, returning:', url);
         return url;
     }, [localImages]);
 

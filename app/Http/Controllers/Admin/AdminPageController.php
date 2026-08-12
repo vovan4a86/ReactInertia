@@ -106,33 +106,6 @@ class AdminPageController extends Controller
 
     public function update(Request $request, Page $page)
     {
-        // Детальное логирование входящих данных
-        \Log::info('=== UPDATE REQUEST START ===');
-        \Log::info('Request method: ' . $request->method());
-        \Log::info('Content-Type: ' . $request->header('Content-Type'));
-        \Log::info('All request data:', $request->all());
-        \Log::info('Has files: ' . ($request->hasFile('new_images') ? 'YES' : 'NO'));
-
-        if ($request->hasFile('new_images')) {
-            $files = $request->file('new_images');
-            \Log::info('new_images is array: ' . (is_array($files) ? 'YES' : 'NO'));
-            \Log::info('new_images count: ' . (is_array($files) ? count($files) : 0));
-
-            if (is_array($files)) {
-                foreach ($files as $index => $file) {
-                    \Log::info("File {$index}:", [
-                        'name' => $file->getClientOriginalName(),
-                        'type' => $file->getClientMimeType(),
-                        'size' => $file->getSize(),
-                        'error' => $file->getError(),
-                        'is_valid' => $file->isValid()
-                    ]);
-                }
-            }
-        }
-
-        \Log::info('=== UPDATE REQUEST END ===');
-
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'slug' => 'nullable|string|max:255|unique:pages,slug,' . $page->id,
@@ -163,9 +136,6 @@ class AdminPageController extends Controller
             'new_images.*' => 'image|max:10240',
         ]);
 
-        \Log::info('Validation passed');
-        \Log::info('Validated data:', $validated);
-
         if (empty($validated['slug'])) {
             $validated['slug'] = Str::slug($validated['title']);
         }
@@ -186,14 +156,12 @@ class AdminPageController extends Controller
 
         // Обработка удаления изображений
         if (!empty($deletedImages)) {
-            \Log::info('Processing deleted images:', $deletedImages);
 
             foreach ($deletedImages as $imageId) {
                 // Ищем изображение по ID в текущих изображениях
                 foreach ($currentImages as $index => $image) {
                     $currentImageId = $image['original'] ?? null;
                     if ($currentImageId === $imageId) {
-                        \Log::info('Deleting image:', ['id' => $imageId, 'index' => $index]);
                         $page->deleteImage($image);
                         unset($currentImages[$index]);
                         break;
@@ -206,8 +174,6 @@ class AdminPageController extends Controller
 
         // Применяем новый порядок изображений
         if (!empty($images)) {
-            \Log::info('Reordering images:', $images);
-
             $orderedImages = [];
             $unmatchedImages = [];
 
@@ -235,7 +201,6 @@ class AdminPageController extends Controller
 
         // Обработка новых загруженных изображений
         if ($request->hasFile('new_images')) {
-            \Log::info('Processing new images:', ['count' => count($request->file('new_images'))]);
 
             $uploadedImages = [];
             foreach ($request->file('new_images') as $file) {
