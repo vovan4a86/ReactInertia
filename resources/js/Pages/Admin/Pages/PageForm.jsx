@@ -36,12 +36,16 @@ import {
 } from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
 import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
+import { useLocalNotification } from '@/Contexts/Admin/LocalNotificationContext.jsx';
 
 const PageForm = ({page, parents, isNew = false}) => {
     const [activeTab, setActiveTab] = useState(0);
     const isInitialized = useRef(false);
     const previousPageId = useRef(null);
     const [previewOpen, setPreviewOpen] = useState(false);
+
+    // сообщения для локальных изменений
+    const { showMessage } = useLocalNotification();
 
     const BOOLEAN_FIELDS = ['published', 'on_main', 'on_header_menu', 'on_footer_menu', 'on_mobile_menu'];
 
@@ -141,6 +145,7 @@ const PageForm = ({page, parents, isNew = false}) => {
             // ПРЯМО устанавливаем new_images из переданных файлов
             if (newFiles && newFiles.length > 0) {
                 updatedData.new_images = [...newFiles];
+                showMessage('Изображения добавлены. Не забудьте сохранить страницу!', 'warning');
             } else if (newFiles && newFiles.length === 0) {
                 // Если файлов нет, но есть существующие - сохраняем их
                 // Если файлов нет и не было - очищаем
@@ -155,7 +160,7 @@ const PageForm = ({page, parents, isNew = false}) => {
 
             return updatedData;
         });
-    }, [setData]);
+    }, [setData, showMessage]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -415,6 +420,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                                                                 image_src: null,
                                                                 image_deleted: true,
                                                             }));
+                                                            showMessage('Изображение будет удалено после сохранения.', 'warning');
                                                         }}
                                                         sx={{
                                                             bgcolor: 'error.main',
@@ -464,6 +470,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                                                                 image_preview: URL.createObjectURL(file),
                                                                 image_deleted: false,
                                                             }));
+                                                            showMessage('Изображение будет заменено после сохранения.', 'warning');
                                                         }
                                                     }}
                                                 />
@@ -511,6 +518,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                                                             image_preview: URL.createObjectURL(file),
                                                             image_deleted: false,
                                                         }));
+                                                        showMessage('Изображение будет добавлено после сохранения.', 'warning');
                                                     }
                                                 }}
                                             />
