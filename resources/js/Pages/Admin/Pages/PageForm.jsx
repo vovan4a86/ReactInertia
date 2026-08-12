@@ -50,21 +50,29 @@ const PageForm = ({page, parents, isNew = false}) => {
         errors,
         reset
     } = useForm({
-        title: page?.title || '',
+        name: page?.name || '',
+        h1: page?.h1 || '',
+        alias: page?.alias || '',
         slug: page?.slug || '',
-        content: page?.content || '',
+        announce: page?.announce || '',
+        text: page?.text || '',
         parent_id: page?.parent_id || '',
-        is_active: page?.is_active !== undefined ? page.is_active : true,
-        meta_title: page?.meta_title || '',
-        meta_description: page?.meta_description || '',
-        template: page?.template || 'default',
+        published: page?.published !== undefined ? page.published : true,
+        on_main: page?.on_main !== undefined ? page.on_main : false,
+        on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : false,
+        on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : false,
+        on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : false,
+        title: page?.title || '',
+        keywords: page?.keywords || '',
+        description: page?.description || '',
+        og_title: page?.og_title || '',
+        og_description: page?.og_description || '',
         image: null,
         image_preview: page?.single_thumb || null,
         image_src: page?.single_image_src || null,
-        image_deleted: false,
-        images: [], // ID существующих изображений для сохранения порядка
-        deleted_images: [], // ID удаленных изображений
-        new_images: [], // File объекты новых изображений
+        images: [],
+        deleted_images: [],
+        new_images: [],
     });
 
     // Инициализация только при первой загрузке или смене страницы
@@ -85,14 +93,23 @@ const PageForm = ({page, parents, isNew = false}) => {
 
             reset();
             setData({
-                title: page?.title || '',
+                name: page?.name || '',
+                h1: page?.h1 || '',
+                alias: page?.alias || '',
                 slug: page?.slug || '',
-                content: page?.content || '',
+                announce: page?.announce || '',
+                text: page?.text || '',
                 parent_id: page?.parent_id || '',
-                is_active: page?.is_active !== undefined ? page.is_active : true,
-                meta_title: page?.meta_title || '',
-                meta_description: page?.meta_description || '',
-                template: page?.template || 'default',
+                published: page?.published !== undefined ? page.published : true,
+                on_main: page?.on_main !== undefined ? page.on_main : false,
+                on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : false,
+                on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : false,
+                on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : false,
+                title: page?.title || '',
+                keywords: page?.keywords || '',
+                description: page?.description || '',
+                og_title: page?.og_title || '',
+                og_description: page?.og_description || '',
                 image: null,
                 image_preview: page?.single_thumb || null,
                 image_src: page?.single_image_src || null,
@@ -139,27 +156,20 @@ const PageForm = ({page, parents, isNew = false}) => {
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        if (data.new_images && data.new_images.length > 0) {
-            data.new_images.forEach((file, i) => {
-                console.log(`📊 File ${i}:`, {
-                    name: file.name,
-                    isFile: file instanceof File,
-                    size: file?.size,
-                    type: file?.type
-                });
-            });
-        }
-
         // Создаем FormData
         const formData = new FormData();
-        formData.append('title', data.title);
+        formData.append('name', data.name);
+        formData.append('h1', data.h1);
+        formData.append('alias', data.alias);
         formData.append('slug', data.slug);
-        formData.append('content', data.content || '');
+        formData.append('text', data.text || '');
         formData.append('parent_id', data.parent_id || '');
-        formData.append('is_active', data.is_active ? '1' : '0');
-        formData.append('meta_title', data.meta_title || '');
-        formData.append('meta_description', data.meta_description || '');
-        formData.append('template', data.template || 'default');
+        formData.append('published', data.published ? '1' : '0');
+        formData.append('title', data.title || '');
+        formData.append('keywords', data.keywords || '');
+        formData.append('description', data.description || '');
+        formData.append('og_title', data.og_title || '');
+        formData.append('og_description', data.og_description || '');
         formData.append('images', JSON.stringify(data.images));
         formData.append('deleted_images', JSON.stringify(data.deleted_images || []));
 
@@ -207,10 +217,10 @@ const PageForm = ({page, parents, isNew = false}) => {
     };
 
     const handleTitleChange = (event) => {
-        const title = event.target.value;
-        setData('title', title);
-        if (!data.slug || data.slug === slugify(page?.title || '')) {
-            setData('slug', slugify(title));
+        const name = event.target.value;
+        setData('name', name);
+        if (!data.alias || data.alias === slugify(page?.name || '')) {
+            setData('alias', slugify(name));
         }
     };
 
@@ -230,7 +240,7 @@ const PageForm = ({page, parents, isNew = false}) => {
         <Box component="form" onSubmit={handleSubmit} sx={{height: '100%', display: 'flex', flexDirection: 'column'}}>
             <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                 <Typography variant="h6">
-                    {isNew ? 'Новая страница' : page?.title || 'Редактирование страницы'}
+                    {isNew ? 'Новая страница' : page?.name || 'Редактирование страницы'}
                     {page?.url && (
                         <IconButton component="a" href={page.url} target="_blank" size="small" color="primary">
                             <OpenInNewIcon fontSize="small"/>
@@ -238,9 +248,9 @@ const PageForm = ({page, parents, isNew = false}) => {
                     )}
                 </Typography>
                 <FormControlLabel
-                    control={<Switch checked={data.is_active} onChange={(e) => setData('is_active', e.target.checked)}
+                    control={<Switch checked={data.published} onChange={(e) => setData('published', e.target.checked)}
                                      size="small" color="success"/>}
-                    label={data.is_active ? "Активна" : "Выключена"}
+                    label={data.published ? "Активна" : "Выключена"}
                     labelPlacement="start"
                 />
             </Box>
@@ -254,7 +264,7 @@ const PageForm = ({page, parents, isNew = false}) => {
 
             <Box sx={{flex: 1, overflow: 'auto'}}>
                 {activeTab === 0 && (
-                    <Box>
+                    <Box sx={{ pr: 2 }}>
                         <Box sx={{display: 'flex', gap: 3, pt: 2}}>
                             {/* Левая колонка 75% */}
                             <Box sx={{flex: 3}}>
@@ -263,10 +273,10 @@ const PageForm = ({page, parents, isNew = false}) => {
                                         <TextField
                                             fullWidth
                                             label="Название"
-                                            value={data.title}
+                                            value={data.name}
                                             onChange={handleTitleChange}
-                                            error={!!errors.title}
-                                            helperText={errors.title}
+                                            error={!!errors.name}
+                                            helperText={errors.name}
                                             required
                                             size="small"
                                         />
@@ -274,28 +284,24 @@ const PageForm = ({page, parents, isNew = false}) => {
                                     <Grid item xs={12}>
                                         <TextField
                                             fullWidth
-                                            label="Slug"
-                                            value={data.slug}
-                                            onChange={handleChange('slug')}
-                                            error={!!errors.slug}
-                                            helperText={errors.slug || "Автоматически из названия"}
+                                            label="H1"
+                                            value={data.h1}
+                                            onChange={handleChange('h1')}
+                                            error={!!errors.h1}
+                                            helperText={errors.h1}
                                             size="small"
                                         />
                                     </Grid>
                                     <Grid item xs={12}>
-                                        <FormControl fullWidth error={!!errors.template} size="small">
-                                            <InputLabel>Шаблон</InputLabel>
-                                            <Select
-                                                value={data.template}
-                                                onChange={handleChange('template')}
-                                                label="Шаблон"
-                                                variant="outlined">
-                                                <MenuItem value="default">По умолчанию</MenuItem>
-                                                <MenuItem value="home">Главная</MenuItem>
-                                                <MenuItem value="contact">Контакты</MenuItem>
-                                                <MenuItem value="blog">Блог</MenuItem>
-                                            </Select>
-                                        </FormControl>
+                                        <TextField
+                                            fullWidth
+                                            label="Alias"
+                                            value={data.alias}
+                                            onChange={handleChange('alias')}
+                                            error={!!errors.alias}
+                                            helperText={errors.alias || "Автоматически из названия"}
+                                            size="small"
+                                        />
                                     </Grid>
                                     <Grid item xs={12}>
                                         <FormControl fullWidth error={!!errors.parent_id} size="small">
@@ -312,19 +318,6 @@ const PageForm = ({page, parents, isNew = false}) => {
                                             </Select>
                                         </FormControl>
                                     </Grid>
-                                    <Grid item xs={12}>
-                                        <TextField
-                                            fullWidth
-                                            label="Заглушка"
-                                            value={data.title}
-                                            onChange={handleTitleChange}
-                                            error={!!errors.title}
-                                            helperText={errors.title}
-                                            required
-                                            size="small"
-                                        />
-                                    </Grid>
-
                                 </Grid>
                             </Box>
 
@@ -479,11 +472,17 @@ const PageForm = ({page, parents, isNew = false}) => {
                                                 justifyContent: 'center',
                                                 gap: 1,
                                                 textTransform: 'none',
-                                                color: 'text.secondary',
+                                                bgcolor: 'background.default',
+                                                border: '2px dashed',
+                                                borderColor: 'divider',
+                                                '&:hover': {
+                                                    bgcolor: 'action.hover',
+                                                    borderColor: 'primary.main',
+                                                },
                                             }}
                                         >
-                                            <CloudUploadIcon sx={{fontSize: 48, color: 'grey.400'}}/>
-                                            <Typography variant="body2" sx={{fontWeight: 500}}>
+                                            <CloudUploadIcon sx={{fontSize: 48, color: 'text.secondary'}}/>
+                                            <Typography variant="body2" sx={{fontWeight: 500, color: 'text.primary'}}>
                                                 Загрузить фото
                                             </Typography>
                                             <Typography variant="caption" color="text.secondary">
@@ -519,10 +518,10 @@ const PageForm = ({page, parents, isNew = false}) => {
                                 <Grid item xs={12}>
                                     <TextField
                                         fullWidth
-                                        label="Meta Title"
-                                        value={data.meta_title}
-                                        onChange={handleChange('meta_title')}
-                                        error={!!errors.meta_title}
+                                        label="Title"
+                                        value={data.title}
+                                        onChange={handleChange('title')}
+                                        error={!!errors.title}
                                         size="small"
                                         slotProps={{inputLabel: {shrink: true}}}
                                     />
@@ -530,12 +529,45 @@ const PageForm = ({page, parents, isNew = false}) => {
                                 <Grid item xs={12}>
                                     <TextField
                                         fullWidth
-                                        label="Meta Description"
-                                        value={data.meta_description}
-                                        onChange={handleChange('meta_description')}
-                                        error={!!errors.meta_description}
+                                        label="Keywords"
+                                        value={data.keywords}
+                                        onChange={handleChange('keywords')}
+                                        error={!!errors.keywords}
+                                        size="small"
+                                        slotProps={{inputLabel: {shrink: true}}}
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="Description"
+                                        value={data.description}
+                                        onChange={handleChange('description')}
+                                        error={!!errors.description}
                                         multiline
                                         rows={4}
+                                        size="small"
+                                        slotProps={{inputLabel: {shrink: true}}}
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="og_title"
+                                        value={data.og_title}
+                                        onChange={handleChange('og_title')}
+                                        error={!!errors.og_title}
+                                        size="small"
+                                        slotProps={{inputLabel: {shrink: true}}}
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="og_description"
+                                        value={data.og_description}
+                                        onChange={handleChange('og_description')}
+                                        error={!!errors.og_description}
                                         size="small"
                                         slotProps={{inputLabel: {shrink: true}}}
                                     />

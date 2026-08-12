@@ -50,30 +50,39 @@ class AdminPageController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'slug' => 'nullable|string|max:255|unique:pages,slug',
-            'content' => 'nullable|string',
+            'name' => 'required|string|max:255',
+            'h1' => 'nullable|string|max:255',
+            'alias' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255',
+            'announce' => 'nullable|string',
+            'text' => 'nullable|string',
             'parent_id' => 'nullable|exists:pages,id',
             'order' => 'nullable|integer',
-            'is_active' => 'boolean',
-            'meta_title' => 'nullable|string|max:255',
-            'meta_description' => 'nullable|string',
-            'template' => 'nullable|string',
+            'published' => 'boolean',
+            'on_main' => 'boolean',
+            'on_header_menu' => 'boolean',
+            'on_footer_menu' => 'boolean',
+            'on_mobile_menu' => 'boolean',
+            'title' => 'nullable|string|max:255',
+            'keywords' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'og_title' => 'nullable|string|max:255',
+            'og_description' => 'nullable|string|max:255',
             'image' => 'nullable|image|max:10240',
-            'images' => 'nullable', // Добавляем валидацию для изображений
+            'images' => 'nullable',
             'new_images' => 'nullable|array',
             'new_images.*' => 'image|max:10240',
         ]);
 
-        if (empty($validated['slug'])) {
-            $validated['slug'] = Str::slug($validated['title']);
+        if (empty($validated['alias'])) {
+            $validated['alias'] = Str::slug($validated['name']);
         }
 
         // Убеждаемся, что slug уникален
-        $originalSlug = $validated['slug'];
+        $originalSlug = $validated['alias'];
         $counter = 1;
-        while (Page::where('slug', $validated['slug'])->exists()) {
-            $validated['slug'] = $originalSlug . '-' . $counter;
+        while (Page::where('alias', $validated['alias'])->exists()) {
+            $validated['alias'] = $originalSlug . '-' . $counter;
             $counter++;
         }
 
@@ -115,9 +124,12 @@ class AdminPageController extends Controller
     public function update(Request $request, Page $page)
     {
         $validated = $request->validate([
-            'title' => 'required|string|max:255',
-            'slug' => 'nullable|string|max:255|unique:pages,slug,' . $page->id,
-            'content' => 'nullable|string',
+            'name' => 'required|string|max:255',
+            'h1' => 'nullable|string|max:255',
+            'alias' => 'required|string|max:255',
+            'slug' => 'nullable|string|max:255',
+            'announce' => 'nullable|string',
+            'text' => 'nullable|string',
             'parent_id' => [
                 'nullable',
                 'exists:pages,id',
@@ -134,19 +146,24 @@ class AdminPageController extends Controller
                 },
             ],
             'order' => 'nullable|integer',
-            'is_active' => 'boolean',
-            'meta_title' => 'nullable|string|max:255',
-            'meta_description' => 'nullable|string',
-            'template' => 'nullable|string',
+            'published' => 'boolean',
+            'on_main' => 'boolean',
+            'on_header_menu' => 'boolean',
+            'on_footer_menu' => 'boolean',
+            'on_mobile_menu' => 'boolean',
+            'title' => 'nullable|string|max:255',
+            'keywords' => 'nullable|string|max:255',
+            'description' => 'nullable|string',
+            'og_title' => 'nullable|string|max:255',
+            'og_description' => 'nullable|string|max:255',
             'image' => 'nullable|image|max:10240',
             'images' => 'nullable',
-            'deleted_images' => 'nullable',
             'new_images' => 'nullable|array',
             'new_images.*' => 'image|max:10240',
         ]);
 
-        if (empty($validated['slug'])) {
-            $validated['slug'] = Str::slug($validated['title']);
+        if (empty($validated['alias'])) {
+            $validated['alias'] = Str::slug($validated['alias']);
         }
 
         // Декодируем JSON строки в массивы, если нужно
@@ -312,92 +329,7 @@ class AdminPageController extends Controller
     public function parents()
     {
         return response()->json([
-            'parents' => Page::select('id', 'title')->get()
+            'parents' => Page::select('id', 'name')->get()
         ]);
-    }
-
-    /**
-     * HasImages
-     * Загрузка изображений через Inertia
-     */
-    public function uploadImages(Request $request, Page $page)
-    {
-        $request->validate([
-            'images' => 'required|array',
-            'images.*' => 'required|image|max:10240',
-        ]);
-
-        $uploadedImages = [];
-
-        foreach ($request->file('images') as $file) {
-            $imageData = $page->uploadImages($file);
-            if ($imageData) {
-                $uploadedImages[] = $imageData;
-            }
-        }
-
-        $existingImages = $page->images ?? [];
-
-        $allImages = array_merge($existingImages, $uploadedImages);
-
-        // Сохраняем
-        $page->update(['images' => $allImages]);
-        $page->refresh();
-
-        $imagesWithUrls = $page->getImagesWithUrls();
-
-        return response()->json([
-            'success' => true,
-            'message' => 'Изображения загружены',
-            'images' => $imagesWithUrls,
-        ]);
-    }
-
-    /**
-     * Удаление изображения
-     */
-    public function deleteImage(Request $request, Page $page)
-    {
-        $request->validate([
-            'image_index' => 'required|integer',
-        ]);
-
-        $images = $page->images ?? [];
-        $index = $request->input('image_index');
-
-        if (!isset($images[$index])) {
-            return redirect()->back()->with('error', 'Изображение не найдено');
-        }
-
-        $page->deleteImage($images[$index]);
-        unset($images[$index]);
-        $page->update(['images' => array_values($images)]);
-
-        return redirect()->back()->with('success', 'Изображение удалено');
-    }
-
-    /**
-     * Переупорядочивание изображений
-     */
-    public function reorderImages(Request $request, Page $page)
-    {
-        $request->validate([
-            'order' => 'required|array',
-            'order.*' => 'required|integer|min:0',
-        ]);
-
-        $images = $page->images ?? [];
-        $newOrder = $request->input('order');
-
-        $orderedImages = [];
-        foreach ($newOrder as $index) {
-            if (isset($images[$index])) {
-                $orderedImages[] = $images[$index];
-            }
-        }
-
-        $page->update(['images' => $orderedImages]);
-
-        return redirect()->back()->with('success', 'Порядок изображений обновлен');
     }
 }

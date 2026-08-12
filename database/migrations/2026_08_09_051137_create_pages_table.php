@@ -13,20 +13,33 @@ return new class extends Migration
     {
         Schema::create('pages', function (Blueprint $table) {
             $table->id();
-            $table->string('title');
-            $table->string('slug')->unique();
-            $table->text('content')->nullable();
-            $table->foreignId('parent_id')->nullable()->constrained('pages')->onDelete('cascade');
+            $table->string('name');
+            $table->string('h1')->nullable();
+            $table->string('alias');
+            $table->string('slug')->nullable();
+            $table->string('image')->nullable();
+            $table->string('announce')->nullable();
+            $table->text('text')->nullable();
+            $table->foreignId('parent_id')->nullable()
+                ->constrained('pages')->onDelete('cascade');
             $table->integer('order')->default(0);
-            $table->boolean('is_active')->default(true);
-            $table->string('meta_title')->nullable();
-            $table->text('meta_description')->nullable();
-            $table->string('template')->default('default');
+            $table->string('title')->nullable();
+            $table->string('keywords')->nullable();
+            $table->string('description', 512)->nullable();
+            $table->string('og_title')->nullable();
+            $table->string('og_description')->nullable();
+            $table->json('images')->nullable();
+            $table->boolean('published')->default(true);
+            $table->boolean('on_main')->default(false);
+            $table->boolean('on_header_menu')->default(false);
+            $table->boolean('on_footer_menu')->default(false);
+            $table->boolean('on_mobile_menu')->default(false);
             $table->timestamps();
             $table->softDeletes();
 
             $table->index('parent_id');
             $table->index('order');
+            $table->index('alias');
         });
     }
 

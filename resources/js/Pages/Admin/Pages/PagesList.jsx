@@ -40,9 +40,9 @@ function getComparator(order, orderBy) {
 // Заголовки таблицы
 const headCells = [
     { id: 'image', label: 'Изображение', sortable: false },
-    { id: 'title', label: 'Название', sortable: true },
+    { id: 'name', label: 'Название', sortable: true },
     { id: 'parent', label: 'Родитель', sortable: true },
-    { id: 'is_active', label: 'Статус', sortable: true },
+    { id: 'published', label: 'Статус', sortable: true },
     { id: 'created_at', label: 'Создана', sortable: true },
     { id: 'actions', label: 'Действия', sortable: false },
 ];
@@ -56,7 +56,7 @@ const PagesList = ({
     onCreateChild
                    }) => {
     const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('title');
+    const [orderBy, setOrderBy] = useState('name');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [hoveredRow, setHoveredRow] = useState(null);
@@ -198,11 +198,11 @@ const PagesList = ({
                                     }}
                                 >
                                     <Typography variant="body2" fontWeight="medium">
-                                        {page.title}
+                                        {page.name}
                                     </Typography>
-                                    {page.slug && (
+                                    {page.alias && (
                                         <Typography variant="caption" color="text.secondary" display="block">
-                                            /{page.slug}
+                                            /{page.alias === '/' ? '' : page.alias}
                                         </Typography>
                                     )}
                                 </TableCell>
@@ -210,16 +210,16 @@ const PagesList = ({
                                 {/* Родитель */}
                                 <TableCell>
                                     <Typography variant="body2" color="text.secondary">
-                                        {page.parent?.title || '—'}
+                                        {page.parent?.name || '—'}
                                     </Typography>
                                 </TableCell>
 
                                 {/* Статус */}
                                 <TableCell>
                                     <Chip
-                                        label={page.is_active ? 'Активна' : 'Черновик'}
+                                        label={page.published ? 'Активна' : 'Черновик'}
                                         size="small"
-                                        color={page.is_active ? 'success' : 'warning'}
+                                        color={page.published ? 'success' : 'warning'}
                                         variant="outlined"
                                     />
                                 </TableCell>

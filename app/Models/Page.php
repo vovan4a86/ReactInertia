@@ -16,21 +16,34 @@ class Page extends Model
     use HasFactory, SoftDeletes, HasImages;
 
     protected $fillable = [
-        'title',
+        'name',
+        'h1',
+        'alias',
         'slug',
-        'content',
+        'image',
+        'announce',
+        'text',
         'parent_id',
         'order',
-        'is_active',
-        'meta_title',
-        'meta_description',
-        'template',
-        'image',
+        'title',
+        'keywords',
+        'description',
+        'og_title',
+        'og_description',
+        'published',
+        'on_main',
+        'on_header_menu',
+        'on_footer_menu',
+        'on_mobile_menu',
         'images',
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'published' => 'boolean',
+        'on_main' => 'boolean',
+        'on_header_menu' => 'boolean',
+        'on_footer_menu' => 'boolean',
+        'on_mobile_menu' => 'boolean',
         'order' => 'integer',
         'images' => 'array',
     ];
@@ -146,9 +159,9 @@ class Page extends Model
     {
         return [
             'id' => $this->id,
-            'title' => $this->title,
-            'slug' => $this->slug,
-            'is_active' => $this->is_active,
+            'title' => $this->name,
+            'slug' => $this->alias,
+            'is_active' => $this->published,
             'children' => $this->children ? $this->children->map(fn($child) => $child->toTreeNode())->toArray() : [],
         ];
     }
