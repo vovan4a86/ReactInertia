@@ -16,8 +16,10 @@ import {
     Tab,
     IconButton,
     FormHelperText,
+    Dialog,
+    DialogContent
 } from '@mui/material';
-import {Add, Save, OpenInNew as OpenInNewIcon } from '@mui/icons-material';
+import {Add, Save, OpenInNew as OpenInNewIcon, Close as CloseIcon } from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
 import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 
@@ -25,9 +27,16 @@ const PageForm = ({ page, parents, isNew = false }) => {
     const [activeTab, setActiveTab] = useState(0);
     const isInitialized = useRef(false);
     const previousPageId = useRef(null);
-    const fileInputRef = useRef(null);
+    const [previewOpen, setPreviewOpen] = useState(false);
 
-    const { data, setData, post, put, processing, errors, reset } = useForm({
+    const {
+        data,
+        setData,
+        post,
+        put,
+        processing,
+        errors,
+        reset } = useForm({
         title: page?.title || '',
         slug: page?.slug || '',
         content: page?.content || '',
@@ -36,6 +45,9 @@ const PageForm = ({ page, parents, isNew = false }) => {
         meta_title: page?.meta_title || '',
         meta_description: page?.meta_description || '',
         template: page?.template || 'default',
+        image: null,
+        image_preview: page?.single_thumb || null,
+        image_src: page?.single_image_src || null,
         images: [], // ID существующих изображений для сохранения порядка
         deleted_images: [], // ID удаленных изображений
         new_images: [], // File объекты новых изображений
@@ -67,6 +79,9 @@ const PageForm = ({ page, parents, isNew = false }) => {
                 meta_title: page?.meta_title || '',
                 meta_description: page?.meta_description || '',
                 template: page?.template || 'default',
+                image: null,
+                image_preview: page?.single_thumb || null,
+                image_src: page?.single_image_src || null,
                 images: existingImageIds,
                 deleted_images: [],
                 new_images: [],
@@ -122,9 +137,6 @@ const PageForm = ({ page, parents, isNew = false }) => {
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        console.log('📊 PRE-SUBMIT STATE:');
-        console.log('📊 data.new_images:', data.new_images);
-        console.log('📊 data.new_images length:', data.new_images?.length);
         if (data.new_images && data.new_images.length > 0) {
             data.new_images.forEach((file, i) => {
                 console.log(`📊 File ${i}:`, {
@@ -149,35 +161,26 @@ const PageForm = ({ page, parents, isNew = false }) => {
         formData.append('images', JSON.stringify(data.images));
         formData.append('deleted_images', JSON.stringify(data.deleted_images || []));
 
+        // Добавляем изображение страницы
+        if (data.image instanceof File) {
+            formData.append('image', data.image);
+        }
+
         // Добавляем новые изображения
         if (data.new_images && data.new_images.length > 0) {
             console.log('📎 Adding new_images to FormData:');
             data.new_images.forEach((file, index) => {
                 if (file instanceof File) {
-                    console.log(`📎 File ${index}:`, file.name, file.size, file.type);
                     formData.append('new_images[]', file, file.name);
                 } else {
                     console.error(`❌ Invalid file at index ${index}:`, file);
                 }
             });
-        } else {
-            console.log('⚠️ No new_images to append');
         }
 
         if (!isNew) {
             formData.append('_method', 'PUT');
         }
-
-        // Финальная проверка
-        let filesCount = 0;
-        console.log('📦 Final FormData entries:');
-        for (let pair of formData.entries()) {
-            if (pair[1] instanceof File) {
-                filesCount++;
-                console.log(`  📎 ${pair[0]}: File(${pair[1].name}, ${pair[1].size} bytes)`);
-            }
-        }
-        console.log(`📦 Total files in FormData: ${filesCount}`);
 
         const url = isNew ? '/admin/api/pages' : `/admin/api/pages/${page.id}`;
 
@@ -200,7 +203,6 @@ const PageForm = ({ page, parents, isNew = false }) => {
             }
         });
     };
-
 
     const handleTitleChange = (event) => {
         const title = event.target.value;
@@ -292,6 +294,138 @@ const PageForm = ({ page, parents, isNew = false }) => {
                                     {parents?.map(p => <MenuItem key={p.id} value={p.id}>{p.title}</MenuItem>)}
                                 </Select>
                             </FormControl>
+                        </Grid>
+                        {/**/}
+                        <Grid item xs={12}>
+                            <Typography variant="subtitle2" gutterBottom>Изображение страницы</Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
+                                {/* Preview */}
+                                <Box
+                                    sx={{
+                                        width: 150,
+                                        height: 150,
+                                        border: '1px solid',
+                                        borderColor: 'divider',
+                                        borderRadius: 1,
+                                        overflow: 'hidden',
+                                        position: 'relative',
+                                        cursor: (data.image_preview || data.image) ? 'pointer' : 'default',
+                                        bgcolor: 'grey.100',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        flexShrink: 0,
+                                    }}
+                                    onClick={() => {
+                                        if (data.image_preview || data.image) {
+                                            setPreviewOpen(true);
+                                        }
+                                    }}
+                                >
+                                    {data.image_preview || data.image ? (
+                                        <img
+                                            src={
+                                                data.image instanceof File
+                                                    ? URL.createObjectURL(data.image)
+                                                    : data.image_preview
+                                            }
+                                            alt="Preview"
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        <Typography variant="caption" color="text.secondary">
+                                            Нет изображения
+                                        </Typography>
+                                    )}
+                                </Box>
+
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        component="label"
+                                    >
+                                        {data.image_preview || data.image ? 'Заменить' : 'Загрузить'}
+                                        <input
+                                            type="file"
+                                            hidden
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) {
+                                                    setData(prev => ({
+                                                        ...prev,
+                                                        image: file,
+                                                        image_preview: URL.createObjectURL(file),
+                                                    }));
+                                                }
+                                            }}
+                                        />
+                                    </Button>
+                                    {(data.image_preview || data.image) && (
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            color="error"
+                                            onClick={() => {
+                                                setData(prev => ({
+                                                    ...prev,
+                                                    image: null,
+                                                    image_preview: null,
+                                                    image_src: null,
+                                                }));
+                                            }}
+                                        >
+                                            Удалить
+                                        </Button>
+                                    )}
+                                    <Typography variant="caption" color="text.secondary">
+                                        JPEG, PNG, GIF, WebP • Макс. 10MB
+                                    </Typography>
+                                </Box>
+                            </Box>
+
+                            {/* Dialog для просмотра полного изображения */}
+                            <Dialog
+                                open={previewOpen}
+                                onClose={() => setPreviewOpen(false)}
+                                maxWidth="lg"
+                                fullWidth
+                            >
+                                <DialogContent sx={{ p: 0, position: 'relative' }}>
+                                    <IconButton
+                                        onClick={() => setPreviewOpen(false)}
+                                        sx={{
+                                            position: 'absolute',
+                                            right: 8,
+                                            top: 8,
+                                            bgcolor: 'rgba(0,0,0,0.5)',
+                                            color: 'white',
+                                            '&:hover': {
+                                                bgcolor: 'rgba(0,0,0,0.7)',
+                                            },
+                                            zIndex: 1,
+                                        }}
+                                    >
+                                        <CloseIcon />
+                                    </IconButton>
+                                    <img
+                                        src={
+                                            data.image instanceof File
+                                                ? URL.createObjectURL(data.image)
+                                                : data.image_src
+                                        }
+                                        alt="Полное изображение"
+                                        style={{
+                                            width: '100%',
+                                            height: 'auto',
+                                            maxHeight: '90vh',
+                                            objectFit: 'contain',
+                                            display: 'block',
+                                        }}
+                                    />
+                                </DialogContent>
+                            </Dialog>
                         </Grid>
                     </Grid>
                 )}

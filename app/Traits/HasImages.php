@@ -38,9 +38,99 @@ trait HasImages
     }
 
     /**
+     * Загрузка одиночного изображения (для полей типа image)
+     */
+    public function uploadSingleImage($file, array $options = []): ?string
+    {
+        $config = array_merge($this->getImageConfig(), $options);
+
+        // Используем single_path если он задан, иначе path
+        $basePath = $config['single_path'] ?? $config['path'];
+        $thumbs = $config['single_thumbs'] ?? $config['thumbs'];
+
+        try {
+            if (!$this->validateImage($file, $config)) {
+                return null;
+            }
+
+            $manager = new ImageManager(new Driver());
+            $image = $manager->decode($file);
+
+            $filename = Str::uuid() . '.' . $file->getClientOriginalExtension();
+
+            // Сохраняем оригинал
+            $originalPath = $basePath . '/original/' . $filename;
+            Storage::disk($config['disk'])->put($originalPath, (string) $image->encode());
+
+            // Создаем WebP версию
+            $webpFilename = pathinfo($filename, PATHINFO_FILENAME) . '.webp';
+            $webpPath = $basePath . '/webp/' . $webpFilename;
+
+            $webpImage = clone $image;
+            Storage::disk($config['disk'])->put(
+                $webpPath,
+                (string) $webpImage->encodeUsingFormat(Format::WEBP, quality: $config['quality'])
+            );
+
+            // Создаем превью
+            foreach ($thumbs as $size => $dimensions) {
+                $thumbFilename = pathinfo($filename, PATHINFO_FILENAME) . "_{$size}.webp";
+                $thumbPath = $basePath . "/thumbs/{$size}/" . $thumbFilename;
+
+                $thumbImage = clone $image;
+                $thumbImage->cover($dimensions['width'], $dimensions['height']);
+
+                Storage::disk($config['disk'])->put(
+                    $thumbPath,
+                    (string) $thumbImage->encodeUsingFormat(Format::WEBP, quality: $config['quality'])
+                );
+            }
+
+            // Возвращаем имя файла (без пути)
+            return $filename;
+        } catch (\Exception $e) {
+            \Log::error('Single image upload failed: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Удаление одиночного изображения
+     */
+    public function deleteSingleImage(?string $filename): bool
+    {
+        if (!$filename) {
+            return false;
+        }
+
+        $config = $this->getImageConfig();
+        $basePath = $config['single_path'] ?? $config['path'];
+        $thumbs = $config['single_thumbs'] ?? $config['thumbs'];
+        $webpFilename = pathinfo($filename, PATHINFO_FILENAME) . '.webp';
+
+        try {
+            $filesToDelete = [
+                $basePath . '/original/' . $filename,
+                $basePath . '/webp/' . $webpFilename,
+            ];
+
+            foreach ($thumbs as $size => $dimensions) {
+                $thumbWebpFilename = pathinfo($filename, PATHINFO_FILENAME) . "_{$size}.webp";
+                $filesToDelete[] = $basePath . "/thumbs/{$size}/" . $thumbWebpFilename;
+            }
+
+            Storage::disk($config['disk'])->delete($filesToDelete);
+            return true;
+        } catch (\Exception $e) {
+            \Log::error('Single image deletion failed: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    /**
      * Загрузка изображения с созданием webp и превью
      */
-    public function uploadImage($file, array $options = []): ?array
+    public function uploadImages($file, array $options = []): ?array
     {
         $config = array_merge($this->getImageConfig(), $options);
 

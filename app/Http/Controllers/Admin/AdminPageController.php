@@ -59,6 +59,7 @@ class AdminPageController extends Controller
             'meta_title' => 'nullable|string|max:255',
             'meta_description' => 'nullable|string',
             'template' => 'nullable|string',
+            'image' => 'nullable|image|max:10240',
             'images' => 'nullable', // Добавляем валидацию для изображений
             'new_images' => 'nullable|array',
             'new_images.*' => 'image|max:10240',
@@ -78,16 +79,23 @@ class AdminPageController extends Controller
 
         // Создаем страницу с базовыми данными
         $pageData = $validated;
-        $pageData['images'] = []; // Временно пустой массив
+        $pageData['images'] = []; // Временно пустой массивadd
         unset($pageData['new_images']);
 
         $page = Page::create($pageData);
+
+        if ($request->hasFile('image')) {
+            $imageData = $page->uploadSingleImage($request->file('image'));
+            $page->update(['image' => $imageData['original'] ?? null]);
+        } else {
+            $page->update(['image' => null]);
+        }
 
         // Загружаем изображения после создания страницы
         $uploadedImages = [];
         if ($request->hasFile('new_images')) {
             foreach ($request->file('new_images') as $file) {
-                $imageData = $page->uploadImage($file);
+                $imageData = $page->uploadImages($file);
                 if ($imageData) {
                     $uploadedImages[] = $imageData;
                 }
@@ -130,6 +138,7 @@ class AdminPageController extends Controller
             'meta_title' => 'nullable|string|max:255',
             'meta_description' => 'nullable|string',
             'template' => 'nullable|string',
+            'image' => 'nullable|image|max:10240',
             'images' => 'nullable',
             'deleted_images' => 'nullable',
             'new_images' => 'nullable|array',
@@ -204,7 +213,7 @@ class AdminPageController extends Controller
 
             $uploadedImages = [];
             foreach ($request->file('new_images') as $file) {
-                $imageData = $page->uploadImage($file);
+                $imageData = $page->uploadImages($file);
                 if ($imageData) {
                     $uploadedImages[] = $imageData;
                 }
@@ -212,6 +221,22 @@ class AdminPageController extends Controller
 
             // Добавляем новые изображения в конец
             $currentImages = array_merge($currentImages, $uploadedImages);
+        }
+
+        // Обработка одиночного изображения страницы
+        if ($request->hasFile('image')) {
+            // Удаляем старое изображение
+            if ($page->image) {
+                $page->deleteSingleImage($page->image);
+            }
+            // Загружаем новое
+            $validated['image'] = $page->uploadSingleImage($request->file('image'));
+        } elseif ($request->has('image_preview') && $request->input('image_preview') === null) {
+            // Удаляем изображение если preview стал null
+            if ($page->image) {
+                $page->deleteSingleImage($page->image);
+            }
+            $validated['image'] = null;
         }
 
         // Обновляем данные для сохранения
@@ -305,7 +330,7 @@ class AdminPageController extends Controller
         $uploadedImages = [];
 
         foreach ($request->file('images') as $file) {
-            $imageData = $page->uploadImage($file);
+            $imageData = $page->uploadImages($file);
             if ($imageData) {
                 $uploadedImages[] = $imageData;
             }

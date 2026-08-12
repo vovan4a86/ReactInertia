@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Storage;
 
 class Page extends Model
 {
@@ -24,6 +25,7 @@ class Page extends Model
         'meta_title',
         'meta_description',
         'template',
+        'image',
         'images',
     ];
 
@@ -33,6 +35,8 @@ class Page extends Model
         'images' => 'array',
     ];
 
+    protected $appends = ['url', 'single_image_src', 'single_thumb'];
+
     /**
      * Переопределяем конфигурацию для страниц
      */
@@ -40,7 +44,7 @@ class Page extends Model
     {
         return [
             'disk' => 'public',
-            'path' => 'uploads/pages', // Свой путь для страниц
+            'path' => 'uploads/pages/images', // Свой путь для страниц
             'formats' => ['original', 'webp'],
             'thumbs' => [
                 'thumb' => ['width' => 100, 'height' => 100],
@@ -48,12 +52,56 @@ class Page extends Model
                 'medium' => ['width' => 600, 'height' => 400],
                 'large' => ['width' => 1200, 'height' => 800],
             ],
+            'single_path' => 'uploads/pages/image',
+            'single_thumbs' => [
+                'thumb' => ['width' => 100, 'height' => 100],
+            ],
             'quality' => 80,
             'max_file_size' => 10240,
         ];
     }
 
-    protected $appends = ['url'];
+    /**
+     * Получить URL оригинального изображения
+     */
+    public function getSingleImageSrcAttribute(): ?string
+    {
+        if (!$this->image) {
+            return null;
+        }
+
+        $config = $this->getImageConfig();
+        $basePath = $config['single_path'] ?? $config['path'];
+
+        return Storage::disk($config['disk'])->url($basePath . '/original/' . $this->image);
+    }
+
+    /**
+     * Получить URL превью изображения
+     */
+    public function getSingleThumb($thumb = 'thumb'): ?string
+    {
+        if (!$this->image) {
+            return null;
+        }
+
+        $config = $this->getImageConfig();
+        $basePath = $config['single_path'] ?? $config['path'];
+        $thumbs = $config['single_thumbs'] ?? $config['thumbs'];
+
+        if (!isset($thumbs[$thumb])) {
+            return null;
+        }
+
+        $webpFilename = pathinfo($this->image, PATHINFO_FILENAME) . "_{$thumb}.webp";
+
+        return Storage::disk($config['disk'])->url($basePath . "/thumbs/{$thumb}/" . $webpFilename);
+    }
+
+    public function getSingleThumbAttribute(): ?string
+    {
+        return $this->getSingleThumb('thumb');
+    }
 
     public function parent(): BelongsTo
     {
