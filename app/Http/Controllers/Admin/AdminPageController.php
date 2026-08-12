@@ -231,8 +231,8 @@ class AdminPageController extends Controller
             }
             // Загружаем новое
             $validated['image'] = $page->uploadSingleImage($request->file('image'));
-        } elseif ($request->has('image_preview') && $request->input('image_preview') === null) {
-            // Удаляем изображение если preview стал null
+        } elseif ($request->has('image_deleted') && $request->input('image_deleted') === 'true') {
+            // Явное удаление изображения
             if ($page->image) {
                 $page->deleteSingleImage($page->image);
             }
