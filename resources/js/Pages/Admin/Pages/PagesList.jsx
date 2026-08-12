@@ -167,7 +167,7 @@ const PagesList = ({
                                 <TableCell sx={{ width: 60 }}>
                                     {page.image ? (
                                         <Avatar
-                                            src={page.image}
+                                            src={page.single_thumb}
                                             variant="rounded"
                                             sx={{ width: 40, height: 40 }}
                                         />

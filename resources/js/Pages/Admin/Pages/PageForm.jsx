@@ -17,9 +17,19 @@ import {
     IconButton,
     FormHelperText,
     Dialog,
-    DialogContent
+    DialogContent,
+    Tooltip,
 } from '@mui/material';
-import {Add, Save, OpenInNew as OpenInNewIcon, Close as CloseIcon } from '@mui/icons-material';
+import {
+    Add,
+    Save,
+    OpenInNew as OpenInNewIcon,
+    Close as CloseIcon,
+    Delete as DeleteIcon,
+    ZoomIn as ZoomInIcon,
+    CloudUpload as CloudUploadIcon,
+    SwapHoriz as SwapHorizIcon,
+} from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
 import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 
@@ -250,79 +260,116 @@ const PageForm = ({ page, parents, isNew = false }) => {
 
             <Box sx={{ flex: 1, overflow: 'auto' }}>
                 {activeTab === 0 && (
-                    <Grid container spacing={2} sx={{ pt: 2 }} direction="column">
-                        <Grid item xs={12}>
-                            <TextField fullWidth label="Название" value={data.title}
-                                       onChange={handleTitleChange} error={!!errors.title}
-                                       helperText={errors.title} required size="small" />
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <TextField fullWidth label="Slug" value={data.slug}
-                                       onChange={handleChange('slug')}
-                                       error={!!errors.slug} helperText={errors.slug || "Автоматически из названия"} size="small" />
-                        </Grid>
-                        <Grid item xs={12}>
-                            <TextField fullWidth label="Meta Title" value={data.meta_title}
-                                       onChange={handleChange('meta_title')}
-                                       error={!!errors.meta_title} size="small"
-                                       slotProps={{ inputLabel: { shrink: true } }} />
-                        </Grid>
-                        <Grid item xs={12}>
-                            <TextField fullWidth label="Meta Description" value={data.meta_description}
-                                       onChange={handleChange('meta_description')}
-                                       error={!!errors.meta_description} multiline rows={4} size="small"
-                                       slotProps={{ inputLabel: { shrink: true } }} />
-                        </Grid>
-                        <Grid item xs={12} sm={6}>
-                            <FormControl fullWidth error={!!errors.template} size="small">
-                                <InputLabel>Шаблон</InputLabel>
-                                <Select value={data.template}
-                                        onChange={handleChange('template')} label="Шаблон">
-                                    <MenuItem value="default">По умолчанию</MenuItem>
-                                    <MenuItem value="home">Главная</MenuItem>
-                                    <MenuItem value="contact">Контакты</MenuItem>
-                                    <MenuItem value="blog">Блог</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid item xs={12}>
-                            <FormControl fullWidth error={!!errors.parent_id} size="small">
-                                <InputLabel>Родительская страница</InputLabel>
-                                <Select value={data.parent_id}
-                                        onChange={handleChange('parent_id')} label="Родительская страница">
-                                    <MenuItem value="">Нет (Корневая)</MenuItem>
-                                    {parents?.map(p => <MenuItem key={p.id} value={p.id}>{p.title}</MenuItem>)}
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        {/**/}
-                        <Grid item xs={12}>
-                            <Typography variant="subtitle2" gutterBottom>Изображение страницы</Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                                {/* Preview */}
-                                <Box
-                                    sx={{
-                                        width: 150,
-                                        height: 150,
-                                        border: '1px solid',
-                                        borderColor: 'divider',
-                                        borderRadius: 1,
-                                        overflow: 'hidden',
-                                        position: 'relative',
-                                        cursor: (data.image_preview || data.image) ? 'pointer' : 'default',
-                                        bgcolor: 'grey.100',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        flexShrink: 0,
-                                    }}
-                                    onClick={() => {
-                                        if (data.image_preview || data.image) {
-                                            setPreviewOpen(true);
-                                        }
-                                    }}
-                                >
-                                    {data.image_preview || data.image ? (
+                    <Box sx={{ display: 'flex', gap: 3, pt: 2 }}>
+                        {/* Левая колонка 75% */}
+                        <Box sx={{ flex: 3 }}>
+                            <Grid container spacing={2} direction="column">
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="Название"
+                                        value={data.title}
+                                        onChange={handleTitleChange}
+                                        error={!!errors.title}
+                                        helperText={errors.title}
+                                        required
+                                        size="small"
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="Slug"
+                                        value={data.slug}
+                                        onChange={handleChange('slug')}
+                                        error={!!errors.slug}
+                                        helperText={errors.slug || "Автоматически из названия"}
+                                        size="small"
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <FormControl fullWidth error={!!errors.template} size="small">
+                                        <InputLabel>Шаблон</InputLabel>
+                                        <Select
+                                            value={data.template}
+                                            onChange={handleChange('template')}
+                                            label="Шаблон"
+                                            variant="outlined">
+                                            <MenuItem value="default">По умолчанию</MenuItem>
+                                            <MenuItem value="home">Главная</MenuItem>
+                                            <MenuItem value="contact">Контакты</MenuItem>
+                                            <MenuItem value="blog">Блог</MenuItem>
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <FormControl fullWidth error={!!errors.parent_id} size="small">
+                                        <InputLabel>Родительская страница</InputLabel>
+                                        <Select
+                                            value={data.parent_id}
+                                            onChange={handleChange('parent_id')}
+                                            label="Родительская страница"
+                                            variant="outlined">
+                                            <MenuItem value="">Нет (Корневая)</MenuItem>
+                                            {parents?.map(p => (
+                                                <MenuItem key={p.id} value={p.id}>{p.title}</MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="Meta Title"
+                                        value={data.meta_title}
+                                        onChange={handleChange('meta_title')}
+                                        error={!!errors.meta_title}
+                                        size="small"
+                                        slotProps={{ inputLabel: { shrink: true } }}
+                                    />
+                                </Grid>
+                                <Grid item xs={12}>
+                                    <TextField
+                                        fullWidth
+                                        label="Meta Description"
+                                        value={data.meta_description}
+                                        onChange={handleChange('meta_description')}
+                                        error={!!errors.meta_description}
+                                        multiline
+                                        rows={4}
+                                        size="small"
+                                        slotProps={{ inputLabel: { shrink: true } }}
+                                    />
+                                </Grid>
+                            </Grid>
+                        </Box>
+
+                        {/* Правая колонка 25% - Изображение */}
+                        <Box sx={{ flex: 1 }}>
+                            <Typography variant="subtitle2" gutterBottom sx={{ mb: 1.5 }}>
+                                Изображение страницы
+                            </Typography>
+
+                            <Box
+                                sx={{
+                                    position: 'relative',
+                                    width: '100%',
+                                    aspectRatio: '1/1',
+                                    borderRadius: 2,
+                                    overflow: 'hidden',
+                                    bgcolor: 'grey.100',
+                                    border: '2px dashed',
+                                    borderColor: data.image_preview || data.image ? 'transparent' : 'grey.300',
+                                    transition: 'all 0.3s ease',
+                                    '&:hover': {
+                                        borderColor: data.image_preview || data.image ? 'transparent' : 'primary.main',
+                                        bgcolor: data.image_preview || data.image ? 'transparent' : 'grey.200',
+                                    },
+                                }}
+                            >
+                                {/* Превью изображения */}
+                                {(data.image_preview || data.image) ? (
+                                    <>
                                         <img
                                             src={
                                                 data.image instanceof File
@@ -330,22 +377,136 @@ const PageForm = ({ page, parents, isNew = false }) => {
                                                     : data.image_preview
                                             }
                                             alt="Preview"
-                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                            style={{
+                                                width: '100%',
+                                                height: '100%',
+                                                objectFit: 'cover',
+                                            }}
+                                            onClick={() => setPreviewOpen(true)}
                                         />
-                                    ) : (
-                                        <Typography variant="caption" color="text.secondary">
-                                            Нет изображения
-                                        </Typography>
-                                    )}
-                                </Box>
 
-                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                        {/* Оверлей с кнопкой удаления при наведении */}
+                                        <Box
+                                            sx={{
+                                                position: 'absolute',
+                                                top: 0,
+                                                left: 0,
+                                                right: 0,
+                                                bottom: 0,
+                                                bgcolor: 'rgba(0,0,0,0.4)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: 1,
+                                                opacity: 0,
+                                                transition: 'opacity 0.2s ease',
+                                                '&:hover': {
+                                                    opacity: 1,
+                                                },
+                                            }}
+                                        >
+                                            <Tooltip title="Просмотр">
+                                                <IconButton
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setPreviewOpen(true);
+                                                    }}
+                                                    sx={{
+                                                        bgcolor: 'white',
+                                                        '&:hover': { bgcolor: 'grey.100' },
+                                                    }}
+                                                    size="small"
+                                                >
+                                                    <ZoomInIcon fontSize="small" sx={{ color: 'grey.800' }} />
+                                                </IconButton>
+                                            </Tooltip>
+
+                                            <Tooltip title="Удалить">
+                                                <IconButton
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setData(prev => ({
+                                                            ...prev,
+                                                            image: null,
+                                                            image_preview: null,
+                                                            image_src: null,
+                                                        }));
+                                                    }}
+                                                    sx={{
+                                                        bgcolor: 'error.main',
+                                                        color: 'white',
+                                                        '&:hover': { bgcolor: 'error.dark' },
+                                                    }}
+                                                    size="small"
+                                                >
+                                                    <DeleteIcon fontSize="small" />
+                                                </IconButton>
+                                            </Tooltip>
+                                        </Box>
+
+                                        {/* Кнопка замены */}
+                                        <Button
+                                            component="label"
+                                            sx={{
+                                                position: 'absolute',
+                                                bottom: 8,
+                                                right: 8,
+                                                minWidth: 'auto',
+                                                bgcolor: 'rgba(255,255,255,0.9)',
+                                                backdropFilter: 'blur(4px)',
+                                                '&:hover': {
+                                                    bgcolor: 'white',
+                                                },
+                                                px: 2,
+                                                py: 0.5,
+                                                fontSize: '0.75rem',
+                                                borderRadius: 1,
+                                                opacity: 0.9,
+                                                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                            }}
+                                        >
+                                            <SwapHorizIcon sx={{ fontSize: 16, mr: 0.5 }} />
+                                            Заменить
+                                            <input
+                                                type="file"
+                                                hidden
+                                                accept="image/*"
+                                                onChange={(e) => {
+                                                    const file = e.target.files?.[0];
+                                                    if (file) {
+                                                        setData(prev => ({
+                                                            ...prev,
+                                                            image: file,
+                                                            image_preview: URL.createObjectURL(file),
+                                                        }));
+                                                    }
+                                                }}
+                                            />
+                                        </Button>
+                                    </>
+                                ) : (
+                                    /* Зона загрузки */
                                     <Button
-                                        variant="outlined"
-                                        size="small"
                                         component="label"
+                                        sx={{
+                                            width: '100%',
+                                            height: '100%',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: 1,
+                                            textTransform: 'none',
+                                            color: 'text.secondary',
+                                        }}
                                     >
-                                        {data.image_preview || data.image ? 'Заменить' : 'Загрузить'}
+                                        <CloudUploadIcon sx={{ fontSize: 48, color: 'grey.400' }} />
+                                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                            Загрузить фото
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            JPEG, PNG, WebP • Макс. 10MB
+                                        </Typography>
                                         <input
                                             type="file"
                                             hidden
@@ -362,72 +523,10 @@ const PageForm = ({ page, parents, isNew = false }) => {
                                             }}
                                         />
                                     </Button>
-                                    {(data.image_preview || data.image) && (
-                                        <Button
-                                            variant="outlined"
-                                            size="small"
-                                            color="error"
-                                            onClick={() => {
-                                                setData(prev => ({
-                                                    ...prev,
-                                                    image: null,
-                                                    image_preview: null,
-                                                    image_src: null,
-                                                }));
-                                            }}
-                                        >
-                                            Удалить
-                                        </Button>
-                                    )}
-                                    <Typography variant="caption" color="text.secondary">
-                                        JPEG, PNG, GIF, WebP • Макс. 10MB
-                                    </Typography>
-                                </Box>
+                                )}
                             </Box>
-
-                            {/* Dialog для просмотра полного изображения */}
-                            <Dialog
-                                open={previewOpen}
-                                onClose={() => setPreviewOpen(false)}
-                                maxWidth="lg"
-                                fullWidth
-                            >
-                                <DialogContent sx={{ p: 0, position: 'relative' }}>
-                                    <IconButton
-                                        onClick={() => setPreviewOpen(false)}
-                                        sx={{
-                                            position: 'absolute',
-                                            right: 8,
-                                            top: 8,
-                                            bgcolor: 'rgba(0,0,0,0.5)',
-                                            color: 'white',
-                                            '&:hover': {
-                                                bgcolor: 'rgba(0,0,0,0.7)',
-                                            },
-                                            zIndex: 1,
-                                        }}
-                                    >
-                                        <CloseIcon />
-                                    </IconButton>
-                                    <img
-                                        src={
-                                            data.image instanceof File
-                                                ? URL.createObjectURL(data.image)
-                                                : data.image_src
-                                        }
-                                        alt="Полное изображение"
-                                        style={{
-                                            width: '100%',
-                                            height: 'auto',
-                                            maxHeight: '90vh',
-                                            objectFit: 'contain',
-                                            display: 'block',
-                                        }}
-                                    />
-                                </DialogContent>
-                            </Dialog>
-                        </Grid>
-                    </Grid>
+                        </Box>
+                    </Box>
                 )}
 
                 {activeTab === 1 && (
@@ -435,10 +534,14 @@ const PageForm = ({ page, parents, isNew = false }) => {
                         <FormControl fullWidth variant="outlined">
                             <InputLabel shrink>Содержание</InputLabel>
                             <Box sx={{ mt: 1 }}>
-                                <RichTextEditor value={data.content}
-                                                onChange={handleChange('content')} />
+                                <RichTextEditor
+                                    value={data.content}
+                                    onChange={handleChange('content')}
+                                />
                             </Box>
-                            {errors.content && <FormHelperText error>{errors.content}</FormHelperText>}
+                            {errors.content && (
+                                <FormHelperText error>{errors.content}</FormHelperText>
+                            )}
                         </FormControl>
                     </Grid>
                 )}
@@ -449,7 +552,6 @@ const PageForm = ({ page, parents, isNew = false }) => {
                         <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
                             JPEG, PNG, GIF, WebP • Макс. 10MB • Автоконвертация в WebP
                         </Typography>
-
                         <ImageUploader
                             key={page?.id || 'new'}
                             images={data.images}
@@ -461,11 +563,65 @@ const PageForm = ({ page, parents, isNew = false }) => {
                         />
                     </Box>
                 )}
+
+                {/* Dialog для просмотра полного изображения */}
+                <Dialog
+                    open={previewOpen}
+                    onClose={() => setPreviewOpen(false)}
+                    maxWidth="lg"
+                    fullWidth
+                >
+                    <DialogContent sx={{ p: 0, position: 'relative' }}>
+                        <IconButton
+                            onClick={() => setPreviewOpen(false)}
+                            sx={{
+                                position: 'absolute',
+                                right: 8,
+                                top: 8,
+                                bgcolor: 'rgba(0,0,0,0.5)',
+                                color: 'white',
+                                '&:hover': {
+                                    bgcolor: 'rgba(0,0,0,0.7)',
+                                },
+                                zIndex: 1,
+                            }}
+                        >
+                            <CloseIcon />
+                        </IconButton>
+                        <img
+                            src={
+                                data.image instanceof File
+                                    ? URL.createObjectURL(data.image)
+                                    : data.image_src
+                            }
+                            alt="Полное изображение"
+                            style={{
+                                width: '100%',
+                                height: 'auto',
+                                maxHeight: '90vh',
+                                objectFit: 'contain',
+                                display: 'block',
+                            }}
+                        />
+                    </DialogContent>
+                </Dialog>
             </Box>
 
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', pt: 2, mt: 'auto', borderTop: 1, borderColor: 'divider' }}>
-                <Button type="submit" variant="contained"
-                        startIcon={isNew ? <Add /> : <Save />} disabled={processing}>
+            <Box sx={{
+                display: 'flex',
+                gap: 2,
+                justifyContent: 'flex-end',
+                pt: 2,
+                mt: 'auto',
+                borderTop: 1,
+                borderColor: 'divider'
+            }}>
+                <Button
+                    type="submit"
+                    variant="contained"
+                    startIcon={isNew ? <Add /> : <Save />}
+                    disabled={processing}
+                >
                     {processing ? 'Сохранение...' : isNew ? 'Создать' : 'Сохранить'}
                 </Button>
             </Box>
