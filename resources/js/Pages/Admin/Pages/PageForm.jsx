@@ -20,8 +20,10 @@ import {
     DialogContent,
     Tooltip,
     Divider,
-    Chip
+    Chip,
+    Slide
 } from '@mui/material';
+import { alpha, useTheme } from '@mui/material/styles';
 import {
     Add,
     Save,
@@ -41,6 +43,8 @@ const PageForm = ({page, parents, isNew = false}) => {
     const previousPageId = useRef(null);
     const [previewOpen, setPreviewOpen] = useState(false);
 
+    const BOOLEAN_FIELDS = ['published', 'on_main', 'on_header_menu', 'on_footer_menu', 'on_mobile_menu'];
+
     const {
         data,
         setData,
@@ -58,10 +62,10 @@ const PageForm = ({page, parents, isNew = false}) => {
         text: page?.text || '',
         parent_id: page?.parent_id || '',
         published: page?.published !== undefined ? page.published : true,
-        on_main: page?.on_main !== undefined ? page.on_main : false,
-        on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : false,
-        on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : false,
-        on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : false,
+        on_main: page?.on_main !== undefined ? page.on_main : true,
+        on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : true,
+        on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : true,
+        on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : true,
         title: page?.title || '',
         keywords: page?.keywords || '',
         description: page?.description || '',
@@ -101,10 +105,10 @@ const PageForm = ({page, parents, isNew = false}) => {
                 text: page?.text || '',
                 parent_id: page?.parent_id || '',
                 published: page?.published !== undefined ? page.published : true,
-                on_main: page?.on_main !== undefined ? page.on_main : false,
-                on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : false,
-                on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : false,
-                on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : false,
+                on_main: page?.on_main !== undefined ? page.on_main : true,
+                on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : true,
+                on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : true,
+                on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : true,
                 title: page?.title || '',
                 keywords: page?.keywords || '',
                 description: page?.description || '',
@@ -164,7 +168,12 @@ const PageForm = ({page, parents, isNew = false}) => {
         formData.append('slug', data.slug);
         formData.append('text', data.text || '');
         formData.append('parent_id', data.parent_id || '');
-        formData.append('published', data.published ? '1' : '0');
+
+        // отправляем switch
+        BOOLEAN_FIELDS.forEach(field => {
+            formData.append(field, data[field] ? '1' : '0');
+        });
+
         formData.append('title', data.title || '');
         formData.append('keywords', data.keywords || '');
         formData.append('description', data.description || '');
@@ -232,6 +241,7 @@ const PageForm = ({page, parents, isNew = false}) => {
             .replace(/--+/g, '-');
     };
 
+    // Правильно для Inertia useForm
     const handleChange = (field) => (event) => {
         setData(field, event.target.value);
     };
@@ -250,7 +260,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                 <FormControlLabel
                     control={<Switch checked={data.published} onChange={(e) => setData('published', e.target.checked)}
                                      size="small" color="success"/>}
-                    label={data.published ? "Активна" : "Выключена"}
+                    label={data.published ? "Опубликована" : "Черновик"}
                     labelPlacement="start"
                 />
             </Box>
@@ -264,7 +274,7 @@ const PageForm = ({page, parents, isNew = false}) => {
 
             <Box sx={{flex: 1, overflow: 'auto'}}>
                 {activeTab === 0 && (
-                    <Box sx={{ pr: 2 }}>
+                    <Box sx={{pr: 2}}>
                         <Box sx={{display: 'flex', gap: 3, pt: 2}}>
                             {/* Левая колонка 75% */}
                             <Box sx={{flex: 3}}>
@@ -510,9 +520,9 @@ const PageForm = ({page, parents, isNew = false}) => {
                             </Box>
                         </Box>
 
-                        <Box sx={{ mt:2 }}>
-                            <Divider sx={{ mb: 2}}>
-                                <Chip label="Meta" size="small" />
+                        <Box sx={{mt: 2}}>
+                            <Divider sx={{mb: 2}}>
+                                <Chip label="Meta" size="small"/>
                             </Divider>
                             <Grid container spacing={2} direction="column">
                                 <Grid item xs={12}>
@@ -573,6 +583,86 @@ const PageForm = ({page, parents, isNew = false}) => {
                                     />
                                 </Grid>
                             </Grid>
+                        </Box>
+
+
+                        <Box sx={{ my: 2 }}>
+                            <Divider sx={{ mb: 2 }}>
+                                <Chip label="Видимость" size="small" />
+                            </Divider>
+
+                            <Box
+                                sx={{
+                                    display: 'grid',
+                                    gridTemplateColumns: {
+                                        xs: '1fr',           // 1 колонка на мобильных
+                                        sm: '1fr 1fr',       // 2 колонки на планшетах
+                                        md: '1fr 1fr 1fr',   // 3 колонки на десктопах
+                                    },
+                                    gap: 2, // отступы между элементами
+                                }}
+                            >
+                                {[ /* Массив данных для переключателей */
+                                    {
+                                        key: 'on_header_menu',
+                                        title: 'Показывать в шапке',
+                                        activeText: '✓ Отображается в шапке',
+                                        inactiveText: 'Скрыта из шапки',
+                                    },
+                                    {
+                                        key: 'on_footer_menu',
+                                        title: 'Показывать в футере',
+                                        activeText: '✓ Отображается в футере',
+                                        inactiveText: 'Скрыта из футера',
+                                    },
+                                    {
+                                        key: 'on_mobile_menu',
+                                        title: 'Показывать в мобильном меню',
+                                        activeText: '✓ Отображается в мобильном меню',
+                                        inactiveText: 'Скрыта из мобильного меню',
+                                    },
+                                ].map((item) => (
+                                    <Box
+                                        key={item.key}
+                                        sx={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '12px 16px',
+                                            borderRadius: 2,
+                                            border: '1px solid',
+                                            borderColor: data[item.key] ? 'success.main' : 'divider',
+                                            backgroundColor: data[item.key]
+                                                ? (theme) => alpha(theme.palette.success.main, 0.04)
+                                                : 'background.paper',
+                                            transition: 'all 0.2s',
+                                        }}
+                                    >
+                                        <Box sx={{ mr: 2, minWidth: 0 }}> {/* minWidth: 0 для корректного переноса текста */}
+                                            <Typography variant="body2" fontWeight={500} noWrap>
+                                                {item.title}
+                                            </Typography>
+                                            <Typography
+                                                variant="caption"
+                                                color={data[item.key] ? "success.main" : "text.secondary"}
+                                                fontWeight={data[item.key] ? 600 : 400}
+                                                noWrap
+                                            >
+                                                {data[item.key] ? item.activeText : item.inactiveText}
+                                            </Typography>
+                                        </Box>
+
+                                        <Switch
+                                            checked={data[item.key]}
+                                            onChange={(e) => setData(item.key, e.target.checked)}
+                                            size="small"
+                                            color="success"
+                                            sx={{ flexShrink: 0 }}
+                                        />
+                                        {/* flexShrink: 0 Чтобы switch не сжимался */}
+                                    </Box>
+                                ))}
+                            </Box>
                         </Box>
                     </Box>
                 )}
