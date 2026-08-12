@@ -98,14 +98,12 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
     const handleSelect = (nodes) => {
         if (nodes.length > 0) {
             const node = nodes[0];
-            console.log('Selected node:', node);
             setSelectedPage(node);
             setLoading(true);
 
             fetch(`/admin/api/pages/${node.id}`)
                 .then(response => response.json())
                 .then(data => {
-                    console.log('Page data loaded:', data);
                     setPageData(data);
                 })
                 .catch(error => {
@@ -118,8 +116,6 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
     };
 
     const handleMove = ({ dragIds, parentId, index }) => {
-        console.log('Move:', { dragIds, parentId, index });
-
         // Оптимистичное обновление UI
         setTreeDataState(prevData => {
             const newData = JSON.parse(JSON.stringify(prevData));
@@ -150,7 +146,6 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
             let updatedData = removeNode(newData);
 
             if (!draggedNode) {
-                console.warn('Dragged node not found');
                 return prevData;
             }
 
@@ -205,8 +200,6 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
     };
 
     const handleCreate = (parentId = null) => {
-        console.log('create:', parentId);
-
         // Увеличиваем счетчик для создания нового ключа
         const newCreateKey = createKey + 1;
         setCreateKey(newCreateKey);

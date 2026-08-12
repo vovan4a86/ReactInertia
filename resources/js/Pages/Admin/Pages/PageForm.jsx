@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useForm, router } from '@inertiajs/react';
 import {
     Box,
@@ -23,393 +23,315 @@ import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 
 const PageForm = ({ page, parents, isNew = false }) => {
     const [activeTab, setActiveTab] = useState(0);
+    const isInitialized = useRef(false);
+    const previousPageId = useRef(null);
+    const fileInputRef = useRef(null);
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
-        title: page.title || '',
-        slug: page.slug || '',
-        content: page.content || '',
-        parent_id: page.parent_id || '',
-        is_active: page.is_active !== undefined ? page.is_active : true,
-        meta_title: page.meta_title || '',
-        meta_description: page.meta_description || '',
-        template: page.template || 'default',
-        images: page.images || [], // Добавляем images в форму
-        deleted_images: [], // Индексы удаленных изображений
+        title: page?.title || '',
+        slug: page?.slug || '',
+        content: page?.content || '',
+        parent_id: page?.parent_id || '',
+        is_active: page?.is_active !== undefined ? page.is_active : true,
+        meta_title: page?.meta_title || '',
+        meta_description: page?.meta_description || '',
+        template: page?.template || 'default',
+        images: [], // ID существующих изображений для сохранения порядка
+        deleted_images: [], // ID удаленных изображений
+        new_images: [], // File объекты новых изображений
     });
 
-    const normalizeImagePaths = (images) => {
-        if (!Array.isArray(images)) return [];
+    // Инициализация только при первой загрузке или смене страницы
+    useEffect(() => {
+        const currentPageId = page?.id || 'new';
 
-        return images.map(image => {
-            if (typeof image === 'string') {
-                // Нормализуем строковый путь
-                let path = image;
-                if (path.startsWith('http://') || path.startsWith('https://')) {
-                    const url = new URL(path);
-                    path = url.pathname;
-                }
-                if (path.startsWith('/storage/')) {
-                    path = path.replace('/storage/', '');
-                }
-                return path.startsWith('/') ? path.slice(1) : path;
-            }
+        // Инициализируем только если страница изменилась
+        if (previousPageId.current !== currentPageId) {
 
-            // Для объектов - нормализуем все поля с путями
-            const normalized = { ...image };
-            const pathFields = ['original', 'thumb', 'thumb_webp', 'small', 'small_webp',
-                'medium', 'medium_webp', 'large', 'large_webp', 'url'];
-
-            pathFields.forEach(field => {
-                if (normalized[field] && typeof normalized[field] === 'string') {
-                    let path = normalized[field];
-                    if (path.startsWith('http://') || path.startsWith('https://')) {
-                        const url = new URL(path);
-                        path = url.pathname;
-                    }
-                    if (path.startsWith('/storage/')) {
-                        path = path.replace('/storage/', '');
-                    }
-                    if (path.startsWith('/')) {
-                        path = path.slice(1);
-                    }
-                    normalized[field] = path;
+            // Получаем ID существующих изображений
+            const existingImages = page?.images || [];
+            const existingImageIds = existingImages.map(img => {
+                if (typeof img === 'object') {
+                    return img.original || img.id || img;
                 }
+                return img;
             });
 
-            return normalized;
-        });
-    };
+            reset();
+            setData({
+                title: page?.title || '',
+                slug: page?.slug || '',
+                content: page?.content || '',
+                parent_id: page?.parent_id || '',
+                is_active: page?.is_active !== undefined ? page.is_active : true,
+                meta_title: page?.meta_title || '',
+                meta_description: page?.meta_description || '',
+                template: page?.template || 'default',
+                images: existingImageIds,
+                deleted_images: [],
+                new_images: [],
+            });
 
-    // Сбрасываем форму при изменении страницы
-    useEffect(() => {
-        reset();
-        setData({
-            title: page?.title || '',
-            slug: page?.slug || '',
-            content: page?.content || '',
-            parent_id: page?.parent_id || '',
-            is_active: page?.is_active !== undefined ? page.is_active : true,
-            meta_title: page?.meta_title || '',
-            meta_description: page?.meta_description || '',
-            template: page?.template || 'default',
-            images: normalizeImagePaths(page?.images || []), // Нормализуем пути
-            deleted_images: [],
-        });
-        setActiveTab(0); // Сбрасываем на первую вкладку
+            setActiveTab(0);
+            isInitialized.current = true;
+            previousPageId.current = currentPageId;
+        }
     }, [page?.id, isNew]);
 
-    const handleChange = (field) => (event) => {
-        setData(field, event.target.value);
-    };
+    // Обработчик изображений - ПРИНИМАЕТ ФАЙЛЫ НАПРЯМУЮ
+    const handleImagesChange = useCallback((newImagesOrder, newFiles, deletedImageIds) => {
+        console.log('🖼️ PageForm.handleImagesChange called with:', {
+            order: newImagesOrder,
+            newFilesCount: newFiles?.length || 0,
+            deleted: deletedImageIds
+        });
 
-    const handleSwitchChange = (event) => {
-        setData('is_active', event.target.checked);
-    };
+        // Обновляем состояние НАПРЯМУЮ через setData
+        setData(prevData => {
+            const updatedData = {
+                ...prevData,
+                images: newImagesOrder,
+                deleted_images: [...(prevData.deleted_images || []), ...(deletedImageIds || [])]
+            };
 
-    const handleSelectChange = (field) => (event) => {
-        setData(field, event.target.value);
-    };
+            // ПРЯМО устанавливаем new_images из переданных файлов
+            if (newFiles && newFiles.length > 0) {
+                updatedData.new_images = [...newFiles];
+                console.log('🖼️ Setting new_images directly:', updatedData.new_images.map(f => ({
+                    name: f.name,
+                    isFile: f instanceof File,
+                    size: f.size
+                })));
+            } else if (newFiles && newFiles.length === 0) {
+                // Если файлов нет, но есть существующие - сохраняем их
+                // Если файлов нет и не было - очищаем
+                if (prevData.new_images && prevData.new_images.length > 0) {
+                    // Проверяем, есть ли еще новые изображения в localImages
+                    const hasNewImages = newImagesOrder.some(id => typeof id === 'string' && id.startsWith('new_'));
+                    if (!hasNewImages) {
+                        console.log('🖼️ Clearing new_images - no new images in order');
+                        updatedData.new_images = [];
+                    }
+                }
+            }
 
-    const handleTabChange = (event, newValue) => {
-        setActiveTab(newValue);
-    };
+            return updatedData;
+        });
+    }, [setData]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        if (isNew) {
-            // Создание новой страницы
-            post('/admin/api/pages', {
-                preserveScroll: true,
-                onSuccess: (response) => {
-                    // Обновляем изображения в форме после создания
-                    if (response.props?.page?.images) {
-                        setData('images', response.props.page.images);
-                    }
-                    // Обновляем страницу для отображения нового дерева
-                    router.reload({ only: ['treeData'] });
-                },
-                onError: (errors) => {
-                    console.error('Error creating page:', errors);
+        console.log('📊 PRE-SUBMIT STATE:');
+        console.log('📊 data.new_images:', data.new_images);
+        console.log('📊 data.new_images length:', data.new_images?.length);
+        if (data.new_images && data.new_images.length > 0) {
+            data.new_images.forEach((file, i) => {
+                console.log(`📊 File ${i}:`, {
+                    name: file.name,
+                    isFile: file instanceof File,
+                    size: file?.size,
+                    type: file?.type
+                });
+            });
+        }
+
+        // Создаем FormData
+        const formData = new FormData();
+        formData.append('title', data.title);
+        formData.append('slug', data.slug);
+        formData.append('content', data.content || '');
+        formData.append('parent_id', data.parent_id || '');
+        formData.append('is_active', data.is_active ? '1' : '0');
+        formData.append('meta_title', data.meta_title || '');
+        formData.append('meta_description', data.meta_description || '');
+        formData.append('template', data.template || 'default');
+        formData.append('images', JSON.stringify(data.images));
+        formData.append('deleted_images', JSON.stringify(data.deleted_images || []));
+
+        // Добавляем новые изображения
+        if (data.new_images && data.new_images.length > 0) {
+            console.log('📎 Adding new_images to FormData:');
+            data.new_images.forEach((file, index) => {
+                if (file instanceof File) {
+                    console.log(`📎 File ${index}:`, file.name, file.size, file.type);
+                    formData.append('new_images[]', file, file.name);
+                } else {
+                    console.error(`❌ Invalid file at index ${index}:`, file);
                 }
             });
         } else {
-            // Обновление существующей страницы
-            put(`/admin/api/pages/${page.id}`, {
-                preserveScroll: true,
-                onSuccess: (response) => {
-                    // Обновляем изображения в форме после обновления
-                    if (response.props?.page?.images) {
-                        setData('images', response.props.page.images);
-                        // Очищаем список удаленных изображений
-                        setData('deleted_images', []);
-                    }
-                    console.log('Page updated successfully');
-                },
-                onError: (errors) => {
-                    console.error('Error updating page:', errors);
-                }
-            });
+            console.log('⚠️ No new_images to append');
         }
+
+        if (!isNew) {
+            formData.append('_method', 'PUT');
+        }
+
+        // Финальная проверка
+        let filesCount = 0;
+        console.log('📦 Final FormData entries:');
+        for (let pair of formData.entries()) {
+            if (pair[1] instanceof File) {
+                filesCount++;
+                console.log(`  📎 ${pair[0]}: File(${pair[1].name}, ${pair[1].size} bytes)`);
+            }
+        }
+        console.log(`📦 Total files in FormData: ${filesCount}`);
+
+        const url = isNew ? '/admin/api/pages' : `/admin/api/pages/${page.id}`;
+
+        router.post(url, formData, {
+            forceFormData: false,
+            preserveScroll: true,
+            preserveState: !isNew,
+            onSuccess: (page) => {
+                console.log('✅ Operation successful');
+                if (!isNew) {
+                    setData(prev => ({
+                        ...prev,
+                        deleted_images: [],
+                        new_images: []
+                    }));
+                }
+            },
+            onError: (errors) => {
+                console.error('❌ Submit error:', errors);
+            }
+        });
     };
+
 
     const handleTitleChange = (event) => {
         const title = event.target.value;
         setData('title', title);
-
-        // Автоматически генерируем slug только если он пустой или совпадает с предыдущим
         if (!data.slug || data.slug === slugify(page?.title || '')) {
             setData('slug', slugify(title));
         }
     };
 
-    // Обработчик изменений изображений
-    const handleImagesChange = useCallback((images, deletedImages) => {
-        setData('images', images);
-        setData('deleted_images', deletedImages);
-    }, [setData]);
-
     const slugify = (text) => {
-        return text
-            .toString()
-            .toLowerCase()
-            .trim()
+        if (!text) return '';
+        return text.toLowerCase().trim()
             .replace(/\s+/g, '-')
             .replace(/[^\w-]+/g, '')
             .replace(/--+/g, '-');
     };
 
+    const handleChange = (field) => (event) => {
+        setData(field, event.target.value);
+    };
+
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Typography variant="h6">
                     {isNew ? 'Новая страница' : page?.title || 'Редактирование страницы'}
                     {page?.url && (
-                        <IconButton
-                            component="a"
-                            href={page.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            size="small"
-                            color="primary"
-                            title="Открыть страницу на сайте"
-                            onClick={(e) => e.stopPropagation()}
-                        >
+                        <IconButton component="a" href={page.url} target="_blank" size="small" color="primary">
                             <OpenInNewIcon fontSize="small" />
                         </IconButton>
                     )}
                 </Typography>
-
                 <FormControlLabel
-                    control={
-                        <Switch
-                            checked={data.is_active}
-                            onChange={handleSwitchChange}
-                            size="small"
-                            color="success"
-                        />
-                    }
+                    control={<Switch checked={data.is_active} onChange={(e) => setData('is_active', e.target.checked)} size="small" color="success" />}
                     label={data.is_active ? "Активна" : "Выключена"}
                     labelPlacement="start"
                 />
             </Box>
 
-            {/* Tabs */}
-            <Tabs
-                value={activeTab}
-                onChange={handleTabChange}
-                sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-            >
+            <Tabs value={activeTab} onChange={(e, v) => setActiveTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                 <Tab label="Параметры" />
                 <Tab label="Текст" />
                 <Tab label="Изображения" />
             </Tabs>
 
-            {/* Tab Content */}
             <Box sx={{ flex: 1, overflow: 'auto' }}>
-                {/* Параметры Tab */}
                 {activeTab === 0 && (
                     <Grid container spacing={2} sx={{ pt: 2 }} direction="column">
                         <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Название"
-                                value={data.title}
-                                onChange={handleTitleChange}
-                                error={!!errors.title}
-                                helperText={errors.title}
-                                required
-                                size="small"
-                            />
+                            <TextField fullWidth label="Название" value={data.title}
+                                       onChange={handleTitleChange} error={!!errors.title}
+                                       helperText={errors.title} required size="small" />
                         </Grid>
-
                         <Grid item xs={12} sm={6}>
-                            <TextField
-                                fullWidth
-                                label="Slug"
-                                value={data.slug}
-                                onChange={handleChange('slug')}
-                                error={!!errors.slug}
-                                helperText={errors.slug || "Автоматически из названия"}
-                                size="small"
-                            />
+                            <TextField fullWidth label="Slug" value={data.slug}
+                                       onChange={handleChange('slug')}
+                                       error={!!errors.slug} helperText={errors.slug || "Автоматически из названия"} size="small" />
                         </Grid>
-
                         <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Meta Title"
-                                value={data.meta_title}
-                                onChange={handleChange('meta_title')}
-                                error={!!errors.meta_title}
-                                helperText={errors.meta_title}
-                                size="small"
-                                slotProps={{ inputLabel: {shrink: true} }}
-                            />
+                            <TextField fullWidth label="Meta Title" value={data.meta_title}
+                                       onChange={handleChange('meta_title')}
+                                       error={!!errors.meta_title} size="small"
+                                       slotProps={{ inputLabel: { shrink: true } }} />
                         </Grid>
-
                         <Grid item xs={12}>
-                            <TextField
-                                fullWidth
-                                label="Meta Description"
-                                value={data.meta_description}
-                                onChange={handleChange('meta_description')}
-                                error={!!errors.meta_description}
-                                helperText={errors.meta_description}
-                                multiline
-                                rows={4}
-                                size="small"
-                                slotProps={{ inputLabel: {shrink: true} }}
-                            />
+                            <TextField fullWidth label="Meta Description" value={data.meta_description}
+                                       onChange={handleChange('meta_description')}
+                                       error={!!errors.meta_description} multiline rows={4} size="small"
+                                       slotProps={{ inputLabel: { shrink: true } }} />
                         </Grid>
-
                         <Grid item xs={12} sm={6}>
                             <FormControl fullWidth error={!!errors.template} size="small">
                                 <InputLabel>Шаблон</InputLabel>
-                                <Select
-                                    value={data.template}
-                                    onChange={handleSelectChange('template')}
-                                    label="Шаблон"
-                                    variant="outlined"
-                                >
+                                <Select value={data.template}
+                                        onChange={handleChange('template')} label="Шаблон">
                                     <MenuItem value="default">По умолчанию</MenuItem>
                                     <MenuItem value="home">Главная</MenuItem>
                                     <MenuItem value="contact">Контакты</MenuItem>
                                     <MenuItem value="blog">Блог</MenuItem>
                                 </Select>
-                                {errors.template && (
-                                    <Typography color="error" variant="caption">
-                                        {errors.template}
-                                    </Typography>
-                                )}
                             </FormControl>
                         </Grid>
-
                         <Grid item xs={12}>
                             <FormControl fullWidth error={!!errors.parent_id} size="small">
                                 <InputLabel>Родительская страница</InputLabel>
-                                <Select
-                                    value={data.parent_id}
-                                    onChange={handleSelectChange('parent_id')}
-                                    label="Родительская страница"
-                                    variant="outlined"
-                                >
+                                <Select value={data.parent_id}
+                                        onChange={handleChange('parent_id')} label="Родительская страница">
                                     <MenuItem value="">Нет (Корневая)</MenuItem>
-                                    {parents && parents.map((parent) => (
-                                        <MenuItem key={parent.id} value={parent.id}>
-                                            {parent.title}
-                                        </MenuItem>
-                                    ))}
+                                    {parents?.map(p => <MenuItem key={p.id} value={p.id}>{p.title}</MenuItem>)}
                                 </Select>
-                                {errors.parent_id && (
-                                    <Typography color="error" variant="caption">
-                                        {errors.parent_id}
-                                    </Typography>
-                                )}
                             </FormControl>
                         </Grid>
                     </Grid>
                 )}
 
-                {/* Контент Tab */}
                 {activeTab === 1 && (
-                    <Grid container spacing={2} sx={{ pt: 2 }} direction="column">
+                    <Grid container spacing={2} sx={{ pt: 2 }}>
                         <FormControl fullWidth variant="outlined">
                             <InputLabel shrink>Содержание</InputLabel>
-                            <Box
-                                sx={{
-                                    mt: 1,
-                                    '& .MuiInputBase-root': {
-                                        borderRadius: 1,
-                                        border: '1px solid',
-                                        borderColor: errors.content ? 'error.main' : 'rgba(0, 0, 0, 0.23)',
-                                        '&:hover': {
-                                            borderColor: 'text.primary'
-                                        }
-                                    }
-                                }}
-                            >
-                                {/* Ваш RichEdit компонент */}
-                                <RichTextEditor
-                                    value={data.content}
-                                    onChange={handleChange('content')}
-                                />
+                            <Box sx={{ mt: 1 }}>
+                                <RichTextEditor value={data.content}
+                                                onChange={handleChange('content')} />
                             </Box>
-                            {errors.content && (
-                                <FormHelperText error>{errors.content}</FormHelperText>
-                            )}
+                            {errors.content && <FormHelperText error>{errors.content}</FormHelperText>}
                         </FormControl>
                     </Grid>
                 )}
 
-                {/* Изображения Tab */}
                 {activeTab === 2 && (
                     <Box sx={{ pt: 2 }}>
-                        <Typography variant="subtitle1" gutterBottom>
-                            Изображения страницы
-                        </Typography>
+                        <Typography variant="subtitle1" gutterBottom>Изображения страницы</Typography>
                         <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                            Поддерживаются форматы JPEG, PNG, GIF, WebP. Максимальный размер: 10MB.
-                            Изображения автоматически конвертируются в WebP и создаются миниатюры разных размеров.
+                            JPEG, PNG, GIF, WebP • Макс. 10MB • Автоконвертация в WebP
                         </Typography>
 
                         <ImageUploader
+                            key={page?.id || 'new'}
                             images={data.images}
-                            pageId={page.id}
-                            uploadUrl={`/admin/pages/${page.id}/upload-images`}
+                            pageId={page?.id}
+                            uploadUrl={`/admin/pages/${page?.id || 'new'}/upload-images`}
                             maxImages={10}
                             multiple={true}
                             onChange={handleImagesChange}
                         />
-
-                        {errors.images && (
-                            <Typography color="error" variant="caption" sx={{ mt: 1, display: 'block' }}>
-                                {errors.images}
-                            </Typography>
-                        )}
                     </Box>
                 )}
             </Box>
 
-            {/* Actions - Sticky Bottom */}
-            <Box
-                sx={{
-                    display: 'flex',
-                    gap: 2,
-                    justifyContent: 'flex-end',
-                    pt: 2,
-                    mt: 'auto',
-                    borderTop: 1,
-                    borderColor: 'divider'
-                }}
-            >
-                <Button
-                    type="submit"
-                    variant="contained"
-                    startIcon={isNew ? <Add /> : <Save />}
-                    disabled={processing}
-                >
+            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end', pt: 2, mt: 'auto', borderTop: 1, borderColor: 'divider' }}>
+                <Button type="submit" variant="contained"
+                        startIcon={isNew ? <Add /> : <Save />} disabled={processing}>
                     {processing ? 'Сохранение...' : isNew ? 'Создать' : 'Сохранить'}
                 </Button>
             </Box>
