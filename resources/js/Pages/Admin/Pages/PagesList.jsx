@@ -15,7 +15,7 @@ import {
     Chip,
     Avatar,
     CircularProgress,
-    Alert,
+    Tooltip,
 } from '@mui/material';
 import {
     Edit as EditIcon,
@@ -43,6 +43,7 @@ const headCells = [
     { id: 'name', label: 'Название', sortable: true },
     { id: 'parent', label: 'Родитель', sortable: true },
     { id: 'published', label: 'Статус', sortable: true },
+    { id: 'display', label: 'Отображение', sortable: false },
     { id: 'created_at', label: 'Создана', sortable: true },
     { id: 'actions', label: 'Действия', sortable: false },
 ];
@@ -218,6 +219,42 @@ const PagesList = ({
                                         color={page.published ? 'success' : 'warning'}
                                         variant="outlined"
                                     />
+                                </TableCell>
+
+                                {/* Отображение */}
+                                <TableCell>
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <Tooltip title={page.on_header_menu ? 'В шапке' : 'Не в шапке'}>
+                                            <Box
+                                                sx={{
+                                                    width: 12,
+                                                    height: 12,
+                                                    borderRadius: '50%',
+                                                    backgroundColor: page.on_header_menu ? 'success.main' : 'error.main',
+                                                }}
+                                            />
+                                        </Tooltip>
+                                        <Tooltip title={page.on_footer_menu ? 'В подвале' : 'Не в подвале'}>
+                                            <Box
+                                                sx={{
+                                                    width: 12,
+                                                    height: 12,
+                                                    borderRadius: '50%',
+                                                    backgroundColor: page.on_footer_menu ? 'success.main' : 'error.main',
+                                                }}
+                                            />
+                                        </Tooltip>
+                                        <Tooltip title={page.on_mobile_menu ? 'В мобильном меню' : 'Не в мобильном меню'}>
+                                            <Box
+                                                sx={{
+                                                    width: 12,
+                                                    height: 12,
+                                                    borderRadius: '50%',
+                                                    backgroundColor: page.on_mobile_menu ? 'success.main' : 'error.main',
+                                                }}
+                                            />
+                                        </Tooltip>
+                                    </Box>
                                 </TableCell>
 
                                 {/* Дата создания */}
