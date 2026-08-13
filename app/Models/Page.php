@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
 class Page extends Model
@@ -49,6 +50,149 @@ class Page extends Model
     ];
 
     protected $appends = ['url', 'single_image_src', 'single_thumb'];
+
+    private bool $_disableEventUpdateSlug = false;
+    private bool $_disableEventUpdatePublished = false;
+    protected array $_parents = [];
+
+    public static function boot(): void
+    {
+        parent::boot();
+
+        self::saved(function (self $category) {
+            if ($category->isDirty('alias') || $category->isDirty('parent_id')) {
+                if (!$category->_disableEventUpdateSlug) {
+                    self::updateUrlRecurse($category);
+                }
+            }
+            if ($category->isDirty('published') && $category->published == 0) {
+                if (!$category->_disableEventUpdatePublished) {
+                    self::updateDisablePublishedRecurse($category);
+                }
+            }
+        });
+    }
+
+    public static function updateUrlRecurse(self $category): void
+    {
+        // Проверяем существование категории
+        if (!$category || !$category->exists) {
+            return;
+        }
+
+        $parents = $category->getParents(true, true);
+        $slug_arr = [];
+        foreach ($parents as $parent) {
+            if ($parent && $parent->alias) {
+                $slug_arr[] = $parent->alias;
+            }
+        }
+
+        // Используем try-finally для гарантии сброса флага
+        $category->_disableEventUpdateSlug = true;
+        try {
+            $category->update(['slug' => implode('/', $slug_arr)]);
+
+            // Оптимизация: используем chunk для больших деревьев
+            $category->children()->chunk(100, function ($children) {
+                foreach ($children as $child) {
+                    self::updateUrlRecurse($child);
+                }
+            });
+        } finally {
+            $category->_disableEventUpdateSlug = false;
+        }
+    }
+
+    public static function updateDisablePublishedRecurse(self $category): void
+    {
+        if (!$category || !$category->exists) {
+            return;
+        }
+
+        $category->_disableEventUpdatePublished = true;
+        try {
+            $category->update(['published' => 0]);
+
+            // Исправлено: вызываем правильный метод для рекурсии
+            $category->children()->chunk(100, function ($children) {
+                foreach ($children as $child) {
+                    self::updateDisablePublishedRecurse($child);
+                }
+            });
+        } finally {
+            $category->_disableEventUpdatePublished = false;
+        }
+    }
+
+    public function getParents($with_self = false, $reverse = false): array
+    {
+        $p = $this;
+        $parents = [];
+
+        if ($with_self) {
+            $parents[] = $p;
+        }
+
+        // Используем кэшированные родительские связи
+        if (empty($this->_parents) && $this->parent_id > 1) {
+            $currentParentId = $this->parent_id;
+            $maxDepth = 50; // Защита от бесконечного цикла
+            $depth = 0;
+
+            while ($currentParentId > 1 && $depth < $maxDepth) {
+                $parent = self::getPages($currentParentId);
+                if (!$parent) {
+                    break;
+                }
+                $this->_parents[] = $parent;
+                $currentParentId = $parent->parent_id;
+                $depth++;
+            }
+        }
+
+        $parents = array_merge($parents, $this->_parents);
+
+        if ($reverse) {
+            $parents = array_reverse($parents);
+        }
+
+        return $parents;
+    }
+
+    public static function getPages($id = null)
+    {
+        // Добавляем блокировку для предотвращения гонок при кэшировании
+        $pages = Cache::get('pages', []);
+
+        if (empty($pages)) {
+            // Используем lock для предотвращения множественных запросов
+            $lock = Cache::lock('pages_lock', 10);
+
+            try {
+                $lock->block(5);
+
+                // Повторная проверка после получения блокировки
+                $pages = Cache::get('pages', []);
+
+                if (empty($pages)) {
+                    $pages_arr = Page::all(['id', 'name', 'alias', 'published', 'parent_id']);
+                    foreach ($pages_arr as $item) {
+                        $pages[$item->id] = $item;
+                    }
+                    Cache::put('pages', $pages, 60); // Увеличиваем время кэширования
+                }
+            } finally {
+                optional($lock)->release();
+            }
+        }
+
+        if ($id) {
+            return $pages[$id] ?? null;
+        }
+
+        return $pages;
+    }
 
     /**
      * Переопределяем конфигурацию для страниц
