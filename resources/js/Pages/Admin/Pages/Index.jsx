@@ -364,24 +364,22 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                     )}
                 </Box>
 
-                <Grid container spacing={3} sx={{ height: 'calc(100vh - 150px)', flexWrap: 'nowrap' }}>
+                <Grid container spacing={3} sx={{ flexWrap: 'nowrap' }}>
                     {/* Tree Panel */}
                     <Grid
                         item
                         md={3}
                         sx={{
-                            height: '100%',
-                            width: '25%',
-                            flex: '0 0 25%',
                             display: 'flex',
-                            flexDirection: 'column'
+                            flexDirection: 'column',
+                            flex: '0 0 auto',
+                            minWidth: '250px',
+                            maxWidth: '400px'
                         }}
                     >
                         <Paper
                             sx={{
                                 p: 2,
-                                height: '100%',
-                                overflow: 'auto',
                                 display: 'flex',
                                 flexDirection: 'column',
                                 width: '100%'
@@ -399,7 +397,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                             </Box>
 
                             {treeDataState.length > 0 && (
-                                <Box sx={{ flex: 1, overflow: 'auto' }}>
+                                <Box sx={{ flex: 1 }}>
                                     <Tree
                                         data={treeDataState}
                                         width="100%"
@@ -429,18 +427,15 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                         item
                         md={9}
                         sx={{
-                            height: '100%',
-                            width: '75%',
-                            flex: '0 0 75%',
                             display: 'flex',
-                            flexDirection: 'column'
+                            flexDirection: 'column',
+                            flex: '1 1 auto'
                         }}
                     >
                         <Paper
                             sx={{
                                 p: 3,
                                 height: '100%',
-                                overflow: 'auto',
                                 width: '100%'
                             }}
                         >

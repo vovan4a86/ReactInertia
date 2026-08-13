@@ -59,7 +59,6 @@ const PagesList = ({
     const [orderBy, setOrderBy] = useState('name');
     const [page, setPage] = useState(0);
     const [rowsPerPage, setRowsPerPage] = useState(10);
-    const [hoveredRow, setHoveredRow] = useState(null);
 
     const handleRequestSort = (event, property) => {
         const isAsc = orderBy === property && order === 'asc';
@@ -155,9 +154,6 @@ const PagesList = ({
                         {paginatedPages.map((page) => (
                             <TableRow
                                 key={page.id}
-                                hover
-                                onMouseEnter={() => setHoveredRow(page.id)}
-                                onMouseLeave={() => setHoveredRow(null)}
                                 sx={{
                                     cursor: 'pointer',
                                     '&:last-child td, &:last-child th': { border: 0 }
@@ -241,7 +237,6 @@ const PagesList = ({
                                         sx={{
                                             display: 'flex',
                                             gap: 0.5,
-                                            opacity: hoveredRow === page.id ? 1 : 0,
                                             transition: 'opacity 0.2s ease',
                                         }}
                                     >

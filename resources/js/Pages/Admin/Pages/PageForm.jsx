@@ -277,7 +277,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                 <Tab label="Изображения"/>
             </Tabs>
 
-            <Box sx={{flex: 1, overflow: 'auto'}}>
+            <Box sx={{flex: 1 }}>
                 {activeTab === 0 && (
                     <Box sx={{pr: 2}}>
                         <Box sx={{display: 'flex', gap: 3, pt: 2}}>
