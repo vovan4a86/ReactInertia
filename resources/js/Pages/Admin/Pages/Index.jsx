@@ -1,25 +1,22 @@
 import React, {useState, useEffect, useRef} from 'react';
-import { router } from '@inertiajs/react';
+import {router} from '@inertiajs/react';
 import {Box, Grid, Paper, Typography, CircularProgress, Button, Link, Breadcrumbs} from '@mui/material';
-import { Tree } from 'react-arborist';
+import {Tree} from 'react-arborist';
 import PageForm from './PageForm';
 import TreeNode from './TreeNode';
 import PagesList from './PagesList';
 import AdminLayout from "@/Layouts/Admin/AdminLayout.jsx";
 
-const AdminPages = ({ treeData = [], pagesData = [] }) => {
+const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageData = []}) => {
     const [selectedPage, setSelectedPage] = useState(null);
     const [pageData, setPageData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [treeDataState, setTreeDataState] = useState([]);
     const [createKey, setCreateKey] = useState(0); // Добавляем счетчик для ключа
-
     const [allPages, setAllPages] = useState(pagesData || []);
+
     const [pagesLoading, setPagesLoading] = useState(false);
     const [pagesError, setPagesError] = useState(null);
-
-    const treeContainerRef = useRef(null);
-    const [treeHeight, setTreeHeight] = useState(600);
 
     // Инициализируем данные при загрузке
     useEffect(() => {
@@ -32,43 +29,16 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
 
     // Загрузка всех страниц для списка
     useEffect(() => {
-        if (!selectedPage && pagesData && pagesData.length > 0) {
-            setAllPages(pagesData);
-        } else if (!selectedPage) {
-            fetchAllPages();
-        }
-    }, [selectedPage]);
+        setAllPages(pagesData);
+    }, [pagesData]);
 
-    const fetchAllPages = async () => {
-        setPagesLoading(true);
-        setPagesError(null);
-        try {
-            const response = await fetch('/admin/api/pages');
-            if (!response.ok) throw new Error('Failed to fetch pages');
-            const data = await response.json();
-            setAllPages(data.pages || []);
-        } catch (error) {
-            console.error('Error fetching all pages:', error);
-            setPagesError('Не удалось загрузить список страниц');
-        } finally {
-            setPagesLoading(false);
-        }
-    };
-
-    // Высота дерева
     useEffect(() => {
-        const updateHeight = () => {
-            if (treeContainerRef.current) {
-                const height = treeContainerRef.current.clientHeight;
-                setTreeHeight(height);
-            }
-        };
-
-        updateHeight();
-        window.addEventListener('resize', updateHeight);
-
-        return () => window.removeEventListener('resize', updateHeight);
-    }, []);
+        if (selectedPageData && selectedPageData.length > 0) {
+            setPageData(selectedPageData);
+            console.log(selectedPageData)
+            setSelectedPage({id: selectedPageData.page.id});
+        }
+    }, [selectedPageData]);
 
     const getBreadcrumbs = (page, treeData) => {
         if (!page) return [];
@@ -77,7 +47,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
 
         const findPath = (nodes, targetId, path = []) => {
             for (const node of nodes) {
-                const currentPath = [...path, { id: node.id, title: node.title }];
+                const currentPath = [...path, {id: node.id, title: node.title}];
 
                 if (node.id === targetId) {
                     return currentPath;
@@ -92,30 +62,23 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
         };
 
         const path = findPath(treeData, page.id);
-        return path || [{ id: page.id, title: page.title }];
+        return path || [{id: page.id, title: page.title}];
     };
 
     const handleSelect = (nodes) => {
         if (nodes.length > 0) {
             const node = nodes[0];
             setSelectedPage(node);
-            setLoading(true);
 
-            fetch(`/admin/api/pages/${node.id}`)
-                .then(response => response.json())
-                .then(data => {
-                    setPageData(data);
-                })
-                .catch(error => {
-                    console.error('Error fetching page:', error);
-                })
-                .finally(() => {
-                    setLoading(false);
-                });
+            // Используем Inertia для перехода
+            router.get(`/admin/pages/${node.id}`, {}, {
+                preserveScroll: true,
+                preserveState: false,
+            });
         }
     };
 
-    const handleMove = ({ dragIds, parentId, index }) => {
+    const handleMove = ({dragIds, parentId, index}) => {
         // Оптимистичное обновление UI
         setTreeDataState(prevData => {
             const newData = JSON.parse(JSON.stringify(prevData));
@@ -126,7 +89,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
             const removeNode = (nodes) => {
                 const filtered = nodes.filter(node => {
                     if (node.id === dragIds[0]) {
-                        draggedNode = { ...node };
+                        draggedNode = {...node};
                         return false;
                     }
                     return true;
@@ -178,7 +141,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
         });
 
         // Отправляем на сервер через POST с _method=PUT
-        router.post('/admin/api/pages/reorder', {
+        router.post('/admin/pages/reorder', {
             id: dragIds[0],
             parent_id: parentId,
             order: index,
@@ -204,65 +167,39 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
         const newCreateKey = createKey + 1;
         setCreateKey(newCreateKey);
 
-        // Сначала загружаем список родителей
-        fetch('/admin/api/pages/parents')
-            .then(response => response.json())
-            .then(parentsData => {
-                // Создаем новую страницу с правильным parent_id
-                const newPage = {
-                    id: null,
-                    title: '',
-                    slug: '',
-                    content: '',
-                    parent_id: parentId || '',
-                    is_active: true,
-                    meta_title: '',
-                    meta_description: '',
-                    template: 'default',
-                };
+        // Используем parents из props
+        const newPage = {
+            id: null,
+            name: '',
+            slug: '',
+            text: '',
+            parent_id: parentId || '',
+            published: true,
+            on_main: true,
+            on_header_menu: true,
+            on_footer_menu: true,
+            on_mobile_menu: true,
+            title: '',
+            keywords: '',
+            description: '',
+            og_title: '',
+            og_description: '',
+        };
 
-                // Устанавливаем все данные сразу
-                setPageData({
-                    page: newPage,
-                    parents: parentsData.parents || [],
-                    isNew: true,
-                    createKey: newCreateKey // Добавляем ключ в данные
-                });
+        setPageData({
+            page: newPage,
+            parents: parents, // Берем из props
+            isNew: true,
+            createKey: newCreateKey
+        });
 
-                // Сбрасываем selectedPage
-                setSelectedPage({ id: null, parentId: parentId });
-            })
-            .catch(error => {
-                console.error('Error fetching parents:', error);
-
-                // Даже при ошибке открываем форму
-                const newPage = {
-                    id: null,
-                    title: '',
-                    slug: '',
-                    content: '',
-                    parent_id: parentId || '',
-                    is_active: true,
-                    meta_title: '',
-                    meta_description: '',
-                    template: 'default',
-                };
-
-                setPageData({
-                    page: newPage,
-                    parents: [],
-                    isNew: true,
-                    createKey: newCreateKey
-                });
-
-                setSelectedPage({ id: null, parentId: parentId });
-            });
+        setSelectedPage({ id: null, parentId: parentId });
     };
 
     const handleDelete = (pageId) => {
         if (!confirm('Вы уверены что хотите удалить страницу?')) return;
 
-        router.delete(`/admin/api/pages/${pageId}`, {
+        router.delete(`/admin/pages/${pageId}`, {
             preserveScroll: true,
             preserveState: true,
             onSuccess: () => {
@@ -291,7 +228,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
 
     // Обработчики для PagesList
     const handleEditFromList = (page) => {
-        handleSelect([{ id: page.id }]);
+        handleSelect([{id: page.id}]);
     };
 
     const handleDeleteFromList = (pageId) => {
@@ -304,10 +241,11 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
 
     // Функция для обновления allPages после создания/обновления страницы
     const handlePageSaved = () => {
-        // Обновляем список всех страниц
-        fetchAllPages();
-        // Также нужно обновить дерево
-        // Это можно сделать через Inertia.reload или перезапросить данные
+        // После сохранения перезагружаем страницу
+        router.reload({
+            only: ['treeData', 'pagesData', 'parents'],
+            preserveScroll: true,
+        });
     };
 
     // Генерируем ключ для PageForm
@@ -320,10 +258,10 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
 
     if (treeDataState.length === 0) {
         return (
-            <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+            <Box sx={{p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh'}}>
                 <Box textAlign="center">
-                    <CircularProgress />
-                    <Typography sx={{ mt: 2 }}>Загрузка дерева...</Typography>
+                    <CircularProgress/>
+                    <Typography sx={{mt: 2}}>Загрузка дерева...</Typography>
                 </Box>
             </Box>
         );
@@ -331,8 +269,8 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
 
     return (
         <AdminLayout>
-            <Box sx={{ mr: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{mr: 3}}>
+                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
                     <Typography variant="h4">
                         Менеджер страниц
                     </Typography>
@@ -353,7 +291,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                                         href="#"
                                         onClick={(e) => {
                                             e.preventDefault();
-                                            handleSelect([{ id: item.id }]);
+                                            handleSelect([{id: item.id}]);
                                         }}
                                     >
                                         {item.title}
@@ -364,7 +302,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                     )}
                 </Box>
 
-                <Grid container spacing={3} sx={{ flexWrap: 'nowrap' }}>
+                <Grid container spacing={3} sx={{flexWrap: 'nowrap'}}>
                     {/* Tree Panel */}
                     <Grid
                         item
@@ -385,7 +323,7 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                                 width: '100%'
                             }}
                         >
-                            <Box sx={{ mb: 2, flexShrink: 0 }}>
+                            <Box sx={{mb: 2, flexShrink: 0}}>
                                 <Button
                                     variant="contained"
                                     size="small"
@@ -397,11 +335,11 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                             </Box>
 
                             {treeDataState.length > 0 && (
-                                <Box sx={{ flex: 1 }}>
+                                <Box sx={{flex: 1}}>
                                     <Tree
                                         data={treeDataState}
                                         width="100%"
-                                        height={treeHeight}
+                                        height={600}
                                         indent={24}
                                         rowHeight={36}
                                         onMove={handleMove}
@@ -448,18 +386,18 @@ const AdminPages = ({ treeData = [], pagesData = [] }) => {
                                         height: '100%'
                                     }}
                                 >
-                                    <CircularProgress />
+                                    <CircularProgress/>
                                 </Box>
-                            ) : pageData ? (
+                            ) : selectedPageData && selectedPageData.page ? (
                                 <PageForm
                                     key={getFormKey()}
-                                    page={pageData.page}
-                                    parents={pageData.parents}
-                                    isNew={pageData.isNew || false}
+                                    page={selectedPageData.page}
+                                    parents={selectedPageData.parents}
+                                    isNew={selectedPageData.isNew || false}
                                     onSaved={handlePageSaved}
                                 />
                             ) : (
-                                <Box sx={{ height: '100%' }}>
+                                <Box sx={{height: '100%'}}>
                                     <Typography variant="h6" gutterBottom>
                                         Все страницы
                                     </Typography>

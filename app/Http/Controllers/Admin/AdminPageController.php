@@ -25,25 +25,36 @@ class AdminPageController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
+        // Получаем родителей для формы создания
+        $parents = Page::select('id', 'name')->get();
+
         return Inertia::render('Admin/Pages/Index', [
             'treeData' => $treeData,
             'pagesData' => $pagesData,
+            'parents' => $parents,
         ]);
     }
 
     public function show(Page $page)
     {
         $page->load('parent');
-
-        // Получаем данные страницы с URL изображений
         $pageData = $page->toArray();
         $pageData['images'] = $page->getImagesWithUrls(); // Добавляем URL к изображениям
 
-        return response()->json([
-            'page' => $pageData,
-            'parents' => Page::where('id', '!=', $page->id)
-                ->select('id', 'title')
-                ->get(),
+        $treeData = $this->getTreeData();
+        $pagesData = $this->getPagesData();
+        $parents = Page::where('id', '!=', $page->id)
+            ->select('id', 'title')
+            ->get();
+
+        return Inertia::render('Admin/Pages/Index', [
+            'treeData' => $treeData,
+            'pagesData' => $pagesData,
+            'parents' => $parents,
+            'selectedPageData' => [
+                'page' => $pageData,
+                'parents' => $parents,
+            ],
         ]);
     }
 
@@ -331,5 +342,21 @@ class AdminPageController extends Controller
         return response()->json([
             'parents' => Page::select('id', 'name')->get()
         ]);
+    }
+
+    private function getTreeData()
+    {
+        $pages = Page::getTree();
+        return $pages->map(function ($page) {
+            return $page->toTreeNode();
+        })->values()->toArray();
+    }
+
+    private function getPagesData()
+    {
+        return Page::with('parent')
+            ->orderBy('order')
+            ->orderBy('created_at', 'desc')
+            ->get();
     }
 }

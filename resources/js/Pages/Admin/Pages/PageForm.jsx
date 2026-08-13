@@ -209,23 +209,24 @@ const PageForm = ({page, parents, isNew = false}) => {
             formData.append('_method', 'PUT');
         }
 
-        const url = isNew ? '/admin/api/pages' : `/admin/api/pages/${page.id}`;
+        const url = isNew ? '/admin/pages' : `/admin/pages/${page.id}`;
 
         router.post(url, formData, {
             forceFormData: false,
             preserveScroll: true,
             preserveState: !isNew,
             onSuccess: (page) => {
-                if (!isNew) {
-                    setData(prev => ({
-                        ...prev,
-                        deleted_images: [],
-                        new_images: []
-                    }));
-                }
+                // if (!isNew) {
+                //     setData(prev => ({
+                //         ...prev,
+                //         deleted_images: [],
+                //         new_images: []
+                //     }));
+                // }
             },
             onError: (errors) => {
                 console.error('❌ Submit error:', errors);
+                showMessage('Ошибка при сохранении страницы', 'error');
             }
         });
     };
@@ -328,7 +329,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                                                 variant="outlined">
                                                 <MenuItem value="">Нет (Корневая)</MenuItem>
                                                 {parents?.map(p => (
-                                                    <MenuItem key={p.id} value={p.id}>{p.title}</MenuItem>
+                                                    <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
                                                 ))}
                                             </Select>
                                         </FormControl>
