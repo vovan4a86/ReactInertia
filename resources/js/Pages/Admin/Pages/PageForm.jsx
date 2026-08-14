@@ -21,9 +21,8 @@ import {
     Tooltip,
     Divider,
     Chip,
-    Slide
 } from '@mui/material';
-import { alpha, useTheme } from '@mui/material/styles';
+import { alpha } from '@mui/material/styles';
 import {
     Add,
     Save,
@@ -66,10 +65,9 @@ const PageForm = ({page, parents, isNew = false}) => {
         text: page?.text || '',
         parent_id: page?.parent_id || '',
         published: page?.published !== undefined ? page.published : true,
-        on_main: page?.on_main !== undefined ? page.on_main : true,
-        on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : true,
-        on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : true,
-        on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : true,
+        on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : false,
+        on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : false,
+        on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : false,
         title: page?.title || '',
         keywords: page?.keywords || '',
         description: page?.description || '',
@@ -110,9 +108,9 @@ const PageForm = ({page, parents, isNew = false}) => {
                 parent_id: page?.parent_id || '',
                 published: page?.published !== undefined ? page.published : true,
                 on_main: page?.on_main !== undefined ? page.on_main : true,
-                on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : true,
-                on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : true,
-                on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : true,
+                on_header_menu: page?.on_header_menu !== undefined ? page.on_header_menu : false,
+                on_footer_menu: page?.on_footer_menu !== undefined ? page.on_footer_menu : false,
+                on_mobile_menu: page?.on_mobile_menu !== undefined ? page.on_mobile_menu : false,
                 title: page?.title || '',
                 keywords: page?.keywords || '',
                 description: page?.description || '',
@@ -231,22 +229,6 @@ const PageForm = ({page, parents, isNew = false}) => {
         });
     };
 
-    const handleTitleChange = (event) => {
-        const name = event.target.value;
-        setData('name', name);
-        if (!data.alias || data.alias === slugify(page?.name || '')) {
-            setData('alias', slugify(name));
-        }
-    };
-
-    const slugify = (text) => {
-        if (!text) return '';
-        return text.toLowerCase().trim()
-            .replace(/\s+/g, '-')
-            .replace(/[^\w-]+/g, '')
-            .replace(/--+/g, '-');
-    };
-
     // Правильно для Inertia useForm
     const handleChange = (field) => (event) => {
         setData(field, event.target.value);
@@ -290,7 +272,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                                             fullWidth
                                             label="Название"
                                             value={data.name}
-                                            onChange={handleTitleChange}
+                                            onChange={handleChange('name')}
                                             error={!!errors.name}
                                             helperText={errors.name}
                                             required

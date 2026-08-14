@@ -7,6 +7,9 @@ import TreeNode from './TreeNode';
 import PagesList from './PagesList';
 import AdminLayout from "@/Layouts/Admin/AdminLayout.jsx";
 
+const treePanelMinWidth = '400px';
+const treePanelMaxWidth = '600px';
+
 const AdminPages = ({
                         treeData = [],
                         pagesData = [],
@@ -17,7 +20,6 @@ const AdminPages = ({
     const [pageData, setPageData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [treeDataState, setTreeDataState] = useState([]);
-    const [createKey, setCreateKey] = useState(0);
     const [allPages, setAllPages] = useState(pagesData || []);
     const [pagesLoading, setPagesLoading] = useState(false);
     const [pagesError, setPagesError] = useState(null);
@@ -39,14 +41,6 @@ const AdminPages = ({
     useEffect(() => {
         setAllPages(pagesData);
     }, [pagesData]);
-
-    useEffect(() => {
-        if (selectedPageData && selectedPageData.length > 0) {
-            setPageData(selectedPageData);
-            console.log(selectedPageData)
-            setSelectedPage({ id: selectedPageData.page.id });
-        }
-    }, [selectedPageData]);
 
     // Обработчик изменения состояния узла
     const handleNodeToggle = useCallback((nodeId, isOpen) => {
@@ -217,37 +211,13 @@ const AdminPages = ({
     };
 
     const handleCreate = (parentId = null) => {
-        // Увеличиваем счетчик для создания нового ключа
-        const newCreateKey = createKey + 1;
-        setCreateKey(newCreateKey);
-
-        // Используем parents из props
-        const newPage = {
-            id: null,
-            name: '',
-            slug: '',
-            text: '',
-            parent_id: parentId || '',
-            published: true,
-            on_main: true,
-            on_header_menu: true,
-            on_footer_menu: true,
-            on_mobile_menu: true,
-            title: '',
-            keywords: '',
-            description: '',
-            og_title: '',
-            og_description: '',
-        };
-
-        setPageData({
-            page: newPage,
-            parents: parents,
-            isNew: true,
-            createKey: newCreateKey
-        });
-
-        setSelectedPage({ id: null, parentId: parentId });
+        router.get('/admin/pages/create',
+            parentId ? { parent_id: parentId } : {},
+            {
+                preserveScroll: true,
+                preserveState: false,
+            }
+        );
     };
 
     const handleDelete = (pageId) => {
@@ -300,14 +270,6 @@ const AdminPages = ({
             only: ['treeData', 'pagesData', 'parents'],
             preserveScroll: true,
         });
-    };
-
-    // Генерируем ключ для PageForm
-    const getFormKey = () => {
-        if (pageData?.isNew) {
-            return `new-${pageData.createKey || createKey}`;
-        }
-        return pageData?.page?.id || 'empty';
     };
 
     if (treeDataState.length === 0) {
@@ -365,8 +327,8 @@ const AdminPages = ({
                             display: 'flex',
                             flexDirection: 'column',
                             flex: '0 0 auto',
-                            minWidth: '250px',
-                            maxWidth: '400px'
+                            minWidth: treePanelMinWidth,
+                            maxWidth: treePanelMaxWidth
                         }}
                     >
                         <Paper
@@ -446,7 +408,6 @@ const AdminPages = ({
                                 </Box>
                             ) : selectedPageData && selectedPageData.page ? (
                                 <PageForm
-                                    key={getFormKey()}
                                     page={selectedPageData.page}
                                     parents={selectedPageData.parents}
                                     isNew={selectedPageData.isNew || false}

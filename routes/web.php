@@ -73,10 +73,9 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::prefix('pages')->name('pages.')->group(function () {
             Route::get('/', [AdminPageController::class, 'index'])->name('index');
 
-            // Маршрут для reorder ДОЛЖЕН быть перед {page}
+            // Маршруты ДОЛЖНЫ быть перед {page}
+            Route::get('/create', [AdminPageController::class, 'create'])->name('create');
             Route::put('/reorder', [AdminPageController::class, 'reorder'])->name('reorder');
-
-            // Родители для формы
             Route::get('/parents', [AdminPageController::class, 'parents'])->name('parents');
 
             // CRUD операции
@@ -84,16 +83,6 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
             Route::get('/{page}', [AdminPageController::class, 'show'])->name('show');
             Route::put('/{page}', [AdminPageController::class, 'update'])->name('update');
             Route::delete('/{page}', [AdminPageController::class, 'destroy'])->name('destroy');
-
-            // Работа с изображениями
-            Route::post('/{page}/upload-images', [AdminPageController::class, 'uploadImages'])
-                ->name('upload-images');
-
-            Route::post('/{page}/delete-image', [AdminPageController::class, 'deleteImage'])
-                ->name('delete-image');
-
-            Route::post('/{page}/reorder-images', [AdminPageController::class, 'reorderImages'])
-                ->name('reorder-images');
         });
         Route::resource('articles', AdminArticleController::class);
 

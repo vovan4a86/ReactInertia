@@ -44,7 +44,7 @@ class AdminPageController extends Controller
         $treeData = $this->getTreeData();
         $pagesData = $this->getPagesData();
         $parents = Page::where('id', '!=', $page->id)
-            ->select('id', 'title')
+            ->select('id', 'name')
             ->get();
 
         return Inertia::render('Admin/Pages/Index', [
@@ -58,12 +58,42 @@ class AdminPageController extends Controller
         ]);
     }
 
+    public function create(Request $request)
+    {
+        $page = new Page();
+        $pageData = $page->toArray();
+        $pageData['images'] = [];
+        $pageData['id'] = null;
+
+        // Если передан parent_id, устанавливаем его
+        if ($request->has('parent_id')) {
+            $pageData['parent_id'] = $request->input('parent_id');
+        }
+
+        $treeData = $this->getTreeData();
+        $pagesData = $this->getPagesData();
+        $parents = Page::where('id', '!=', $page->id)
+            ->select('id', 'name')
+            ->get();
+
+        return Inertia::render('Admin/Pages/Index', [
+            'treeData' => $treeData,
+            'pagesData' => $pagesData,
+            'parents' => $parents,
+            'selectedPageData' => [
+                'page' => $pageData,
+                'parents' => $parents,
+                'isNew' => true,
+            ],
+        ]);
+    }
+
     public function store(Request $request)
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'h1' => 'nullable|string|max:255',
-            'alias' => 'required|string|max:255',
+            'alias' => 'nullable|string|max:255',
             'slug' => 'nullable|string|max:255',
             'announce' => 'nullable|string',
             'text' => 'nullable|string',
@@ -99,7 +129,7 @@ class AdminPageController extends Controller
 
         // Создаем страницу с базовыми данными
         $pageData = $validated;
-        $pageData['images'] = []; // Временно пустой массивadd
+        $pageData['images'] = [];
         unset($pageData['new_images']);
 
         $page = Page::create($pageData);
@@ -137,7 +167,7 @@ class AdminPageController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'h1' => 'nullable|string|max:255',
-            'alias' => 'required|string|max:255',
+            'alias' => 'nullable|string|max:255',
             'slug' => 'nullable|string|max:255',
             'announce' => 'nullable|string',
             'text' => 'nullable|string',
