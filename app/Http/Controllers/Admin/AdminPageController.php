@@ -211,11 +211,6 @@ class AdminPageController extends Controller
 
         $images = $validated['images'] ?? [];
 
-        $deletedImages = [];
-        if (!empty($validated['deleted_images'])) {
-            $deletedImages = is_string($validated['deleted_images']) ? json_decode($validated['deleted_images'], true) : $validated['deleted_images'];
-        }
-
         // Получаем текущие изображения из БД
         $currentImages = $page->images ?? [];
 

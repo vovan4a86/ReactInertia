@@ -41,9 +41,10 @@ const PageForm = ({page, parents, isNew = false}) => {
     const [activeTab, setActiveTab] = useState(0);
     const previousPageId = useRef(null);
     const [previewOpen, setPreviewOpen] = useState(false);
+    const syncKey = `${page?.id || 'new'}-${page?.images?.length || 0}`;
 
     // сообщения для локальных изменений
-    const { showMessage } = useLocalNotification();
+    const {showMessage} = useLocalNotification();
 
     const BOOLEAN_FIELDS = [
         'published',
@@ -88,21 +89,15 @@ const PageForm = ({page, parents, isNew = false}) => {
         new_images: [],
     });
 
+    // console.log('data.images:', data.images);
+
     // Инициализация только при первой загрузке или смене страницы
     useEffect(() => {
-        const currentPageId = page?.id || 'new';
-
         // Инициализируем только если страница изменилась
-        if (previousPageId.current !== currentPageId) {
+        if (previousPageId.current !== syncKey) {
 
             // Получаем ID существующих изображений
             const existingImages = page?.images || [];
-            const existingImageIds = existingImages.map(img => {
-                if (typeof img === 'object') {
-                    return img.original || img.id || img;
-                }
-                return img;
-            });
 
             reset();
             setData({
@@ -126,15 +121,15 @@ const PageForm = ({page, parents, isNew = false}) => {
                 image: null,
                 image_preview: page?.single_thumb || null,
                 image_src: page?.single_image_src || null,
-                images: existingImageIds,
+                images: existingImages,
                 deleted_images: [],
                 new_images: [],
             });
 
             setActiveTab(0);
-            previousPageId.current = currentPageId;
+            previousPageId.current = syncKey;
         }
-    }, [page?.id, isNew]);
+    }, [page?.id, page?.images?.length, isNew]);
 
     // Обработчик изображений - ПРИНИМАЕТ ФАЙЛЫ НАПРЯМУЮ
     const handleImagesChange = useCallback((
@@ -160,6 +155,9 @@ const PageForm = ({page, parents, isNew = false}) => {
         // Добавляем все текстовые поля
         Object.keys(data).forEach(key => {
             if (key === 'new_images') return;
+            if (key === 'images') return;
+            if (key === 'image') return;
+            if (key === 'deleted_images') return;
             if (key === 'image' && !(data[key] instanceof File)) return;
             if (key === 'image_deleted' && !data[key]) return;
 
@@ -180,13 +178,16 @@ const PageForm = ({page, parents, isNew = false}) => {
         }
 
         if (data.images && Array.isArray(data.images)) {
-            data.images.forEach((imageId, index) => {
+            data.images.forEach((img, index) => {
+                const imageId = typeof img === 'object' ? (img.original || img.id) : img;
                 formData.append(`images[${index}]`, imageId);
             });
         }
 
         if (data.deleted_images?.length > 0) {
-            formData.append('deleted_images', JSON.stringify(data.deleted_images));
+            data.deleted_images.forEach((id, index) => {
+                formData.append(`deleted_images[${index}]`, id);
+            });
         }
 
         if (data.new_images?.length > 0) {
@@ -252,7 +253,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                 <Tab label="Изображения"/>
             </Tabs>
 
-            <Box sx={{flex: 1 }}>
+            <Box sx={{flex: 1}}>
                 {activeTab === 0 && (
                     <Box sx={{pr: 2}}>
                         <Box sx={{display: 'flex', gap: 3, pt: 2}}>
@@ -569,9 +570,9 @@ const PageForm = ({page, parents, isNew = false}) => {
                         </Box>
 
 
-                        <Box sx={{ my: 2 }}>
-                            <Divider sx={{ mb: 2 }}>
-                                <Chip label="Видимость" size="small" />
+                        <Box sx={{my: 2}}>
+                            <Divider sx={{mb: 2}}>
+                                <Chip label="Видимость" size="small"/>
                             </Divider>
 
                             <Box
@@ -621,7 +622,10 @@ const PageForm = ({page, parents, isNew = false}) => {
                                             transition: 'all 0.2s',
                                         }}
                                     >
-                                        <Box sx={{ mr: 2, minWidth: 0 }}> {/* minWidth: 0 для корректного переноса текста */}
+                                        <Box sx={{
+                                            mr: 2,
+                                            minWidth: 0
+                                        }}> {/* minWidth: 0 для корректного переноса текста */}
                                             <Typography variant="body2" fontWeight={500} noWrap>
                                                 {item.title}
                                             </Typography>
@@ -640,7 +644,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                                             onChange={(e) => setData(item.key, e.target.checked)}
                                             size="small"
                                             color="success"
-                                            sx={{ flexShrink: 0 }}
+                                            sx={{flexShrink: 0}}
                                         />
                                         {/* flexShrink: 0 Чтобы switch не сжимался */}
                                     </Box>
@@ -674,7 +678,7 @@ const PageForm = ({page, parents, isNew = false}) => {
                             JPEG, PNG, GIF, WebP • Макс. 10MB • Автоконвертация в WebP
                         </Typography>
                         <ImageUploader
-                            key={page?.id || 'new'}
+                            key={syncKey}
                             images={data.images}
                             pageId={page?.id}
                             uploadUrl={`/admin/pages/${page?.id || 'new'}/upload-images`}

@@ -167,16 +167,6 @@ const ImageUploader = ({
         }
     }, [externalImages, isInitialized]);
 
-    // Сброс инициализации при смене страницы
-    useEffect(() => {
-        // Сбрасываем инициализацию при смене страницы
-        setIsInitialized(false);
-        // Очищаем состояние
-        setLocalImages([]);
-        setNewFiles([]);
-        setDeletedImageIds([]);
-    }, [pageId]);
-
     // Функция для отправки данных родителю
     const notifyParent = useCallback((images, files, deleted) => {
         if (onChangeRef.current) {
