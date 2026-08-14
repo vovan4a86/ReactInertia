@@ -1,52 +1,57 @@
-import React, {useState, useEffect, useCallback, useRef} from 'react';
-import {useForm, router} from '@inertiajs/react';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {router, useForm} from '@inertiajs/react';
 import {
     Box,
-    Typography,
-    TextField,
     Button,
-    Grid,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
-    FormControlLabel,
-    Switch,
-    Tabs,
-    Tab,
-    IconButton,
-    FormHelperText,
+    Chip,
     Dialog,
     DialogContent,
-    Tooltip,
     Divider,
-    Chip,
+    FormControl,
+    FormControlLabel,
+    FormHelperText,
+    Grid,
+    IconButton,
+    InputLabel,
+    MenuItem,
+    Select,
+    Switch,
+    Tab,
+    Tabs,
+    TextField,
+    Tooltip,
+    Typography,
 } from '@mui/material';
-import { alpha } from '@mui/material/styles';
+import {alpha} from '@mui/material/styles';
 import {
     Add,
-    Save,
-    OpenInNew as OpenInNewIcon,
     Close as CloseIcon,
-    Delete as DeleteIcon,
-    ZoomIn as ZoomInIcon,
     CloudUpload as CloudUploadIcon,
+    Delete as DeleteIcon,
+    OpenInNew as OpenInNewIcon,
+    Save,
     SwapHoriz as SwapHorizIcon,
+    ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
 import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
 import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
-import { useLocalNotification } from '@/Contexts/Admin/LocalNotificationContext.jsx';
+import {useLocalNotification} from '@/Contexts/Admin/LocalNotificationContext.jsx';
 
 const PageForm = ({page, parents, isNew = false}) => {
     const [activeTab, setActiveTab] = useState(0);
-    const isInitialized = useRef(false);
     const previousPageId = useRef(null);
     const [previewOpen, setPreviewOpen] = useState(false);
 
     // сообщения для локальных изменений
     const { showMessage } = useLocalNotification();
 
-    const BOOLEAN_FIELDS = ['published', 'on_main', 'on_header_menu', 'on_footer_menu', 'on_mobile_menu'];
+    const BOOLEAN_FIELDS = [
+        'published',
+        'on_main',
+        'on_header_menu',
+        'on_footer_menu',
+        'on_mobile_menu'
+    ];
 
     const {
         data,
@@ -55,7 +60,8 @@ const PageForm = ({page, parents, isNew = false}) => {
         put,
         processing,
         errors,
-        reset
+        reset,
+        transform
     } = useForm({
         name: page?.name || '',
         h1: page?.h1 || '',
@@ -74,6 +80,7 @@ const PageForm = ({page, parents, isNew = false}) => {
         og_title: page?.og_title || '',
         og_description: page?.og_description || '',
         image: null,
+        image_deleted: false,
         image_preview: page?.single_thumb || null,
         image_src: page?.single_image_src || null,
         images: [],
@@ -125,80 +132,67 @@ const PageForm = ({page, parents, isNew = false}) => {
             });
 
             setActiveTab(0);
-            isInitialized.current = true;
             previousPageId.current = currentPageId;
         }
     }, [page?.id, isNew]);
 
     // Обработчик изображений - ПРИНИМАЕТ ФАЙЛЫ НАПРЯМУЮ
-    const handleImagesChange = useCallback((newImagesOrder, newFiles, deletedImageIds) => {
-        // Обновляем состояние НАПРЯМУЮ через setData
-        setData(prevData => {
-            const updatedData = {
-                ...prevData,
-                images: newImagesOrder,
-                deleted_images: [...(prevData.deleted_images || []), ...(deletedImageIds || [])]
-            };
-
-            // ПРЯМО устанавливаем new_images из переданных файлов
-            if (newFiles && newFiles.length > 0) {
-                updatedData.new_images = [...newFiles];
-                showMessage('Изображения добавлены. Не забудьте сохранить страницу!', 'warning');
-            } else if (newFiles && newFiles.length === 0) {
-                // Если файлов нет, но есть существующие - сохраняем их
-                // Если файлов нет и не было - очищаем
-                if (prevData.new_images && prevData.new_images.length > 0) {
-                    // Проверяем, есть ли еще новые изображения в localImages
-                    const hasNewImages = newImagesOrder.some(id => typeof id === 'string' && id.startsWith('new_'));
-                    if (!hasNewImages) {
-                        updatedData.new_images = [];
-                    }
-                }
-            }
-
-            return updatedData;
-        });
-    }, [setData, showMessage]);
+    const handleImagesChange = useCallback((
+        newImagesOrder,
+        newFiles,
+        deletedImageIds
+    ) => {
+        setData(prevData => ({
+            ...prevData,
+            images: newImagesOrder,
+            deleted_images: deletedImageIds || [],
+            new_images: newFiles || [],
+        }));
+    }, [setData]);
 
     const handleSubmit = (e) => {
         e.preventDefault();
 
-        // Создаем FormData
+        const url = isNew ? '/admin/pages' : `/admin/pages/${page.id}`;
+
         const formData = new FormData();
-        formData.append('name', data.name);
-        formData.append('h1', data.h1);
-        formData.append('alias', data.alias);
-        formData.append('slug', data.slug);
-        formData.append('text', data.text || '');
-        formData.append('parent_id', data.parent_id || '');
+
+        // Добавляем все текстовые поля
+        Object.keys(data).forEach(key => {
+            if (key === 'new_images') return;
+            if (key === 'image' && !(data[key] instanceof File)) return;
+            if (key === 'image_deleted' && !data[key]) return;
+
+            if (data[key] !== null && data[key] !== undefined) {
+                formData.append(key, data[key]);
+            }
+        });
 
         // отправляем switch
         BOOLEAN_FIELDS.forEach(field => {
             formData.append(field, data[field] ? '1' : '0');
         });
 
-        formData.append('title', data.title || '');
-        formData.append('keywords', data.keywords || '');
-        formData.append('description', data.description || '');
-        formData.append('og_title', data.og_title || '');
-        formData.append('og_description', data.og_description || '');
-        formData.append('images', JSON.stringify(data.images));
-        formData.append('deleted_images', JSON.stringify(data.deleted_images || []));
 
-        // Если изображение удалено, отправляем пустую строку
-        if (data.image_deleted) {
-            formData.append('image_deleted', true); // или можно отправить специальный параметр
-        } else if (data.image instanceof File) {
+        // Добавляем изображения отдельно
+        if (data.image instanceof File) {
             formData.append('image', data.image);
         }
 
-        // Добавляем новые изображения
-        if (data.new_images && data.new_images.length > 0) {
+        if (data.images && Array.isArray(data.images)) {
+            data.images.forEach((imageId, index) => {
+                formData.append(`images[${index}]`, imageId);
+            });
+        }
+
+        if (data.deleted_images?.length > 0) {
+            formData.append('deleted_images', JSON.stringify(data.deleted_images));
+        }
+
+        if (data.new_images?.length > 0) {
             data.new_images.forEach((file, index) => {
                 if (file instanceof File) {
-                    formData.append('new_images[]', file, file.name);
-                } else {
-                    console.error(`❌ Invalid file at index ${index}:`, file);
+                    formData.append(`new_images[${index}]`, file);
                 }
             });
         }
@@ -207,27 +201,25 @@ const PageForm = ({page, parents, isNew = false}) => {
             formData.append('_method', 'PUT');
         }
 
-        const url = isNew ? '/admin/pages' : `/admin/pages/${page.id}`;
-
         router.post(url, formData, {
-            forceFormData: false,
+            forceFormData: true,
             preserveScroll: true,
-            preserveState: !isNew,
-            onSuccess: (page) => {
-                // if (!isNew) {
-                //     setData(prev => ({
-                //         ...prev,
-                //         deleted_images: [],
-                //         new_images: []
-                //     }));
-                // }
-            },
             onError: (errors) => {
-                console.error('❌ Submit error:', errors);
-                showMessage('Ошибка при сохранении страницы', 'error');
-            }
+                // Вручную устанавливаем ошибки
+                console.log(errors)
+                // setErrors(errors);
+            },
+            onSuccess: () => {
+                setData(prev => ({
+                    ...prev,
+                    deleted_images: [],
+                    image_deleted: false,
+                    new_images: [],
+                }));
+            },
         });
     };
+
 
     // Правильно для Inertia useForm
     const handleChange = (field) => (event) => {

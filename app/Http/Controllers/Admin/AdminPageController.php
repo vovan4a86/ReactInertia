@@ -110,7 +110,10 @@ class AdminPageController extends Controller
             'og_title' => 'nullable|string|max:255',
             'og_description' => 'nullable|string|max:255',
             'image' => 'nullable|image|max:10240',
-            'images' => 'nullable',
+            'image_deleted' => 'nullable|boolean',
+            'images' => 'nullable|array',
+            'deleted_images' => 'nullable|array',
+            'deleted_images.*' => 'string',
             'new_images' => 'nullable|array',
             'new_images.*' => 'image|max:10240',
         ]);
@@ -135,13 +138,9 @@ class AdminPageController extends Controller
         $page = Page::create($pageData);
 
         if ($request->hasFile('image')) {
-            $imageData = $page->uploadSingleImage($request->file('image'));
-            $page->update(['image' => $imageData['original'] ?? null]);
-        } else {
-            $page->update(['image' => null]);
+            $page->image = $page->uploadSingleImage($request->file('image'));
         }
 
-        // Загружаем изображения после создания страницы
         $uploadedImages = [];
         if ($request->hasFile('new_images')) {
             foreach ($request->file('new_images') as $file) {
@@ -150,16 +149,16 @@ class AdminPageController extends Controller
                     $uploadedImages[] = $imageData;
                 }
             }
-
-            if (!empty($uploadedImages)) {
-                $page->update(['images' => $uploadedImages]);
-                $page->refresh();
-            }
         }
 
-        return redirect()
-            ->route('admin.pages.show', $page->id)
-            ->with('success', 'Страница создана');
+        $page->images = $uploadedImages;
+        $page->save();
+
+        return redirect()->back()->with('success', 'Страница создана');
+
+//        return redirect()
+//            ->route('admin.pages.show', $page->id)
+//            ->with('success', 'Страница создана');
     }
 
     public function update(Request $request, Page $page)
@@ -198,7 +197,10 @@ class AdminPageController extends Controller
             'og_title' => 'nullable|string|max:255',
             'og_description' => 'nullable|string|max:255',
             'image' => 'nullable|image|max:10240',
-            'images' => 'nullable',
+            'image_deleted' => 'nullable|boolean',
+            'images' => 'nullable|array',
+            'deleted_images' => 'nullable|array',
+            'deleted_images.*' => 'string',
             'new_images' => 'nullable|array',
             'new_images.*' => 'image|max:10240',
         ]);
@@ -207,11 +209,7 @@ class AdminPageController extends Controller
             $validated['alias'] = Str::slug($validated['alias']);
         }
 
-        // Декодируем JSON строки в массивы, если нужно
-        $images = [];
-        if (!empty($validated['images'])) {
-            $images = is_string($validated['images']) ? json_decode($validated['images'], true) : $validated['images'];
-        }
+        $images = $validated['images'] ?? [];
 
         $deletedImages = [];
         if (!empty($validated['deleted_images'])) {
@@ -221,90 +219,74 @@ class AdminPageController extends Controller
         // Получаем текущие изображения из БД
         $currentImages = $page->images ?? [];
 
-        // Обработка удаления изображений
-        if (!empty($deletedImages)) {
+        $currentImagesMap = [];
+        foreach ($currentImages as $image) {
+            $key = $image['original'] ?? null;
+            if ($key) {
+                $currentImagesMap[$key] = $image;
+            }
+        }
 
-            foreach ($deletedImages as $imageId) {
-                // Ищем изображение по ID в текущих изображениях
-                foreach ($currentImages as $index => $image) {
-                    $currentImageId = $image['original'] ?? null;
-                    if ($currentImageId === $imageId) {
-                        $page->deleteImage($image);
-                        unset($currentImages[$index]);
-                        break;
-                    }
+        // Обработка удаления
+        if (!empty($validated['deleted_images'])) {
+            foreach ($validated['deleted_images'] as $deletedId) {
+                if (isset($currentImagesMap[$deletedId])) {
+                    $page->deleteImage($currentImagesMap[$deletedId]);
+                    unset($currentImagesMap[$deletedId]);
                 }
             }
-            // Переиндексируем массив
-            $currentImages = array_values($currentImages);
         }
 
         // Применяем новый порядок изображений
-        if (!empty($images)) {
-            $orderedImages = [];
-            $unmatchedImages = [];
-
-            // Сначала находим изображения в указанном порядке
-            foreach ($images as $imageId) {
-                $found = false;
-                foreach ($currentImages as $key => $image) {
-                    $currentImageId = $image['original'] ?? null;
-                    if ($currentImageId === $imageId) {
-                        $orderedImages[] = $image;
-                        unset($currentImages[$key]);
-                        $found = true;
-                        break;
-                    }
-                }
-                // Если это ID нового изображения (начинается с "new_"), пропускаем
-                if (!$found && !str_starts_with($imageId, 'new_')) {
-                    \Log::warning('Image not found for reordering:', ['id' => $imageId]);
+        $orderedImages = [];
+        if (!empty($validated['images'])) {
+            foreach ($validated['images'] as $imageId) {
+                if (isset($currentImagesMap[$imageId])) {
+                    $orderedImages[] = $currentImagesMap[$imageId];
+                    unset($currentImagesMap[$imageId]);
                 }
             }
-
-            // Добавляем оставшиеся изображения, которые не были в списке порядка
-            $currentImages = array_merge($orderedImages, array_values($currentImages));
         }
 
-        // Обработка новых загруженных изображений
-        if ($request->hasFile('new_images')) {
+        // Добавляем оставшиеся изображения
+        $currentImages = array_merge($orderedImages, array_values($currentImagesMap));
 
-            $uploadedImages = [];
+        // Обработка новых изображений
+        if ($request->hasFile('new_images')) {
             foreach ($request->file('new_images') as $file) {
                 $imageData = $page->uploadImages($file);
                 if ($imageData) {
-                    $uploadedImages[] = $imageData;
+                    $currentImages[] = $imageData;
                 }
             }
-
-            // Добавляем новые изображения в конец
-            $currentImages = array_merge($currentImages, $uploadedImages);
         }
 
-        // Обработка одиночного изображения страницы
+        // Обработка одиночного изображения
         if ($request->hasFile('image')) {
-            // Удаляем старое изображение
             if ($page->image) {
                 $page->deleteSingleImage($page->image);
             }
-            // Загружаем новое
-            $validated['image'] = $page->uploadSingleImage($request->file('image'));
-        } elseif ($request->has('image_deleted') && $request->input('image_deleted') === 'true') {
-            // Явное удаление изображения
+            $page->image = $page->uploadSingleImage($request->file('image'));
+        } elseif ($request->boolean('image_deleted')) {
             if ($page->image) {
                 $page->deleteSingleImage($page->image);
             }
-            $validated['image'] = null;
+            $page->image = null;
         }
 
-        // Обновляем данные для сохранения
-        $validated['images'] = $currentImages;
-        unset($validated['new_images']);
-        unset($validated['deleted_images']);
+        // Обновляем страницу
+        $page->images = $currentImages;
+        $page->save();
 
-        // Сохраняем все изменения разом
+        // Обновляем остальные поля
+        unset($validated['images']);
+        unset($validated['deleted_images']);
+        unset($validated['new_images']);
+        unset($validated['image_deleted']);
+        unset($validated['image']);
+
         $page->update($validated);
-        $page->refresh();
+//        $page->refresh();
 
         return redirect()->back()->with('success', 'Страница обновлена');
     }

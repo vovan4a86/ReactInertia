@@ -155,14 +155,12 @@ const ImageUploader = ({
 
     // Инициализация из внешних данных
     useEffect(() => {
-        if (!isInitialized && externalImages && externalImages.length > 0) {
-            // Сохраняем все изображения (существующие + новые)
-            setLocalImages([...externalImages]);
-            setNewFiles([]);
-            setDeletedImageIds([]);
-            setIsInitialized(true);
-        } else if (!isInitialized && (!externalImages || externalImages.length === 0)) {
-            setLocalImages([]);
+        if (!isInitialized) {
+            if (externalImages && externalImages.length > 0) {
+                setLocalImages([...externalImages]);
+            } else {
+                setLocalImages([]);
+            }
             setNewFiles([]);
             setDeletedImageIds([]);
             setIsInitialized(true);
@@ -171,7 +169,12 @@ const ImageUploader = ({
 
     // Сброс инициализации при смене страницы
     useEffect(() => {
+        // Сбрасываем инициализацию при смене страницы
         setIsInitialized(false);
+        // Очищаем состояние
+        setLocalImages([]);
+        setNewFiles([]);
+        setDeletedImageIds([]);
     }, [pageId]);
 
     // Функция для отправки данных родителю
