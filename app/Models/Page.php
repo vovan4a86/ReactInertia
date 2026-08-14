@@ -302,7 +302,7 @@ class Page extends Model
     public function toTreeNode(): array
     {
         return [
-            'id' => $this->id,
+            'id' => (string)$this->id, //обязательно string для react-дерева
             'title' => $this->name,
             'slug' => $this->alias,
             'is_active' => $this->published,

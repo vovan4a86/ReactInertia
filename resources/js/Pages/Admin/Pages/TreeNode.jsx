@@ -1,9 +1,16 @@
-import React from 'react';
-import { Box, IconButton, Typography, Chip } from '@mui/material';
-import { Add, Edit, Delete, DragIndicator } from '@mui/icons-material';
+import React, {useEffect} from 'react';
+import { Box, IconButton, Typography, Chip, Tooltip } from '@mui/material';
+import {Add, Edit, Delete, ExpandMore, Folder, FolderOpen, Article} from '@mui/icons-material';
 
-const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) => {
-    // В react-arborist данные узла находятся в node.data
+const TreeNode = ({
+                      node,
+                      style,
+                      dragHandle,
+                      onAddChild,
+                      onDelete,
+                      onSelect,
+                      onToggleNode,
+                  }) => {
     const data = node.data;
 
     if (!data) {
@@ -14,70 +21,117 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
         );
     }
 
-    // Обработчик клика по названию страницы
     const handleTitleClick = (e) => {
         e.stopPropagation();
-        // Вызываем select для узла и передаем данные в родительский компонент
         node.select();
         if (onSelect) {
             onSelect([{ id: data.id }]);
         }
     };
 
+    const handleToggle = (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+
+        // Вызываем toggle
+        node.toggle();
+
+        // Уведомляем родителя об изменении
+        if (onToggleNode) {
+            onToggleNode(data.id, !node.isOpen);
+        }
+    };
+
+    const hasChildren = node.children && node.children.length > 0;
+
+    const getNodeIcon = () => {
+        if (hasChildren) {
+            return node.isOpen ? (
+                <FolderOpen sx={{ fontSize: 16, color: 'primary.main' }} />
+            ) : (
+                <Folder sx={{ fontSize: 16, color: 'primary.main' }} />
+            );
+        }
+        return <Article sx={{ fontSize: 16, color: 'text.secondary' }} />;
+    };
+
     return (
         <Box
             style={style}
-            ref={dragHandle} // ВАЖНО: привязываем dragHandle к корневому элементу
+            ref={dragHandle}
             sx={{
                 display: 'flex',
                 alignItems: 'center',
-                px: 1,
+                px: 0.75,
+                py: 0.25,
                 border: '1px solid transparent',
                 borderRadius: 1,
-                transition: 'all 0.2s ease',
+                transition: 'all 0.15s ease',
                 cursor: 'pointer',
-                '&.tree-node-row:hover .action-buttons': {
-                    opacity: 1
-                },
+                minHeight: 32,
                 '&:hover': {
                     backgroundColor: 'action.hover',
+                    '& .action-buttons': {
+                        opacity: 1,
+                        transform: 'translateX(0)'
+                    }
                 },
                 ...(node.isSelected && {
-                    backgroundColor: 'primary.light',
-                    color: 'primary.contrastText',
+                    backgroundColor: 'primary.50',
+                    border: '1px solid',
+                    borderColor: 'primary.main',
                     '&:hover': {
-                        backgroundColor: 'primary.main',
+                        backgroundColor: 'primary.100',
                     },
                 }),
             }}
             className="tree-node-row"
             onClick={handleTitleClick}
         >
-            {/* Drag Handle */}
-            <Box
-                sx={{
-                    mr: 0.5,
-                    cursor: 'grab',
-                    display: 'flex',
-                    alignItems: 'center',
-                    opacity: 0.5,
-                    '&:hover': {
-                        opacity: 1
-                    }
-                }}
-            >
-                <DragIndicator fontSize="small" />
+            {/* Toggle Button for expand/collapse */}
+            {hasChildren ? (
+                <Tooltip title={node.isOpen ? "Свернуть" : "Развернуть"}>
+                    <IconButton
+                        size="small"
+                        onClick={handleToggle}
+                        sx={{
+                            width: 20,
+                            height: 20,
+                            mr: 0.25,
+                            transform: node.isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
+                            transition: 'transform 0.15s ease',
+                            color: 'text.secondary',
+                            '&:hover': {
+                                color: 'primary.main',
+                            }
+                        }}
+                    >
+                        <ExpandMore sx={{ fontSize: 16 }} />
+                    </IconButton>
+                </Tooltip>
+            ) : (
+                <Box sx={{ width: 20, mr: 0.25 }} />
+            )}
+
+            {/* Node Icon */}
+            <Box sx={{
+                mr: 0.75,
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0
+            }}>
+                {getNodeIcon()}
             </Box>
 
-            {/* Page Title - Clickable for editing */}
+            {/* Page Title */}
             <Box
                 sx={{
                     flex: 1,
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 1,
+                    gap: 0.75,
                     cursor: 'pointer',
-                    minWidth: 0, // Important for text overflow
+                    minWidth: 0,
                 }}
                 onClick={handleTitleClick}
             >
@@ -85,6 +139,7 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                     variant="body2"
                     noWrap
                     sx={{
+                        fontSize: '0.875rem',
                         '&:hover': {
                             textDecoration: 'underline'
                         }
@@ -98,61 +153,102 @@ const TreeNode = ({ node, style, dragHandle, onAddChild, onDelete, onSelect }) =
                         label="Черновик"
                         size="small"
                         color="warning"
-                        sx={{ height: 20, fontSize: '0.7rem' }}
+                        variant="outlined"
+                        sx={{
+                            height: 18,
+                            fontSize: '0.65rem',
+                            '& .MuiChip-label': {
+                                px: 0.5
+                            }
+                        }}
                     />
                 )}
             </Box>
 
-            {/* Action Buttons */}
+            {/* Action Buttons - компактные и современные */}
             <Box
                 className="action-buttons"
                 sx={{
                     display: 'flex',
-                    gap: 0.5,
+                    alignItems: 'center',
+                    gap: 0.25,
                     opacity: 0,
-                    transition: 'opacity 0.2s ease',
+                    transform: 'translateX(-4px)',
+                    transition: 'all 0.15s ease',
+                    flexShrink: 0,
+                    ml: 1,
                 }}
                 onClick={(e) => e.stopPropagation()}
             >
-                <IconButton
-                    size="small"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onAddChild(data.id);
-                    }}
-                    title="Добавить страницу"
-                >
-                    <Add fontSize="small" />
-                </IconButton>
+                <Tooltip title="Добавить подраздел">
+                    <IconButton
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onAddChild(data.id);
+                        }}
+                        sx={{
+                            width: 24,
+                            height: 24,
+                            color: 'text.secondary',
+                            '&:hover': {
+                                backgroundColor: 'primary.50',
+                                color: 'primary.main',
+                            }
+                        }}
+                    >
+                        <Add sx={{ fontSize: 16 }} />
+                    </IconButton>
+                </Tooltip>
 
-                <IconButton
-                    size="small"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        node.select();
-                        if (onSelect) {
-                            onSelect([{ id: data.id }]);
-                        }
-                    }}
-                    title="Редактировать страницу"
-                >
-                    <Edit fontSize="small" />
-                </IconButton>
+                <Tooltip title="Редактировать">
+                    <IconButton
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            node.select();
+                            if (onSelect) {
+                                onSelect([{ id: data.id }]);
+                            }
+                        }}
+                        sx={{
+                            width: 24,
+                            height: 24,
+                            color: 'text.secondary',
+                            '&:hover': {
+                                backgroundColor: 'primary.50',
+                                color: 'primary.main',
+                            }
+                        }}
+                    >
+                        <Edit sx={{ fontSize: 14 }} />
+                    </IconButton>
+                </Tooltip>
 
-                <IconButton
-                    size="small"
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onDelete(data.id);
-                    }}
-                    color="error"
-                    title="Удалить страницу"
-                >
-                    <Delete fontSize="small" />
-                </IconButton>
+                <Tooltip title="Удалить">
+                    <IconButton
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(data.id);
+                        }}
+                        sx={{
+                            width: 24,
+                            height: 24,
+                            color: 'text.secondary',
+                            '&:hover': {
+                                backgroundColor: 'error.50',
+                                color: 'error.main',
+                            }
+                        }}
+                    >
+                        <Delete sx={{ fontSize: 14 }} />
+                    </IconButton>
+                </Tooltip>
             </Box>
         </Box>
     );
 };
+
 
 export default TreeNode;

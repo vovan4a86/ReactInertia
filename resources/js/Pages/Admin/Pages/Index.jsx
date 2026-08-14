@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useRef} from 'react';
+import React, {useState, useEffect, useRef, useCallback} from 'react';
 import {router} from '@inertiajs/react';
 import {Box, Grid, Paper, Typography, CircularProgress, Button, Link, Breadcrumbs} from '@mui/material';
 import {Tree} from 'react-arborist';
@@ -7,16 +7,24 @@ import TreeNode from './TreeNode';
 import PagesList from './PagesList';
 import AdminLayout from "@/Layouts/Admin/AdminLayout.jsx";
 
-const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageData = []}) => {
+const AdminPages = ({
+                        treeData = [],
+                        pagesData = [],
+                        parents = [],
+                        selectedPageData = []
+                    }) => {
     const [selectedPage, setSelectedPage] = useState(null);
     const [pageData, setPageData] = useState(null);
     const [loading, setLoading] = useState(false);
     const [treeDataState, setTreeDataState] = useState([]);
-    const [createKey, setCreateKey] = useState(0); // Добавляем счетчик для ключа
+    const [createKey, setCreateKey] = useState(0);
     const [allPages, setAllPages] = useState(pagesData || []);
-
     const [pagesLoading, setPagesLoading] = useState(false);
     const [pagesError, setPagesError] = useState(null);
+
+    // Состояние для открытых узлов
+    const [expandedNodes, setExpandedNodes] = useState(new Set());
+    const treeRef = useRef(null);
 
     // Инициализируем данные при загрузке
     useEffect(() => {
@@ -36,9 +44,48 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
         if (selectedPageData && selectedPageData.length > 0) {
             setPageData(selectedPageData);
             console.log(selectedPageData)
-            setSelectedPage({id: selectedPageData.page.id});
+            setSelectedPage({ id: selectedPageData.page.id });
         }
     }, [selectedPageData]);
+
+    // Обработчик изменения состояния узла
+    const handleNodeToggle = useCallback((nodeId, isOpen) => {
+        setExpandedNodes(prev => {
+            const newSet = new Set(prev);
+            if (isOpen) {
+                newSet.add(nodeId);
+            } else {
+                newSet.delete(nodeId);
+            }
+            return newSet;
+        });
+    }, []);
+
+    // Сохранение открытых узлов перед перемещением
+    const saveExpandedNodes = useCallback(() => {
+        if (treeRef.current) {
+            const openNodes = new Set();
+            treeRef.current.visibleNodes.forEach(node => {
+                if (node.isOpen && node.children?.length) {
+                    openNodes.add(node.data.id);
+                }
+            });
+            setExpandedNodes(openNodes);
+        }
+    }, []);
+
+    // Восстановление открытых узлов после обновления
+    const restoreExpandedNodes = useCallback(() => {
+        setTimeout(() => {
+            if (treeRef.current) {
+                treeRef.current.visibleNodes.forEach(node => {
+                    if (expandedNodes.has(node.data.id) && node.children?.length) {
+                        node.open();
+                    }
+                });
+            }
+        }, 50);
+    }, [expandedNodes]);
 
     const getBreadcrumbs = (page, treeData) => {
         if (!page) return [];
@@ -47,7 +94,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
 
         const findPath = (nodes, targetId, path = []) => {
             for (const node of nodes) {
-                const currentPath = [...path, {id: node.id, title: node.title}];
+                const currentPath = [...path, { id: node.id, title: node.title }];
 
                 if (node.id === targetId) {
                     return currentPath;
@@ -62,7 +109,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
         };
 
         const path = findPath(treeData, page.id);
-        return path || [{id: page.id, title: page.title}];
+        return path || [{ id: page.id, title: page.title }];
     };
 
     const handleSelect = (nodes) => {
@@ -78,7 +125,10 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
         }
     };
 
-    const handleMove = ({dragIds, parentId, index}) => {
+    const handleMove = ({ dragIds, parentId, index }) => {
+        // Сохраняем состояние открытых узлов
+        saveExpandedNodes();
+
         // Оптимистичное обновление UI
         setTreeDataState(prevData => {
             const newData = JSON.parse(JSON.stringify(prevData));
@@ -89,7 +139,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
             const removeNode = (nodes) => {
                 const filtered = nodes.filter(node => {
                     if (node.id === dragIds[0]) {
-                        draggedNode = {...node};
+                        draggedNode = { ...node };
                         return false;
                     }
                     return true;
@@ -154,10 +204,14 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                 if (page.props.treeData) {
                     setTreeDataState(page.props.treeData);
                 }
+                // Восстанавливаем открытые узлы
+                restoreExpandedNodes();
             },
             onError: (errors) => {
                 console.error('Reorder error:', errors);
                 setTreeDataState([...treeData]);
+                // Восстанавливаем открытые узлы
+                restoreExpandedNodes();
             },
         });
     };
@@ -188,7 +242,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
 
         setPageData({
             page: newPage,
-            parents: parents, // Берем из props
+            parents: parents,
             isNew: true,
             createKey: newCreateKey
         });
@@ -228,7 +282,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
 
     // Обработчики для PagesList
     const handleEditFromList = (page) => {
-        handleSelect([{id: page.id}]);
+        handleSelect([{ id: page.id }]);
     };
 
     const handleDeleteFromList = (pageId) => {
@@ -258,10 +312,10 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
 
     if (treeDataState.length === 0) {
         return (
-            <Box sx={{p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh'}}>
+            <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
                 <Box textAlign="center">
-                    <CircularProgress/>
-                    <Typography sx={{mt: 2}}>Загрузка дерева...</Typography>
+                    <CircularProgress />
+                    <Typography sx={{ mt: 2 }}>Загрузка дерева...</Typography>
                 </Box>
             </Box>
         );
@@ -269,8 +323,8 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
 
     return (
         <AdminLayout>
-            <Box sx={{mr: 3}}>
-                <Box sx={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2}}>
+            <Box sx={{ mr: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Typography variant="h4">
                         Менеджер страниц
                     </Typography>
@@ -291,7 +345,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                                         href="#"
                                         onClick={(e) => {
                                             e.preventDefault();
-                                            handleSelect([{id: item.id}]);
+                                            handleSelect([{ id: item.id }]);
                                         }}
                                     >
                                         {item.title}
@@ -302,7 +356,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                     )}
                 </Box>
 
-                <Grid container spacing={3} sx={{flexWrap: 'nowrap'}}>
+                <Grid container spacing={3} sx={{ flexWrap: 'nowrap' }}>
                     {/* Tree Panel */}
                     <Grid
                         item
@@ -323,7 +377,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                                 width: '100%'
                             }}
                         >
-                            <Box sx={{mb: 2, flexShrink: 0}}>
+                            <Box sx={{ mb: 2, flexShrink: 0 }}>
                                 <Button
                                     variant="contained"
                                     size="small"
@@ -335,8 +389,9 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                             </Box>
 
                             {treeDataState.length > 0 && (
-                                <Box sx={{flex: 1}}>
+                                <Box sx={{ flex: 1 }}>
                                     <Tree
+                                        ref={treeRef}
                                         data={treeDataState}
                                         width="100%"
                                         height={600}
@@ -352,6 +407,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                                                 onAddChild={handleCreate}
                                                 onDelete={handleDelete}
                                                 onSelect={handleSelect}
+                                                onToggleNode={handleNodeToggle}
                                             />
                                         )}
                                     </Tree>
@@ -386,7 +442,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                                         height: '100%'
                                     }}
                                 >
-                                    <CircularProgress/>
+                                    <CircularProgress />
                                 </Box>
                             ) : selectedPageData && selectedPageData.page ? (
                                 <PageForm
@@ -397,7 +453,7 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
                                     onSaved={handlePageSaved}
                                 />
                             ) : (
-                                <Box sx={{height: '100%'}}>
+                                <Box sx={{ height: '100%' }}>
                                     <Typography variant="h6" gutterBottom>
                                         Все страницы
                                     </Typography>
@@ -420,3 +476,4 @@ const AdminPages = ({treeData = [], pagesData = [], parents = [], selectedPageDa
 };
 
 export default AdminPages;
+
