@@ -1,271 +1,297 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Models;
 
+use App\Casts\SettingValueCast;
+use App\Enums\SettingType;
 use App\Helpers\SettingsThumb;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * @property int $id
+ * @property int $setting_group_id
+ * @property string $code
+ * @property SettingType $type
+ * @property string $name
+ * @property string|null $description
+ * @property mixed $value   // string|array|null — зависит от типа
+ * @property array<string, mixed> $params
+ * @property int $order
+ */
 class Setting extends Model
 {
-    protected $fillable = [
-        'setting_group_id', 'code', 'type', 'name',
-        'description', 'value', 'params', 'order'
-    ];
-
-    protected $casts = [
-        'value' => 'json',
-        'params' => 'json',
-    ];
+    public const UPLOAD_DISK = 'public';
+    public const UPLOAD_DIR = 'uploads/settings';
+    public const IMAGE_QUALITY = 90;
+    public const CACHE_KEY = 'settings_data';
+    public const CACHE_TTL = 3600;
 
     public $timestamps = false;
 
-    const UPLOAD_DISK = 'public';
-    const UPLOAD_DIR = 'uploads/settings';
-    const IMAGE_QUALITY = 90;
-
-    public static $types = [
-        0 => 'Текстовое поле',
-        1 => 'Текстовая область',
-        2 => 'Редактор',
-        3 => 'Файл',
-        4 => 'Данные',
-        5 => 'Список',
-        6 => 'Список данных',
-        7 => 'Галерея',
+    protected $fillable = [
+        'setting_group_id',
+        'code',
+        'type',
+        'name',
+        'description',
+        'value',
+        'params',
+        'order'
     ];
 
-    protected static ?array $_data = null;
-
-    public static function get(string $code, mixed $default = null): mixed
-    {
-        if (!self::$_data) {
-            self::$_data = Cache::remember('settings_data', 3600, function () {
-                $data = [];
-                $settings = DB::table('settings')
-                    ->select('code', 'value', 'type', 'setting_group_id')
-                    ->get();
-
-                foreach ($settings as $item) {
-                    $data[$item->code] = [
-                        'code' => $item->code,
-                        'value' => $item->value,
-                        'type' => $item->type,
-                        'setting_group_id' => $item->setting_group_id,
-                    ];
-                }
-
-                return $data;
-            });
-        }
-
-        if (!isset(self::$_data[$code])) {
-            return $default;
-        }
-
-        $value = self::$_data[$code]['value'];
-
-        // JSON types
-        if (in_array(self::$_data[$code]['type'], [4, 5, 6, 7])) {
-            $decoded = json_decode($value, true);
-            return is_array($decoded) ? $decoded : [];
-        }
-
-        return $value;
-    }
-
-    public function getFileUrlAttribute(): ?array
-    {
-        $value = $this->value;
-
-        if (empty($value)) {
-            return [];
-        }
-
-        // Для типа 6 (ListDataInput) - массив объектов
-        if ($this->type === 6 && is_array($value)) {
-            $urls = [];
-            foreach ($value as $rowIndex => $row) {
-                if (is_array($row)) {
-                    foreach ($row as $field => $fieldValue) {
-                        if (is_string($fieldValue) && $this->isStoredFile($fieldValue)) {
-                            if (!isset($urls[$rowIndex])) {
-                                $urls[$rowIndex] = [];
-                            }
-                            $urls[$rowIndex][$field] = asset('storage/' . $fieldValue);
-                        }
-                    }
-                }
-            }
-            return $urls; // Возвращаем индексированный массив с ключами по индексам
-        }
-
-        // Для типа 4 (DataFields) - объект с полями
-        if ($this->type === 4 && is_array($value)) {
-            $urls = [];
-            foreach ($value as $field => $fieldValue) {
-                if (is_string($fieldValue) && $this->isStoredFile($fieldValue)) {
-                    $urls[$field] = asset('storage/' . $fieldValue); // Ключ - имя поля
-                }
-            }
-            return $urls;
-        }
-
-        // Для типа 7 (Gallery) - массив изображений
-        if ($this->type === 7 && is_array($value)) {
-            $urls = [];
-            foreach ($value as $index => $file) {
-                if (is_string($file) && !empty($file) && $this->isStoredFile($file)) {
-                    $urls[$index] = asset('storage/' . $file);
-                }
-            }
-            return $urls;
-        }
-
-        // Для типа 3 (File) - одиночный файл
-        if ($this->type === 3 && is_string($value) && $this->isStoredFile($value)) {
-            return [$value => asset('storage/' . $value)];
-        }
-
-        return [];
-    }
+    /** Статический кэш процесса (чтобы не дёргать Cache на каждый Setting::get()). */
+    protected static ?array $cachedData = null;
 
     /**
-     * Check if value is a stored file (not a marker)
+     * Современный способ объявления кастов (метод, а не свойство).
+     *
+     * @return array<string, mixed>
      */
-    protected function isStoredFile($value): bool
+    protected function casts(): array
     {
-        if (!is_string($value)) {
-            return false;
-        }
-
-        // Исключаем маркеры
-        if (str_starts_with($value, 'settings.') || str_starts_with($value, 'settings[')) {
-            return false;
-        }
-
-        // Проверяем, что это похоже на имя файла (содержит расширение)
-        return preg_match('/\.[a-zA-Z0-9]{2,4}$/', $value) === 1;
+        return [
+            'setting_group_id' => 'integer',
+            'order' => 'integer',
+            'type' => SettingType::class,
+            'params' => 'array',
+            'value' => SettingValueCast::class,
+        ];
     }
 
-    public static function getFilePath(string $filename): string
+    protected static function booted(): void
     {
-        return self::UPLOAD_DIR . '/' . $filename;
+        // Кэш настроек всегда актуален — не нужно помнить про clearCache() в контроллерах.
+        static::saved(static fn() => static::clearCache());
+        static::deleted(static fn() => static::clearCache());
     }
 
-    public static function clearCache(): void
-    {
-        self::$_data = null;
-        Cache::forget('settings_data');
-    }
+    /* Отношения и скоупы
+    | ----------------------------------------------------
+    */
 
-    public function group()
+    public function group(): BelongsTo
     {
         return $this->belongsTo(SettingGroup::class, 'setting_group_id');
     }
 
-    /**
-     * Get thumb URL for gallery image
-     *
-     * @param string|int $index Index of image in gallery
-     * @param string|int $thumbKey Key of thumb configuration (0, 1, 2, etc.)
-     * @return string|null
-     */
-    public function thumb(string|int $index, string|int $thumbKey = 0): ?string
+    /** @param Builder<self> $query */
+    public function scopeOrdered(Builder $query): Builder
     {
-        // Only for gallery type
-        if ($this->type !== 7) {
-            return null;
+        return $query->orderBy('order')->orderBy('id');
+    }
+
+    /* Быстрый доступ к значениям
+    | ----------------------------------------------------
+    */
+
+    /**
+     * Получить значение настройки по коду.
+     *
+     * @param string $code Системный ключ настройки
+     * @param mixed $default Значение по умолчанию, если настройка не найдена
+     */
+    public static function get(string $code, mixed $default = null): mixed
+    {
+        self::$cachedData ??= Cache::remember(
+            self::CACHE_KEY,
+            self::CACHE_TTL,
+            static fn(): array => DB::table('settings')
+                ->select('code', 'value', 'type', 'setting_group_id')
+                ->get()
+                ->keyBy('code')
+                ->map(static fn($row) => [
+                    'value' => $row->value,
+                    'type' => (int)$row->type,
+                ])
+                ->all()
+        );
+
+        if (!isset(self::$cachedData[$code])) {
+            return $default;
         }
 
-        // Get images array
-        $images = json_decode($this->value, true);
+        $row = self::$cachedData[$code];
+        $value = SettingValueCast::decode($row['value'], $row['type']);
 
-        if (!is_array($images) || !isset($images[$index])) {
-            return null;
-        }
+        return $value === null || $value === '' ? ($default ?? $value) : $value;
+    }
 
-        $imagePath = $images[$index];
+    /** Сбросить кэш настроек (процесса и Cache-хранилища). */
+    public static function clearCache(): void
+    {
+        self::$cachedData = null;
+        Cache::forget(self::CACHE_KEY);
+    }
 
-        if (!is_string($imagePath) || empty($imagePath)) {
-            return null;
-        }
+    /* Файлы
+    | ----------------------------------------------------
+    */
 
-        // Parse thumbs configuration from params
-        $thumbsConfig = SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
+    /** Путь файла настройки относительно диска (storage/app/public/...). */
+    public static function filePath(string $filename): string
+    {
+        return self::UPLOAD_DIR . '/' . ltrim($filename, '/');
+    }
 
-        if (empty($thumbsConfig)) {
-            return null;
-        }
-
-        // Convert thumbKey to array key
-        if (!isset($thumbsConfig[$thumbKey])) {
-            return null;
-        }
-
-        return SettingsThumb::get($imagePath, $thumbKey, $thumbsConfig);
+    /** Публичный URL файла настройки. */
+    public static function fileUrl(?string $filename): ?string
+    {
+        return $filename
+            ? Storage::disk(self::UPLOAD_DISK)->url(self::filePath($filename))
+            : null;
     }
 
     /**
-     * Get all thumbs for gallery image
+     * Плоская карта [имя файла => URL] по всем файлам настройки.
+     * Используется фронтом: поиск по значению
      *
-     * @param string|int $index Index of image in gallery
-     * @return array
+     * @return array<string, string>
      */
-    public function thumbs(string|int $index): array
+    public function fileUrlMap(): array
     {
-        if ($this->type !== 7) {
-            return [];
+        $map = [];
+
+        foreach ($this->fileValues() as $filename) {
+            $map[$filename] = self::fileUrl($filename);
         }
 
-        $images = json_decode($this->value, true);
-
-        if (!is_array($images) || !isset($images[$index])) {
-            return [];
-        }
-
-        $imagePath = $images[$index];
-
-        if (!is_string($imagePath) || empty($imagePath)) {
-            return [];
-        }
-
-        $thumbsConfig = SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
-
-        return SettingsThumb::getAll($imagePath, $thumbsConfig);
+        return $map;
     }
 
     /**
-     * Get all images with their thumbs for gallery
+     * Все значения-файлы настройки (с учётом типа и params.fields).
      *
-     * @return array
+     * @return list<string>
      */
-    public function getGalleryWithSettingsThumbsAttribute(): array
+    public function fileValues(): array
     {
-        if ($this->type !== 7) {
-            return [];
-        }
+        $value = $this->value;
 
-        $images = json_decode($this->value, true) ?? [];
-        $thumbsConfig = SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
+        return match ($this->type) {
+            SettingType::File => is_string($value) && $value !== '' ? [$value] : [],
 
-        $result = [];
+            SettingType::Gallery => array_values(
+                array_filter(
+                    is_array($value) ? $value : [],
+                    static fn($item) => is_string($item) && $item !== ''
+                )
+            ),
 
-        foreach ($images as $index => $imagePath) {
-            if (is_string($imagePath) && !empty($imagePath)) {
-                $storage = Storage::disk('public');
+            SettingType::Data => $this->extractFieldFiles(is_array($value) ? [$value] : []),
 
-                $result[] = [
-                    'original' => $storage->url($imagePath),
-                    'path' => $imagePath,
-                    'thumbs' => SettingsThumb::getAll($imagePath, $thumbsConfig),
-                ];
+            SettingType::ListData => $this->extractFieldFiles(is_array($value) ? $value : []),
+
+            default => [],
+        };
+    }
+
+    /**
+     * Вытащить файловые поля (type === 3) из набора строк.
+     *
+     * @param array<int, mixed> $rows
+     * @return list<string>
+     */
+    protected function extractFieldFiles(array $rows): array
+    {
+        $fields = $this->params['fields'] ?? [];
+        $files = [];
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            foreach ($fields as $key => $config) {
+                $item = $row[$key] ?? null;
+
+                if ((int)($config['type'] ?? -1) === SettingType::File->value
+                    && is_string($item) && $item !== ''
+                ) {
+                    $files[] = $item;
+                }
             }
         }
 
-        return $result;
+        return array_values(array_unique($files));
     }
+
+    /* Миниатюры галереи
+    | ----------------------------------------------------
+    */
+
+    /** Конфигурация миниатюр из params.thumbs. */
+    public function thumbsConfig(): array
+    {
+        return SettingsThumb::parseThumbsConfig($this->params['thumbs'] ?? '');
+    }
+
+    /**
+     * URL миниатюры изображения галереи.
+     *
+     * @param  string|int  $index    Индекс изображения в галерее
+     * @param  string|int  $thumbKey Ключ конфигурации миниатюры
+     */
+    public function thumb(string|int $index, string|int $thumbKey = 0): ?string
+    {
+        $images = $this->type === SettingType::Gallery && is_array($this->value) ? $this->value : [];
+        $path   = $images[$index] ?? null;
+
+        if (!is_string($path) || $path === '') {
+            return null;
+        }
+
+        $config = $this->thumbsConfig();
+
+        return isset($config[$thumbKey])
+            ? SettingsThumb::get(self::filePath($path), $thumbKey, $config)
+            : null;
+    }
+
+    /**
+     * Все миниатюры одного изображения галереи.
+     *
+     * @return array<string|int, string>
+     */
+    public function thumbs(string|int $index): array
+    {
+        $images = $this->type === SettingType::Gallery && is_array($this->value) ? $this->value : [];
+        $path   = $images[$index] ?? null;
+
+        if (!is_string($path) || $path === '') {
+            return [];
+        }
+
+        return SettingsThumb::getAll(self::filePath($path), $this->thumbsConfig());
+    }
+
+    /**
+     * Галерея вместе с миниатюрами — удобно для вывода на витрине.
+     *
+     * @return list<array{original: string, path: string, thumbs: array}>
+     */
+    public function getGalleryWithThumbsAttribute(): array
+    {
+        if ($this->type !== SettingType::Gallery) {
+            return [];
+        }
+
+        $config = $this->thumbsConfig();
+
+        return array_values(array_map(
+            fn (string $path) => [
+                'original' => self::fileUrl($path),
+                'path'     => self::filePath($path),
+                'thumbs'   => SettingsThumb::getAll(self::filePath($path), $config),
+            ],
+            $this->fileValues()
+        ));
+    }
+
 }

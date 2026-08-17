@@ -1,319 +1,250 @@
-import React, {useState } from 'react';
-import {router} from '@inertiajs/react';
+import React, { useCallback, useMemo } from 'react';
+import { useForm } from '@inertiajs/react';
 import {
-    Box,
-    TextField,
-    Button,
-    Typography,
-    FormControl,
-    InputLabel,
-    Select,
-    MenuItem,
     Alert,
-    Divider,
+    Box,
+    Button,
     CircularProgress,
+    Divider,
+    FormControl,
+    FormHelperText,
+    InputLabel,
+    MenuItem,
+    Select,
     Stack,
+    TextField,
+    Typography,
 } from '@mui/material';
 import {
     Save as SaveIcon,
 } from '@mui/icons-material';
 import EditParams from './EditParams';
 import {useModal} from '@/Contexts/Admin/ModalContext.jsx';
+import { SETTING_TYPE } from './utils/uploads';
+
+/** Пояснение к каждому типу настройки. */
+const TYPE_DESCRIPTIONS = {
+    [SETTING_TYPE.TEXT]: 'Простое текстовое поле для коротких значений.',
+    [SETTING_TYPE.TEXTAREA]: 'Многострочное поле для длинного текста без разметки.',
+    [SETTING_TYPE.EDITOR]: 'Визуальный редактор форматированного текста (HTML).',
+    [SETTING_TYPE.FILE]: 'Загрузка одного файла: изображение или документ.',
+    [SETTING_TYPE.DATA]: 'Набор именованных полей разных типов (объект).',
+    [SETTING_TYPE.LIST]: 'Простой список строковых значений с сортировкой.',
+    [SETTING_TYPE.LIST_DATA]: 'Повторитель: список объектов с настраиваемыми полями.',
+    [SETTING_TYPE.GALLERY]: 'Галерея изображений с сортировкой и миниатюрами.',
+};
+
+/**
+ * Создание / редактирование настройки (открывается в модалке).
+ *
+ * @param {object} props
+ * @param {object} props.setting настройка (или заготовка новой)
+ * @param {Array}  props.groups
+ * @param {Record<number, string>} props.types
+ */
 
 export default function Edit({setting, groups, types}) {
     const {closeModal} = useModal();
+    const isNew = !setting?.id;
 
-    const [formData, setFormData] = useState({
-        id: setting?.id || null,
-        setting_group_id: setting?.setting_group_id || '',
-        code: setting?.code || '',
-        type: setting?.type || 0,
-        name: setting?.name || '',
-        description: setting?.description || '',
-        params: setting?.params || {},
+    const {
+        data,
+        setData,
+        post, processing,
+        errors,
+        transform } = useForm({
+        setting_group_id: setting?.setting_group_id ?? '',
+        code: setting?.code ?? '',
+        type: Number(setting?.type ?? SETTING_TYPE.TEXT),
+        name: setting?.name ?? '',
+        description: setting?.description ?? '',
+        params: setting?.params ?? {},
         order: setting?.order ?? 0,
     });
 
-    const [errors, setErrors] = useState({});
-    const [processing, setProcessing] = useState(false);
+    // PUT через POST + _method — обязательное условие для multipart/FormData
+    transform((payload) => (isNew ? payload : { ...payload, _method: 'PUT' }));
 
-    const handleChange = (field, value) => {
-        setFormData(prev => ({...prev, [field]: value}));
+    const showFields = [SETTING_TYPE.DATA, SETTING_TYPE.LIST_DATA].includes(data.type);
+    const showGallery = data.type === SETTING_TYPE.GALLERY;
 
-        if (errors[field]) {
-            setErrors(prev => {
-                const newErrors = {...prev};
-                delete newErrors[field];
-                return newErrors;
+    /** Смена типа сбрасывает несовместимые params. */
+    const handleTypeChange = useCallback(
+        (event) => {
+            const type = Number(event.target.value);
+
+            setData((prev) => ({
+                ...prev,
+                type,
+                params:
+                    type === SETTING_TYPE.GALLERY
+                        ? { thumbs: prev.params?.thumbs ?? '' }
+                        : [SETTING_TYPE.DATA, SETTING_TYPE.LIST_DATA].includes(type)
+                            ? { fields: prev.params?.fields ?? {} }
+                            : {},
+            }));
+        },
+        [setData],
+    );
+
+    const handleSubmit = useCallback(
+        (event) => {
+            event.preventDefault();
+
+            const url = isNew
+                ? route('admin.settings.store')
+                : route('admin.settings.update', {id: setting.id});
+
+            post(url, {
+                forceFormData: true,
+                preserveScroll: true,
+                onSuccess: () => closeModal(),
             });
-        }
-    };
+        },
+        [isNew, post, setting?.id, closeModal]
+    );
 
-    const handleTypeChange = (e) => {
-        const newType = parseInt(e.target.value);
-        handleChange('type', newType);
-
-        // Сбрасываем params для всех типов, кроме 4, 6 и 7
-        if (![4, 6, 7].includes(newType)) {
-            handleChange('params', {});
-        }
-
-        // Для типа 7 инициализируем params с полем thumbs, если его нет
-        if (newType === 7 && !formData.params?.thumbs) {
-            handleChange('params', { thumbs: '' });
-        }
-    };
-
-    const handleParamsChange = (params) => {
-        handleChange('params', params);
-    };
-
-    const handleThumbsChange = (value) => {
-        handleChange('params', { ...formData.params, thumbs: value });
-    };
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-
-        setProcessing(true);
-        setErrors({});
-
-        // Определяем URL и метод
-        const isNew = !formData.id;
-        const url = isNew
-            ? route('admin.settings.store')
-            : route('admin.settings.update', { id: formData.id });
-
-        // Для PUT запроса через Inertia добавляем _method
-        const submitData = { ...formData };
-        if (!isNew) {
-            submitData._method = 'PUT';
-        }
-
-        router.post(url, submitData, {
-            forceFormData: true, // Отправляем как FormData
-            onSuccess: (page) => {
-                setProcessing(false);
-                closeModal(); // Закрываем модальное окно
-
-                // Обновляем данные на странице
-                router.reload({
-                    only: ['groups', 'activeGroup', 'settings'],
-                    preserveState: true,
-                    preserveScroll: true,
-                });
-            },
-            onError: (errors) => {
-                setProcessing(false);
-                setErrors(errors);
-                console.error('Validation errors:', errors);
-            },
-        });
-    };
-
-    const handleCancel = () => {
-        closeModal();
-    };
-
-
-    const isNew = !formData.id;
-    const showParams = [4, 6].includes(formData.type);
-    const showGalleryParams = formData.type === 7;
-
-    const getTypeDescription = (type) => {
-        const descriptions = {
-            0: 'Простое текстовое поле для ввода коротких значений.',
-            1: 'Многострочное текстовое поле для ввода длинного текста.',
-            2: 'Визуальный редактор для форматированного текста (HTML).',
-            3: 'Загрузка одного файла (изображение, документ).',
-            4: 'Набор полей разных типов, сгруппированных вместе.',
-            5: 'Простой список строковых значений.',
-            6: 'Таблица с настраиваемыми полями (список объектов).',
-            7: 'Галерея изображений с возможностью загрузки нескольких файлов.',
-        };
-        return descriptions[type] || 'Выберите тип настройки';
-    };
+    const typeOptions = useMemo(() => Object.entries(types), [types]);
 
     return (
-        <Box>
-            {/* Заголовок */}
+        <Box component="form" onSubmit={handleSubmit} noValidate>
             <Typography variant="h6" gutterBottom>
                 {isNew ? 'Новая настройка' : 'Редактирование настройки'}
             </Typography>
 
-            <Box component="form" onSubmit={handleSubmit}>
-                <Stack spacing={2.5}>
-                    {/* 1) Название + Группа (2:1) */}
-                    <Stack direction={{xs: 'column', sm: 'row'}} spacing={2}>
-                        <TextField
-                            sx={{flex: 3}}
-                            label="Название"
-                            value={formData.name}
-                            onChange={(e) => handleChange('name', e.target.value)}
-                            error={!!errors.name}
-                            helperText={errors.name}
-                            required
-                            placeholder="Введите название настройки"
-                            size="small"
-                        />
-                        <FormControl sx={{flex: 2}} error={!!errors.setting_group_id} size="small">
-                            <InputLabel>Группа</InputLabel>
-                            <Select
-                                value={formData.setting_group_id}
-                                onChange={(e) => handleChange('setting_group_id', e.target.value)}
-                                label="Группа"
-                                variant="outlined"
-                                required
-                            >
-                                {groups && groups.map((group) => (
-                                    <MenuItem key={group.id} value={group.id}>
-                                        {group.name}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                            {errors.setting_group_id && (
-                                <Typography variant="caption" color="error">
-                                    {errors.setting_group_id}
-                                </Typography>
-                            )}
-                        </FormControl>
-                        <TextField
-                            sx={{flex: 1}}
-                            label="Порядок"
-                            value={formData.order}
-                            error={!!errors.order}
-                            onChange={(e) => handleChange('order', e.target.value)}
-                            helperText={errors.order}
-                            size="small"
-                            slotProps={{
-                                htmlInput: {
-                                    maxLength: 2,
-                                    inputMode: 'numeric'
-                                }
-                            }}
-                            type="text"
-                        />
-                    </Stack>
-
-                    {/* 2) Описание — одна строка */}
+            <Stack spacing={2.5}>
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                     <TextField
-                        fullWidth
-                        label="Описание (подсказка)"
-                        value={formData.description}
-                        onChange={(e) => handleChange('description', e.target.value)}
-                        error={!!errors.description}
-                        helperText={errors.description}
+                        sx={{ flex: 3 }}
                         size="small"
-                        placeholder="Краткое описание или подсказка для пользователя"
+                        label="Название"
+                        required
+                        value={data.name}
+                        onChange={(event) => setData('name', event.target.value)}
+                        error={Boolean(errors.name)}
+                        helperText={errors.name}
+                        placeholder="Например: Телефон в шапке"
                     />
 
-                    {/* 3) Системный ключ + Тип (1:1) */}
-                    <Stack direction={{xs: 'column', sm: 'row'}} spacing={2}>
+                    <FormControl sx={{ flex: 2 }} size="small" required error={Boolean(errors.setting_group_id)}>
+                        <InputLabel>Группа</InputLabel>
+                        <Select
+                            label="Группа"
+                            value={data.setting_group_id}
+                            onChange={(event) => setData('setting_group_id', event.target.value)}
+                        >
+                            {groups.map((group) => (
+                                <MenuItem key={group.id} value={group.id}>
+                                    {group.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                        {errors.setting_group_id && <FormHelperText>{errors.setting_group_id}</FormHelperText>}
+                    </FormControl>
+
+                    <TextField
+                        sx={{ flex: 1 }}
+                        size="small"
+                        label="Порядок"
+                        type="number"
+                        value={data.order}
+                        onChange={(event) => setData('order', event.target.value === '' ? 0 : Number(event.target.value))}
+                        error={Boolean(errors.order)}
+                        helperText={errors.order}
+                        slotProps={{ htmlInput: { min: 0, max: 9999, inputMode: 'numeric' } }}
+                    />
+                </Stack>
+
+                <TextField
+                    fullWidth
+                    size="small"
+                    label="Описание (подсказка)"
+                    value={data.description}
+                    onChange={(event) => setData('description', event.target.value)}
+                    error={Boolean(errors.description)}
+                    helperText={errors.description}
+                />
+
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                    <TextField
+                        sx={{ flex: 1 }}
+                        size="small"
+                        label="Системный ключ"
+                        required
+                        value={data.code}
+                        onChange={(event) => setData('code', event.target.value.trim())}
+                        error={Boolean(errors.code)}
+                        helperText={errors.code || 'Уникальный ключ для Setting::get()'}
+                        placeholder="site_title"
+                    />
+
+                    <FormControl sx={{ flex: 1 }} size="small" required error={Boolean(errors.type)}>
+                        <InputLabel>Тип</InputLabel>
+                        <Select label="Тип" value={data.type} onChange={handleTypeChange}>
+                            {typeOptions.map(([value, label]) => (
+                                <MenuItem key={value} value={Number(value)}>
+                                    {label}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                        {errors.type && <FormHelperText>{errors.type}</FormHelperText>}
+                    </FormControl>
+                </Stack>
+
+                <Alert severity="info" variant="outlined">
+                    {TYPE_DESCRIPTIONS[data.type] ?? 'Выберите тип настройки'}
+                </Alert>
+
+                {showGallery && (
+                    <>
+                        <Divider />
+                        <Typography variant="subtitle2" color="text.secondary">
+                            Параметры галереи
+                        </Typography>
                         <TextField
-                            sx={{flex: 1}}
-                            label="Системный ключ"
-                            value={formData.code}
-                            onChange={(e) => handleChange('code', e.target.value)}
-                            error={!!errors.code}
-                            helperText={errors.code || 'Уникальный ключ для доступа из кода'}
-                            required
-                            placeholder="Например: site_title"
+                            fullWidth
                             size="small"
+                            label="Миниатюры"
+                            value={data.params?.thumbs ?? ''}
+                            onChange={(event) => setData('params', { ...data.params, thumbs: event.target.value })}
+                            error={Boolean(errors['params.thumbs'])}
+                            helperText={errors['params.thumbs'] || 'Формат: 200x100, 400x200|cover'}
+                            placeholder="200x100, 400x200|cover"
                         />
-                        <FormControl sx={{flex: 1}} error={!!errors.type} size="small">
-                            <InputLabel>Тип</InputLabel>
-                            <Select
-                                value={formData.type}
-                                onChange={handleTypeChange}
-                                label="Тип"
-                                variant="outlined"
-                                required
-                            >
-                                {types && Object.entries(types).map(([value, label]) => (
-                                    <MenuItem key={value} value={parseInt(value)}>
-                                        {label}
-                                    </MenuItem>
-                                ))}
-                            </Select>
-                            {errors.type && (
-                                <Typography variant="caption" color="error">
-                                    {errors.type}
-                                </Typography>
-                            )}
-                        </FormControl>
-                    </Stack>
+                    </>
+                )}
 
-                    {/* 4) Описание типа */}
-                    <Alert severity="info" variant="outlined" sx={{'& .MuiAlert-message': {fontSize: '0.875rem'}}}>
-                        {getTypeDescription(formData.type)}
-                    </Alert>
+                {showFields && (
+                    <>
+                        <Divider />
+                        <Typography variant="subtitle2" color="text.secondary">
+                            Поля данных
+                        </Typography>
+                        <EditParams
+                            type={data.type}
+                            params={data.params}
+                            types={types}
+                            onChange={(params) => setData('params', params)}
+                        />
+                        {errors.params && <FormHelperText error>{errors.params}</FormHelperText>}
+                    </>
+                )}
+            </Stack>
 
-                    {/* Параметры для галереи (тип 7) */}
-                    {showGalleryParams && (
-                        <>
-                            <Divider />
-                            <Typography variant="subtitle2" color="text.secondary">
-                                Параметры галереи
-                            </Typography>
-                            <TextField
-                                fullWidth
-                                label="Thumbs"
-                                value={formData.params?.thumbs || ''}
-                                onChange={(e) => handleThumbsChange(e.target.value)}
-                                error={!!errors['params.thumbs']}
-                                helperText={errors['params.thumbs'] || 'Размеры эскизов (200x100, 400x200|resize)'}
-                                size="small"
-                                placeholder="Введите значение для thumbs"
-                            />
-                        </>
-                    )}
-
-                    {/* Параметры (для галереи/повторителя) */}
-                    {showParams && (
-                        <>
-                            <Divider/>
-                            <Typography variant="subtitle2" color="text.secondary">
-                                Настройка параметров
-                            </Typography>
-                            <Typography variant="body2" color="text.disabled">
-                                Дополнительные параметры для выбранного типа настройки
-                            </Typography>
-                            <EditParams
-                                type={formData.type}
-                                params={formData.params}
-                                types={types}
-                                onChange={handleParamsChange}
-                            />
-                        </>
-                    )}
-                </Stack>
-
-                {/* Кнопки */}
-                <Stack
-                    direction="row"
-                    spacing={1.5}
-                    justifyContent="flex-end"
-                    sx={{mt: 3}}
+            <Stack direction="row" spacing={1.5} justifyContent="flex-end" sx={{ mt: 3 }}>
+                <Button size="small" variant="outlined" onClick={closeModal} disabled={processing}>
+                    Отмена
+                </Button>
+                <Button
+                    size="small"
+                    type="submit"
+                    variant="contained"
+                    disabled={processing}
+                    startIcon={processing ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
                 >
-                    <Button
-                        variant="outlined"
-                        onClick={handleCancel}
-                        disabled={processing}
-                        size="small"
-                    >
-                        Отмена
-                    </Button>
-                    <Button
-                        type="submit"
-                        variant="contained"
-                        startIcon={processing ? <CircularProgress size={16} color="inherit"/> : <SaveIcon/>}
-                        disabled={processing}
-                        size="small"
-                    >
-                        {processing ? 'Сохранение...' : isNew ? 'Создать' : 'Сохранить'}
-                    </Button>
-                </Stack>
-            </Box>
+                    {processing ? 'Сохранение…' : isNew ? 'Создать' : 'Сохранить'}
+                </Button>
+            </Stack>
         </Box>
     );
 }

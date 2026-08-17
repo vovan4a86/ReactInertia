@@ -1,315 +1,163 @@
-import React, {useState, useEffect} from 'react';
+import React, { memo, useCallback } from 'react';
 import {router} from '@inertiajs/react';
 import {
     Box,
     Button,
-    Typography,
-    Divider,
+    Chip,
     CircularProgress,
+    Divider,
     IconButton,
+    Stack,
+    Tooltip,
+    Typography,
 } from '@mui/material';
-import {Save as SaveIcon, Edit as EditIcon, Delete as DeleteIcon} from '@mui/icons-material';
+import {
+    Delete as DeleteIcon,
+    Edit as EditIcon,
+    Save as SaveIcon,
+} from '@mui/icons-material';
 import FieldRenderer from './Fields/FieldRenderer';
+import { SettingsFormProvider, useSettingsForm } from './SettingsFormContext';
 import {useModal} from "@/Contexts/Admin/ModalContext.jsx";
 import {useDialog} from '@/Contexts/Admin/DialogContext.jsx';
 
-export default function SettingsFields({settings, onSave}) {
-    // Инициализируем values всеми текущими значениями настроек
-    const [values, setValues] = useState(() => {
-        const initialValues = {};
-        settings.forEach(setting => {
-            initialValues[setting.id] = setting.value;
-        });
-        return initialValues;
-    });
-    const [files, setFiles] = useState({});
-    const [saving, setSaving] = useState(false);
+/** Заголовок настройки с действиями. */
+const SettingHeader = memo(function SettingHeader({ setting, onEdit, onDelete }) {
+    return (
+        <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 1.5 }}>
+            <Box>
+                <Stack direction="row" spacing={1} alignItems="center">
+                    <Typography variant="subtitle1" fontWeight={500}>
+                        {setting.name}
+                    </Typography>
+                    <Chip label={setting.type_label} size="small" variant="outlined" sx={{ height: 20, fontSize: '.7rem' }} />
+                </Stack>
+                {setting.code && (
+                    <Typography variant="caption" color="text.secondary">
+                        Код: {setting.code}
+                    </Typography>
+                )}
+            </Box>
 
-    const {openModal} = useModal();
-    const {confirm} = useDialog();
+            <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+                <Tooltip title="Редактировать настройку">
+                    <IconButton size="small" onClick={() => onEdit(setting.id)}>
+                        <EditIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+                <Tooltip title="Удалить настройку">
+                    <IconButton size="small" color="error" onClick={() => onDelete(setting.id)}>
+                        <DeleteIcon fontSize="small" />
+                    </IconButton>
+                </Tooltip>
+            </Stack>
+        </Stack>
+    );
+});
 
-    // Обновляем values при изменении settings
-    useEffect(() => {
-        setValues(prev => {
-            const newValues = {...prev};
-            settings.forEach(setting => {
-                // Сохраняем существующие значения, если они есть
-                if (!(setting.id in newValues) || newValues[setting.id] === undefined) {
-                    newValues[setting.id] = setting.value;
-                }
+/** Внутренняя часть формы — уже внутри провайдера. */
+function SettingsFieldsInner() {
+    const { settings, values, setValue, submit, processing, hasPendingUploads } = useSettingsForm();
+    const { openModal } = useModal();
+    const { confirm } = useDialog();
+
+    const handleEdit = useCallback(
+        (id) => openModal(route('admin.settings.edit', { id })),
+        [openModal],
+    );
+
+    const handleDelete = useCallback(
+        async (id) => {
+            const confirmed = await confirm({
+                title: 'Удаление настройки',
+                message: 'Удалить настройку и все её значения? Действие необратимо.',
+                confirmText: 'Удалить',
+                cancelText: 'Отмена',
+                confirmColor: 'error',
             });
-            return newValues;
-        });
-    }, [settings]);
 
-    const handleEditSettings = (settingId) => {
-        const url = route('admin.settings.edit', {id: settingId});
-        openModal(url);
-    };
+            if (!confirmed) return;
 
-    const handleDeleteSetting = async (settingId) => {
-        // Используем кастомный диалог
-        // confirm() возвращает Promise
-        // Без await переменная result получает сам объект Promise (который всегда truthy)
-        const result = await confirm({
-            title: 'Удаление настройки',
-            message: 'Удалить настройку и все значения? Это действие нельзя отменить.',
-            confirmText: 'Удалить',
-            cancelText: 'Отмена',
-            confirmColor: 'error',
-        });
+            router.delete(route('admin.settings.setting.delete', { id }), { preserveScroll: true });
+        },
+        [confirm],
+    );
 
-        if (!result) return;
-
-        const url = route('admin.settings.setting.delete', {id: settingId});
-
-        router.delete(url, {
-            onSuccess: () => {
-                //
-            },
-            onError: (errors) => {
-                //console.error(errors);
-            },
-        });
-
-    }
-
-    const handleFieldChange = (settingId, value) => {
-        setValues(prev => {
-            return {...prev, [settingId]: value};
-        });
-    };
-
-    const handleFileChange = (key, file) => {
-        setFiles(prev => {
-            const newFiles = {...prev};
-            if (file) {
-                newFiles[key] = file;
-            } else {
-                delete newFiles[key];
-            }
-            return newFiles;
-        });
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        setSaving(true);
-
-        // Правильный способ логирования FormData
-/*        console.log('Current values:', values);
-        console.log('Current files:', files);*/
-
-        const formData = new FormData();
-
-        // console.log('FormData entries before send:');
-        // for (let [key, val] of formData.entries()) {
-        //     console.log(key, val);
-        // }
-
-        // Добавляем ВСЕ значения настроек
-        Object.entries(values).forEach(([settingId, value]) => {
-            if (value === null || value === undefined) {
-                formData.append(`settings[${settingId}]`, '');
-                return;
-            }
-
-            if (Array.isArray(value)) {
-                if (value.length === 0) {
-                    formData.append(`settings[${settingId}]`, JSON.stringify([]));
-                } else {
-                    // Проверяем, содержит ли массив File объекты (галерея)
-                    const hasFiles = value.some(item => item instanceof File);
-
-                    if (hasFiles) {
-                        // Для галереи: НЕ отправляем значение массива, только файлы
-                        // Laravel сам поймет структуру по файлам
-                        value.forEach((item, index) => {
-                            if (item instanceof File) {
-                                // Файл будет добавлен ниже в секции files
-                            } else if (typeof item === 'string') {
-                                // Существующий путь к файлу
-                                formData.append(`settings[${settingId}][${index}]`, item);
-                            }
-                        });
-                    } else {
-                        // Для обычных массивов без файлов
-                        const isArrayOfObjects = value.every(item => typeof item === 'object' && item !== null);
-
-                        value.forEach((item, index) => {
-                            if (isArrayOfObjects) {
-                                Object.entries(item).forEach(([field, fieldVal]) => {
-                                    if (fieldVal !== null && fieldVal !== undefined) {
-                                        formData.append(
-                                            `settings[${settingId}][${index}][${field}]`,
-                                            fieldVal
-                                        );
-                                    } else {
-                                        formData.append(
-                                            `settings[${settingId}][${index}][${field}]`,
-                                            ''
-                                        );
-                                    }
-                                });
-                            } else if (typeof item === 'object' && item !== null) {
-                                Object.entries(item).forEach(([field, fieldVal]) => {
-                                    if (fieldVal !== null && fieldVal !== undefined) {
-                                        formData.append(
-                                            `settings[${settingId}][${index}][${field}]`,
-                                            fieldVal
-                                        );
-                                    } else {
-                                        formData.append(
-                                            `settings[${settingId}][${index}][${field}]`,
-                                            ''
-                                        );
-                                    }
-                                });
-                            } else if (item !== null && item !== undefined) {
-                                formData.append(`settings[${settingId}][${index}]`, item);
-                            }
-                        });
-                    }
-                }
-            } else if (typeof value === 'object' && value !== null) {
-                // БЛОК для обработки обычных объектов (type 4 DataFields)
-                Object.entries(value).forEach(([field, fieldVal]) => {
-                    // Проверяем, не является ли значение файлом (хотя файлы должны быть в files)
-                    if (fieldVal instanceof File) {
-                        // Не добавляем файлы как значения, они будут в files
-                        return;
-                    }
-
-                    if (fieldVal !== null && fieldVal !== undefined) {
-                        formData.append(`settings[${settingId}][${field}]`, fieldVal);
-                    } else {
-                        formData.append(`settings[${settingId}][${field}]`, '');
-                    }
-                });
-            } else {
-                formData.append(`settings[${settingId}]`, value);
-            }
-        });
-
-        // Добавляем файлы
-        Object.entries(files).forEach(([key, file]) => {
-            if (file instanceof File) {
-                let formKey = key;
-                if (key.includes('.')) {
-                    const parts = key.split('.');
-                    formKey = parts[0] + '[' + parts.slice(1).join('][') + ']';
-                }
-                formData.append(formKey, file);
-            }
-        });
-
-        // Итоговая отладка
-        let hasEntries = false;
-        for (let [key, val] of formData.entries()) {
-            hasEntries = true;
-        }
-        if (!hasEntries) {
-            console.log('FormData ПУСТОЙ!');
-        }
-
-
-        await onSave(formData);
-        setSaving(false);
-
-        // После сохранения очищаем files
-        setFiles({});
-    };
-
-    if (!settings || settings.length === 0) {
-        return null;
-    }
+    const handleSubmit = useCallback(
+        (event) => {
+            event.preventDefault();
+            submit();
+        },
+        [submit],
+    );
 
     return (
-        <Box component="form" onSubmit={handleSubmit}>
+        <Box component="form" onSubmit={handleSubmit} noValidate>
             {settings.map((setting, index) => (
                 <React.Fragment key={setting.id}>
-                    <Box sx={{px: 3, py: 2}}>
-                        {/* Setting Header */}
-                        <Box sx={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'flex-start',
-                            mb: 1.5,
-                        }}>
-                            <Box>
-                                <Typography variant="subtitle1" fontWeight={500}>
-                                    {setting.name}
-                                </Typography>
-                                {setting.code && (
-                                    <Typography variant="caption" color="textSecondary">
-                                        Код: {setting.code}
-                                    </Typography>
-                                )}
-                            </Box>
-                            <Box>
-                                <IconButton
-                                    size="small"
-                                    onClick={() => handleEditSettings(setting.id)}
-                                    sx={{ml: 2, flexShrink: 0}}
-                                >
-                                    <EditIcon fontSize="small"/>
-                                </IconButton>
-                                <IconButton
-                                    size="small"
-                                    onClick={() => handleDeleteSetting(setting.id)}
-                                    sx={{
-                                        color: 'error.main',
-                                        '&:hover': {bgcolor: 'error.lighter'},
-                                    }}
-                                >
-                                    <DeleteIcon fontSize="small"/>
-                                </IconButton>
-                            </Box>
-                        </Box>
+                    <Box sx={{ px: 3, py: 2 }}>
+                        <SettingHeader setting={setting} onEdit={handleEdit} onDelete={handleDelete} />
 
-                        {/* Field Renderer */}
-                        <Box sx={{mt: 1}}>
+                        <Box sx={{ mt: 1 }}>
                             <FieldRenderer
                                 setting={setting}
-                                value={values[setting.id] !== undefined ? values[setting.id] : setting.value}
-                                onChange={(value) => handleFieldChange(setting.id, value)}
-                                onFileChange={handleFileChange}
+                                value={values[setting.id]}
+                                onChange={(value) => setValue(setting.id, value)}
                             />
                         </Box>
 
-                        {/* Description */}
                         {setting.description && (
-                            <Typography
-                                variant="caption"
-                                color="textSecondary"
-                                sx={{mt: 1, display: 'block'}}
-                            >
+                            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                                 {setting.description}
                             </Typography>
                         )}
                     </Box>
-                    {index < settings.length - 1 && <Divider/>}
+
+                    {index < settings.length - 1 && <Divider />}
                 </React.Fragment>
             ))}
 
-            {/* Save Button */}
-            <Box sx={{
-                p: 2,
-                borderTop: 1,
-                borderColor: 'divider',
-                display: 'flex',
-                justifyContent: 'flex-end',
-            }}>
+            <Stack
+                direction="row"
+                spacing={2}
+                justifyContent="flex-end"
+                alignItems="center"
+                sx={{ p: 2, borderTop: 1, borderColor: 'divider', position: 'sticky', bottom: 0, bgcolor: 'background.paper', zIndex: 1 }}
+            >
+                {hasPendingUploads && (
+                    <Typography variant="caption" color="warning.main">
+                        Есть незагруженные файлы — сохраните изменения
+                    </Typography>
+                )}
+
                 <Button
                     type="submit"
                     variant="contained"
-                    startIcon={saving ? <CircularProgress size={20} color="inherit"/> : <SaveIcon/>}
                     size="large"
-                    disabled={saving}
+                    disabled={processing}
+                    startIcon={processing ? <CircularProgress size={20} color="inherit" /> : <SaveIcon />}
                 >
-                    {saving ? 'Сохранение...' : 'Сохранить'}
+                    {processing ? 'Сохранение…' : 'Сохранить'}
                 </Button>
-            </Box>
+            </Stack>
         </Box>
+    );
+}
+
+/**
+ * Форма значений настроек группы.
+ *
+ * @param {object} props
+ * @param {Array}  props.settings
+ * @param {number} props.groupId
+ * @param {(fd: FormData) => Promise<void>} props.onSave
+ */
+export default function SettingsFields({ settings = [], groupId, onSave }) {
+    if (settings.length === 0) return null;
+
+    return (
+        <SettingsFormProvider settings={settings} groupId={groupId} onSave={onSave}>
+            <SettingsFieldsInner />
+        </SettingsFormProvider>
     );
 }

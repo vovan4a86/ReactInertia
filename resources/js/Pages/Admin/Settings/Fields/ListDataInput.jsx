@@ -1,32 +1,29 @@
-import React, {useState, useEffect} from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import {
     Box,
-    IconButton,
+    Button,
     Card,
     CardContent,
+    IconButton,
     Paper,
-    Button,
-    Typography
+    Stack,
+    Tooltip,
+    Typography,
 } from '@mui/material';
 import {
+    Add as AddIcon,
+    ContentCopy as CopyIcon,
     Delete as DeleteIcon,
     DragIndicator as DragIndicatorIcon,
-    Add as AddIcon,
 } from '@mui/icons-material';
-import TextFieldInput from './TextFieldInput';
-import TextareaInput from './TextareaInput';
-import EditorInput from './EditorInput';
-import FileInput from './FileInput';
-
 import {
-    DndContext,
     closestCenter,
+    DndContext,
     KeyboardSensor,
     PointerSensor,
     useSensor,
     useSensors,
 } from '@dnd-kit/core';
-
 import {
     arrayMove,
     SortableContext,
@@ -35,325 +32,217 @@ import {
     verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
+import TextFieldInput from './TextFieldInput';
+import TextareaInput from './TextareaInput';
+import EditorInput from './EditorInput';
+import FileInput from './FileInput';
+import { useSettingsForm } from '../SettingsFormContext';
+import { isUploadMarker, SETTING_TYPE, uid } from '../utils/uploads';
 
-function SortableItem({ id, children }) {
+/**
+ * Одна перетаскиваемая строка повторителя.
+ * Ручка drag вынесена в отдельный элемент — иначе поля ввода
+ * «перехватывают» события указателя.
+ */
+const SortableRow = memo(function SortableRow({ row, index, fields, onRemove, onDuplicate, renderField }) {
     const {
         attributes,
         listeners,
         setNodeRef,
         transform,
         transition,
-        isDragging,
-    } = useSortable({ id });
-
-    const style = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.5 : 1,
-        position: 'relative',
-        zIndex: isDragging ? 1000 : 'auto',
-    };
+        isDragging
+    } = useSortable({
+        id: row._key,
+    });
 
     return (
-        <div ref={setNodeRef} style={style} {...attributes}>
-            {React.cloneElement(children, { dragListeners: listeners })}
-        </div>
-    );
-}
-
-function ListItemCard({ item, index, fieldKeys, fields, onRemove, onItemChange, renderField, dragListeners }) {
-    return (
-        <Card variant="outlined">
-            <CardContent sx={{ pb: 1 }}>
-                {/* Заголовок карточки с кнопкой удаления и перетаскиванием */}
-                <Box sx={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    mb: 2,
-                }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Card
+            ref={setNodeRef}
+            variant="outlined"
+            {...attributes}
+            style={{ transform: CSS.Transform.toString(transform), transition }}
+            sx={{ opacity: isDragging ? 0.5 : 1, position: 'relative', zIndex: isDragging ? 10 : 'auto' }}
+        >
+            <CardContent sx={{ pb: 1.5 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+                    <Stack direction="row" alignItems="center" spacing={1}>
                         <Box
-                            {...dragListeners}
-                            sx={{
-                                cursor: 'grab',
-                                display: 'flex',
-                                alignItems: 'center',
-                                '&:active': { cursor: 'grabbing' },
-                            }}
+                            {...listeners}
+                            sx={{ display: 'flex', cursor: 'grab', '&:active': { cursor: 'grabbing' } }}
                         >
-                            <DragIndicatorIcon
-                                sx={{
-                                    color: 'text.disabled',
-                                    fontSize: 20,
-                                }}
-                            />
+                            <DragIndicatorIcon sx={{ color: 'text.disabled', fontSize: 20 }} />
                         </Box>
-                        <Typography variant="subtitle2" color="textSecondary">
+                        <Typography variant="subtitle2" color="text.secondary">
                             Элемент {index + 1}
                         </Typography>
-                    </Box>
-                    <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => onRemove(index)}
-                        title="Удалить элемент"
-                    >
-                        <DeleteIcon fontSize="small" />
-                    </IconButton>
-                </Box>
+                    </Stack>
 
-                {/* Поля в столбик */}
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    {fieldKeys.map(field => (
-                        <Box key={field}>
-                            <Typography
-                                variant="caption"
-                                color="textSecondary"
-                                sx={{ mb: 0.5, display: 'block' }}
-                            >
-                                {fields[field].title}
+                    <Stack direction="row" spacing={0.5}>
+                        <Tooltip title="Дублировать">
+                            <IconButton size="small" onClick={() => onDuplicate(row._key)}>
+                                <CopyIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Удалить элемент">
+                            <IconButton size="small" color="error" onClick={() => onRemove(row._key)}>
+                                <DeleteIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    </Stack>
+                </Stack>
+
+                <Stack spacing={2}>
+                    {Object.entries(fields).map(([key, config]) => (
+                        <Box key={key}>
+                            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                                {config.title || key}
                             </Typography>
-                            {renderField(field, fields[field], item, index)}
+                            {renderField(key, config, row)}
                         </Box>
                     ))}
-                </Box>
+                </Stack>
             </CardContent>
         </Card>
     );
-}
+});
 
-export default function ListDataInput({
-                                          setting,
-                                          name,
-                                          value = [],
-                                          onChange,
-                                          onFileChange,
-                                          getFileUrl,
-                                          fileUrls = {},
-                                      }) {
-    const fields = setting.params?.fields || {};
-    const items = Array.isArray(value) ? value : [];
-    const fieldKeys = Object.keys(fields);
+/**
+ * Список данных / повторитель (тип 6).
+ *
+ * Каждая строка имеет служебный `_key` — стабильный идентификатор для React
+ * и dnd-kit. На сервер он не уходит (см. serializeValue).
+ *
+ * @param {object} props
+ * @param {object} props.setting
+ * @param {Array<object>} props.value
+ * @param {(rows: Array<object>) => void} props.onChange
+ */
+function ListDataInput({ setting, value = [], onChange }) {
+    const { releaseUpload } = useSettingsForm();
 
-    // Состояние для локальных fileUrls, которые будут обновляться при перетаскивании
-    const [localFileUrls, setLocalFileUrls] = useState(() => {
-        // Инициализируем из props
-        return { ...fileUrls };
-    });
-
-    // Синхронизируем localFileUrls с props когда они приходят с сервера
-    useEffect(() => {
-        setLocalFileUrls(prev => {
-            // Если пришли новые fileUrls с сервера - используем их
-            if (Object.keys(fileUrls).length > 0) {
-                return { ...fileUrls };
-            }
-            return prev;
-        });
-    }, [fileUrls]);
-
-    // Отслеживаем изменения value для синхронизации fileUrls
-    useEffect(() => {
-        // Создаем маппинг старых файлов по их значениям
-        const fileValueToUrl = {};
-        Object.entries(localFileUrls).forEach(([index, fields]) => {
-            if (items[index] && fields) {
-                Object.entries(fields).forEach(([field, url]) => {
-                    if (items[index][field]) {
-                        fileValueToUrl[items[index][field]] = { index, field, url };
-                    }
-                });
-            }
-        });
-
-        // Перестраиваем fileUrls в соответствии с новым порядком items
-        const newFileUrls = {};
-        items.forEach((item, newIndex) => {
-            Object.entries(item).forEach(([field, fieldValue]) => {
-                if (typeof fieldValue === 'string' && fieldValue) {
-                    const fileInfo = fileValueToUrl[fieldValue];
-                    if (fileInfo) {
-                        if (!newFileUrls[newIndex]) {
-                            newFileUrls[newIndex] = {};
-                        }
-                        newFileUrls[newIndex][field] = fileInfo.url;
-                    }
-                }
-            });
-        });
-
-        setLocalFileUrls(newFileUrls);
-    }, [value, items]);
+    const fields = setting.params?.fields ?? {};
+    const rows = Array.isArray(value) ? value : [];
 
     const sensors = useSensors(
-        useSensor(PointerSensor, {
-            activationConstraint: {
-                distance: 8,
-            },
-        }),
-        useSensor(KeyboardSensor, {
-            coordinateGetter: sortableKeyboardCoordinates,
-        })
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
     );
 
-    const handleAdd = () => {
-        const newItem = { _key: `item-${Date.now()}-${Math.random()}` };
-        fieldKeys.forEach(field => {
-            newItem[field] = '';
-        });
-        onChange([...items, newItem]);
-    };
+    const emptyRow = useCallback(
+        () => ({
+            _key: uid(),
+            ...Object.fromEntries(
+                Object.entries(fields).map(([key, config]) => [
+                    key,
+                    Number(config.type) === SETTING_TYPE.FILE ? null : '',
+                ]),
+            ),
+        }),
+        [fields],
+    );
 
-    const handleRemove = (index) => {
-        onChange(items.filter((_, i) => i !== index));
+    const handleAdd = useCallback(() => onChange([...rows, emptyRow()]), [rows, onChange, emptyRow]);
 
-        // Обновляем localFileUrls при удалении элемента
-        const newFileUrls = {};
-        newItems.forEach((item, newIndex) => {
-            const oldIndex = items.findIndex(oldItem =>
-                oldItem._key === item._key ||
-                JSON.stringify(oldItem) === JSON.stringify(item)
+    /** Удаление строки освобождает связанные незагруженные файлы. */
+    const handleRemove = useCallback(
+        (key) => {
+            const row = rows.find((item) => item._key === key);
+
+            Object.values(row ?? {}).forEach((val) => {
+                if (isUploadMarker(val)) releaseUpload(val);
+            });
+
+            onChange(rows.filter((item) => item._key !== key));
+        },
+        [rows, onChange, releaseUpload],
+    );
+
+    /** Дубликат не копирует незагруженные файлы — иначе один File был бы в двух строках. */
+    const handleDuplicate = useCallback(
+        (key) => {
+            const index = rows.findIndex((item) => item._key === key);
+            if (index === -1) return;
+
+            const clone = Object.fromEntries(
+                Object.entries(rows[index]).map(([field, val]) => [field, isUploadMarker(val) ? null : val]),
             );
-            if (oldIndex !== -1 && localFileUrls[oldIndex]) {
-                newFileUrls[newIndex] = { ...localFileUrls[oldIndex] };
+
+            onChange(rows.toSpliced(index + 1, 0, { ...clone, _key: uid() }));
+        },
+        [rows, onChange],
+    );
+
+    const handleFieldChange = useCallback(
+        (key, field, val) => {
+            onChange(rows.map((row) => (row._key === key ? { ...row, [field]: val } : row)));
+        },
+        [rows, onChange],
+    );
+
+    const handleDragEnd = useCallback(
+        ({ active, over }) => {
+            if (!over || active.id === over.id) return;
+
+            const from = rows.findIndex((row) => row._key === active.id);
+            const to = rows.findIndex((row) => row._key === over.id);
+
+            if (from !== -1 && to !== -1) onChange(arrayMove(rows, from, to));
+        },
+        [rows, onChange],
+    );
+
+    /** Рендер поля строки согласно его типу из params.fields. */
+    const renderField = useCallback(
+        (field, config, row) => {
+            const onFieldChange = (val) => handleFieldChange(row._key, field, val);
+            const common = {
+                value: row[field] ?? '',
+                onChange: onFieldChange,
+                placeholder: config.title,
+                fullWidth: true,
+            };
+
+            switch (Number(config.type)) {
+                case SETTING_TYPE.TEXTAREA:
+                    return <TextareaInput {...common} rows={3} />;
+                case SETTING_TYPE.EDITOR:
+                    return <EditorInput {...common} />;
+                case SETTING_TYPE.FILE:
+                    return (
+                        <FileInput
+                            setting={setting}
+                            value={row[field] ?? null}
+                            onChange={onFieldChange}
+                            hint=""
+                        />
+                    );
+                default:
+                    return <TextFieldInput {...common} />;
             }
-        });
-        setLocalFileUrls(newFileUrls);
+        },
+        [handleFieldChange, setting],
+    );
 
-        onChange(newItems);
-    };
+    const sortableIds = useMemo(() => rows.map((row) => row._key), [rows]);
 
-    const handleItemChange = (index, field, val) => {
-        const newItems = [...items];
-        newItems[index] = { ...newItems[index], [field]: val };
-
-        // Если поле очистилось - удаляем URL из localFileUrls
-        if (!val && localFileUrls[index] && localFileUrls[index][field]) {
-            const newFileUrls = { ...localFileUrls };
-            if (newFileUrls[index]) {
-                delete newFileUrls[index][field];
-                if (Object.keys(newFileUrls[index]).length === 0) {
-                    delete newFileUrls[index];
-                }
-            }
-            setLocalFileUrls(newFileUrls);
-        }
-
-        onChange(newItems);
-    };
-
-    const handleDragEnd = (event) => {
-        const { active, over } = event;
-
-        if (active.id !== over?.id) {
-            const oldIndex = items.findIndex(item => (item._key || `item-${items.indexOf(item)}`) === active.id);
-            const newIndex = items.findIndex(item => (item._key || `item-${items.indexOf(item)}`) === over.id);
-
-            if (oldIndex !== -1 && newIndex !== -1) {
-                const newItems = arrayMove(items, oldIndex, newIndex);
-
-                // Синхронизируем fileUrls с новым порядком
-                const newFileUrls = {};
-                Object.entries(localFileUrls).forEach(([index, fields]) => {
-                    let newPosition;
-                    if (parseInt(index) === oldIndex) {
-                        newPosition = newIndex;
-                    } else if (parseInt(index) === newIndex) {
-                        newPosition = oldIndex;
-                    } else {
-                        newPosition = parseInt(index);
-                    }
-                    newFileUrls[newPosition] = { ...fields };
-                });
-
-                setLocalFileUrls(newFileUrls);
-                onChange(newItems);
-            }
-        }
-    };
-
-    const renderField = (field, params, item, index) => {
-        // Правильный формат имени файла для вложенных элементов
-        const fileInputName = `${name}.${index}.${field}`;
-        const fieldInputName = `${name}[${index}][${field}]`;
-
-        switch (params.type) {
-            case 0:
-                return (
-                    <TextFieldInput
-                        name={fieldInputName}
-                        value={item[field] || ''}
-                        onChange={(val) => handleItemChange(index, field, val)}
-                        placeholder={params.title}
-                        fullWidth
-                    />
-                );
-
-            case 1:
-                return (
-                    <TextareaInput
-                        name={fieldInputName}
-                        value={item[field] || ''}
-                        onChange={(val) => handleItemChange(index, field, val)}
-                        placeholder={params.title}
-                        rows={2}
-                        fullWidth
-                    />
-                );
-
-            case 2:
-                return (
-                    <EditorInput
-                        name={fieldInputName}
-                        value={item[field] || ''}
-                        onChange={(val) => handleItemChange(index, field, val)}
-                    />
-                );
-
-            case 3:
-                return (
-                    <FileInput
-                        name={`${name}[${index}][${field}]`}
-                        value={item[field]}
-                        fileUrl={
-                            // Используем localFileUrls вместо fileUrls из props
-                            getFileUrl(item[field], localFileUrls, field, index)
-                        }
-                        onChange={(val) => handleItemChange(index, field, val)}
-                        onFileChange={onFileChange}
-                        placeholder={params.title}
-                    />
-                );
-
-            default:
-                return (
-                    <TextFieldInput
-                        name={fieldInputName}
-                        value={item[field] || ''}
-                        onChange={(val) => handleItemChange(index, field, val)}
-                        placeholder={params.title}
-                        fullWidth
-                    />
-                );
-        }
-    };
-
-    if (fieldKeys.length === 0) {
+    if (Object.keys(fields).length === 0) {
         return (
-            <Box sx={{ p: 2, textAlign: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Typography color="textSecondary">Нет настроенных полей для этого списка</Typography>
-            </Box>
+            <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                <Typography color="text.secondary" variant="body2">
+                    Для этого списка не настроены поля. Откройте настройку и добавьте их.
+                </Typography>
+            </Paper>
         );
     }
 
     return (
         <Box>
-            {items.length === 0 ? (
+            {rows.length === 0 ? (
                 <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
-                    <Typography color="textSecondary" sx={{ mb: 1 }}>
-                        Нет элементов. Нажмите "Добавить" для создания.
+                    <Typography color="text.secondary">
+                        Нет элементов. Нажмите «Добавить элемент».
                     </Typography>
                 </Paper>
             ) : (
@@ -361,51 +250,38 @@ export default function ListDataInput({
                     sensors={sensors}
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
-                    modifiers={[restrictToVerticalAxis]}
+                    modifiers={[restrictToVerticalAxis, restrictToParentElement]}
                 >
-                    <SortableContext
-                        items={items.map(item => item._key || `item-${items.indexOf(item)}`)}
-                        strategy={verticalListSortingStrategy}
-                    >
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                            {items.map((item, index) => {
-                                const itemKey = item._key || `item-${index}`;
-                                return (
-                                    <SortableItem key={itemKey} id={itemKey}>
-                                        <ListItemCard
-                                            item={item}
-                                            index={index}
-                                            fieldKeys={fieldKeys}
-                                            fields={fields}
-                                            onRemove={handleRemove}
-                                            onItemChange={handleItemChange}
-                                            renderField={renderField}
-                                        />
-                                    </SortableItem>
-                                );
-                            })}
-                        </Box>
+                    <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+                        <Stack spacing={2}>
+                            {rows.map((row, index) => (
+                                <SortableRow
+                                    key={row._key}
+                                    row={row}
+                                    index={index}
+                                    fields={fields}
+                                    onRemove={handleRemove}
+                                    onDuplicate={handleDuplicate}
+                                    renderField={renderField}
+                                />
+                            ))}
+                        </Stack>
                     </SortableContext>
                 </DndContext>
             )}
 
-            <Box sx={{ mt: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-                <Button
-                    size="small"
-                    startIcon={<AddIcon />}
-                    onClick={handleAdd}
-                    variant="outlined"
-                >
+            <Stack direction="row" spacing={2} alignItems="center" sx={{ mt: 2 }}>
+                <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={handleAdd}>
                     Добавить элемент
                 </Button>
-
-                {items.length > 0 && (
-                    <Typography variant="caption" color="textSecondary">
-                        Всего элементов: {items.length}
+                {rows.length > 0 && (
+                    <Typography variant="caption" color="text.secondary">
+                        Всего элементов: {rows.length}
                     </Typography>
                 )}
-            </Box>
+            </Stack>
         </Box>
     );
 }
 
+export default memo(ListDataInput);

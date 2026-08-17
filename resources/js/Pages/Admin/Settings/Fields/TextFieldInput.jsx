@@ -1,35 +1,46 @@
-import React from 'react';
+import { memo, useCallback } from 'react';
 import { TextField } from '@mui/material';
 
-export default function TextFieldInput({
-                                           name,
-                                           value,
-                                           onChange,
-                                           placeholder,
-                                           type = 'text',
-                                           disabled = false,
-                                           required = false,
-                                           fullWidth = true,
-                                           size = 'small',
-                                           ...props
-                                       }) {
-    const handleChange = (e) => {
-        onChange(e.target.value);
-    };
+function TextFieldInput({
+                            value,
+                            onChange,
+                            placeholder,
+                            type = 'text',
+                            disabled = false,
+                            required = false,
+                            fullWidth = true,
+                            size = 'small',
+                            error,
+                            helperText,
+                            maxLength,
+                            ...props
+                        }) {
+    const handleChange = useCallback(
+        (event) => onChange?.(event.target.value),
+        [onChange],
+    );
 
     return (
         <TextField
-            fullWidth={fullWidth}
-            size={size}
-            name={name}
+            {...props}
             type={type}
-            value={value}
+            // value ?? '' — иначе при value === null/undefined поле становится
+            // неуправляемым и React ругается при первом же вводе символа.
+            value={value ?? ''}
             onChange={handleChange}
             placeholder={placeholder}
             disabled={disabled}
             required={required}
+            fullWidth={fullWidth}
+            size={size}
             variant="outlined"
-            {...props}
+            error={Boolean(error)}
+            helperText={error || helperText}
+            slotProps={{
+                htmlInput: { maxLength },
+            }}
         />
     );
 }
+
+export default memo(TextFieldInput);

@@ -1,1194 +1,299 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
-use App\Helpers\SettingsThumb;
+use App\Enums\SettingType;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\SaveSettingsRequest;
+use App\Http\Requests\Admin\SettingRequest;
+use App\Http\Resources\SettingResource;
 use App\Models\Setting;
 use App\Models\SettingGroup;
+use App\Services\Settings\SettingFieldsManager;
+use App\Services\Settings\SettingFileManager;
+use App\Services\Settings\SettingValueProcessor;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
-use Intervention\Image\Drivers\Gd\Driver;
-use Intervention\Image\ImageManager;
+use Inertia\Response;
 
-class AdminSettingsController
+/**
+ * Управление группами настроек, самими настройками и их значениями.
+ */
+class AdminSettingsController extends Controller
 {
-    protected array $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+    public function __construct(
+        private readonly SettingValueProcessor $processor,
+        private readonly SettingFileManager $files,
+        private readonly SettingFieldsManager $fields,
+    ) {}
 
-    public function index()
+    /* Страницы
+    | -----------------------------------------------------------------
+    */
+
+    /** Список групп + настройки первой группы. */
+    public function index(): Response
     {
-        $groups = SettingGroup::where('page_id', 0)
-            ->orderBy('order')
-            ->get();
+        $groups = $this->groups();
 
-        $activeGroup = $groups->first();
-        $settings = $activeGroup
-            ? $activeGroup->settings()->orderBy('order')->get()
-            : collect();
-
-        return Inertia::render('Admin/Settings/Index', [
-            'groups' => $groups,
-            'activeGroup' => $activeGroup,
-            'settings' => $this->formatSettings($settings),
-            'modalData' => null, // Модалка закрыта
-        ]);
+        return $this->renderIndex($groups, $groups->first());
     }
 
-    public function groupItems(int $id)
-    {
-        $group = SettingGroup::with(['settings' => fn($q) => $q->orderBy('order')])->findOrFail($id);
-        $groups = SettingGroup::where('page_id', 0)->orderBy('order')->get();
-
-        return Inertia::render('Admin/Settings/Index', [
-            'groups' => $groups,
-            'activeGroup' => $group,
-            'settings' => $this->formatSettings($group->settings),
-        ]);
-    }
-
-    public function storeGroup(Request $request)
-    {
-        $data = $request->validate(['name' => 'required|string|max:255']);
-        $data['page_id'] = 0;
-
-        SettingGroup::create($data);
-
-        return back()->with('success', 'Группа создана');
-    }
-
-    public function updateGroup(Request $request, int $id)
-    {
-        $data = $request->validate(['name' => 'required|string|max:255']);
-
-        $group = SettingGroup::findOrFail($id);
-        $group->update($data);
-
-        return redirect()->route('admin.settings.groupItems', $id)
-            ->with('success', 'Группа обновлена');
-    }
-
-    public function destroyGroup(int $id)
+    /** Настройки конкретной группы. */
+    public function groupItems(int $id): Response
     {
         $group = SettingGroup::findOrFail($id);
 
-        // Delete all settings files in this group
-        $settings = Setting::where('setting_group_id', $id)->get();
-        foreach ($settings as $setting) {
-            $this->deleteSettingFiles($setting);
-        }
-
-        Setting::where('setting_group_id', $id)->delete();
-        $group->delete();
-
-        Setting::clearCache();
-
-        return redirect()->route('admin.settings.index')
-            ->with('success', 'Группа удалена');
+        return $this->renderIndex($this->groups(), $group);
     }
 
-    public function editSetting(Request $request, ?int $id = null)
+    /**
+     * Форма создания/редактирования настройки (открывается в модалке).
+     * Страница под модалкой сохраняет своё состояние.
+     */
+    public function editSetting(Request $request, ?int $id = null): Response
     {
         $setting = $id
             ? Setting::findOrFail($id)
             : new Setting([
-                'setting_group_id' => $request->input('setting_group_id'),
-                'type' => 0,
-                'params' => [],
+                'setting_group_id' => $request->integer('setting_group_id'),
+                'type'             => SettingType::Text,
+                'params'           => [],
+                'order'            => 0,
             ]);
 
-        $groups = SettingGroup::where('page_id', 0)->orderBy('order')->get();
+        $groupId     = $id ? $setting->setting_group_id : $request->integer('setting_group_id');
+        $activeGroup = $groupId ? SettingGroup::find($groupId) : null;
 
-        // Получаем текущие данные страницы
-        $activeGroup = $request->input('setting_group_id')
-            ? SettingGroup::find($request->input('setting_group_id'))
-            : null;
-
-        $settings = $request->input('setting_group_id')
-            ? Setting::where('setting_group_id', $request->input('setting_group_id'))->get()
-            : [];
-
-        return Inertia::render('Admin/Settings/Index', [
-            // Сохраняем текущее состояние страницы
-            'groups' => SettingGroup::where('page_id', 0)->orderBy('order')->get(),
-            'activeGroup' => $activeGroup,
-            'settings' => $settings,
-
-            // Добавляем данные для модального окна
-            'modalData' => [
-                'open' => true,
-                'component' => 'Admin/Settings/Edit',
-                'props' => [
-                    'setting' => $setting,
-                    'groups' => $groups,
-                    'types' => Setting::$types ?? [],
-                ]
-            ]
+        return $this->renderIndex($this->groups(), $activeGroup, [
+            'open'      => true,
+            'component' => 'Admin/Settings/Edit',
+            'props'     => [
+                'setting' => (new SettingResource($setting))->toArray($request),
+                'groups'      => $this->groups(),
+                'types'       => SettingType::labels(),
+                'fieldTypes'  => SettingFieldsManager::fieldTypeLabels(),
+            ],
         ]);
     }
 
-    /**
-     * Получить данные о миниатюрах для галереи
+    /* Группы
+    | -----------------------------------------------------------------
+    */
+
+    public function storeGroup(Request $request): RedirectResponse
+    {
+        $data = $request->validate(['name' => ['required', 'string', 'max:255']]);
+
+        $group = SettingGroup::create($data + [
+                'page_id' => 0,
+                'order'   => (int) SettingGroup::where('page_id', 0)->max('order') + 1,
+            ]);
+
+        return redirect()
+            ->route('admin.settings.groupItems', $group->id)
+            ->with('success', 'Группа создана');
+    }
+
+    public function updateGroup(Request $request, int $id): RedirectResponse
+    {
+        $data  = $request->validate(['name' => ['required', 'string', 'max:255']]);
+        $group = SettingGroup::findOrFail($id);
+        $group->update($data);
+
+        return back()->with('success', 'Группа обновлена');
+    }
+
+    public function destroyGroup(int $id): RedirectResponse
+    {
+        $group = SettingGroup::findOrFail($id);
+
+        DB::transaction(function () use ($group): void {
+            $group->settings()->each(function (Setting $setting): void {
+                $this->files->deleteAll($setting);
+                $setting->delete();
+            });
+
+            $group->delete();
+        });
+
+        Setting::clearCache();
+
+        return redirect()
+            ->route('admin.settings.index')
+            ->with('success', 'Группа удалена');
+    }
+
+    /* Настройки
+     | -----------------------------------------------------------------
      */
-    protected function getGalleryThumbsData(Setting $setting): array
+
+    public function storeSetting(SettingRequest $request): RedirectResponse
     {
-        if ($setting->type !== 7) {
-            return [];
-        }
+        $data           = $request->validated();
+        $data['params'] = $this->normalizeParams((int) $data['type'], $request->input('params', []));
+        $data['order']  = $data['order']
+            ?: (int) Setting::where('setting_group_id', $data['setting_group_id'])->max('order') + 1;
 
-        $images = is_string($setting->value)
-            ? json_decode($setting->value, true)
-            : $setting->value;
+        Setting::create($data);
 
-        $images = $images ?? [];
-
-        if (empty($images)) {
-            return [];
-        }
-
-        $thumbsConfig = SettingsThumb::parseThumbsConfig($setting->params['thumbs'] ?? '');
-
-        if (empty($thumbsConfig)) {
-            return [];
-        }
-
-        $result = [];
-        $storage = Storage::disk(Setting::UPLOAD_DISK);
-
-        foreach ($images as $index => $imagePath) {
-            if (is_string($imagePath) && !empty($imagePath)) {
-                $fullPath = Setting::UPLOAD_DIR . '/' . $imagePath;
-
-                // Проверяем существование оригинального файла
-                if (!$storage->exists($fullPath)) {
-                    continue;
-                }
-
-                // Получаем thumbs для каждого изображения
-                $thumbs = [];
-                foreach ($thumbsConfig as $key => $config) {
-                    $thumbPath = SettingsThumb::url($fullPath, $key);
-
-                    // Если thumb не существует, пробуем создать
-                    if (!$storage->exists($thumbPath)) {
-                        SettingsThumb::make($fullPath, $thumbsConfig);
-                    }
-
-                    if ($storage->exists($thumbPath)) {
-                        $thumbs[$key] = [
-                            'url' => $storage->url($thumbPath),
-                            'config' => $config,
-                        ];
-                    }
-                }
-
-                $result[] = [
-                    'original' => $storage->url($fullPath),
-                    'path' => $fullPath,
-                    'name' => basename($imagePath),
-                    'thumbs' => $thumbs,
-                ];
-            }
-        }
-
-        return $result;
+        return redirect()
+            ->route('admin.settings.groupItems', $data['setting_group_id'])
+            ->with('success', 'Настройка создана');
     }
 
-    public function storeSetting(Request $request)
+    public function updateSetting(SettingRequest $request, int $id): RedirectResponse
     {
-        return $this->saveSetting($request);
-    }
-
-    public function updateSetting(Request $request, int $id)
-    {
-        return $this->saveSetting($request, $id);
-    }
-
-    public function destroySetting(int $id) {
         $setting = Setting::findOrFail($id);
 
-        $this->deleteSettingFiles($setting);
-        $setting->delete();
+        $data           = $request->validated();
+        $data['params'] = $this->normalizeParams((int) $data['type'], $request->input('params', []));
 
-        return redirect()->route('admin.settings.index')
+        // Смена типа делает старое значение невалидным — чистим вместе с файлами.
+        if ($setting->type->value !== (int) $data['type']) {
+            $this->files->deleteAll($setting);
+            $data['value'] = null;
+        }
+
+        $setting->update($data);
+
+        return redirect()
+            ->route('admin.settings.groupItems', $data['setting_group_id'])
+            ->with('success', 'Настройка обновлена');
+    }
+
+    public function destroySetting(int $id): RedirectResponse
+    {
+        $setting = Setting::findOrFail($id);
+        $groupId = $setting->setting_group_id;
+
+        DB::transaction(function () use ($setting): void {
+            $this->files->deleteAll($setting);
+            $setting->delete();
+        });
+
+        return redirect()
+            ->route('admin.settings.groupItems', $groupId)
             ->with('success', 'Настройка удалена');
     }
 
-    public function clearValue(int $id)
+    /** Очистить значение настройки вместе со всеми её файлами. */
+    public function clearValue(int $id): RedirectResponse
     {
         $setting = Setting::findOrFail($id);
 
-        if ($setting->value) {
-            $this->deleteFile($setting->value);
-            $setting->value = null;
-            $setting->save();
-            Setting::clearCache();
-        }
+        $this->files->deleteAll($setting);
+        $setting->value = $setting->type->isJson() ? [] : null;
+        $setting->save();
 
         return back()->with('success', 'Значение очищено');
     }
 
-    protected function saveSetting(Request $request, ?int $id = null)
+    /* Сохранение значений
+    | -----------------------------------------------------------------
+    */
+
+    /**
+     * Массовое сохранение значений настроек группы.
+     *
+     * Обрабатываются ТОЛЬКО те настройки, что реально присутствуют в payload —
+     * частичное сохранение не затирает остальные значения.
+     */
+    public function saveSettings(SaveSettingsRequest $request): RedirectResponse
     {
-        $rules = [
-            'name' => 'required|string|max:255',
-            'type' => 'required|integer|in:0,1,2,3,4,5,6,7',
-            'code' => 'required|string|max:255|unique:settings,code',
-            'setting_group_id' => 'required|exists:setting_groups,id',
-            'description' => 'nullable|string',
-            'params' => 'nullable|array',
-            'order' => 'integer',
-        ];
+        $payload = $request->payload();
+        $uploads = $request->uploads();
 
-        if ($id) {
-            $setting = Setting::findOrFail($id);
-            $rules['code'] = 'required|string|max:255|unique:settings,code,' . $id;
-        }
+        $settings = Setting::where('setting_group_id', $request->integer('setting_group_id'))
+            ->ordered()
+            ->get();
 
-        $data = $request->validate($rules);
+        DB::transaction(function () use ($settings, $payload, $uploads): void {
+            foreach ($settings as $setting) {
+                if (!array_key_exists((string) $setting->id, $payload)) {
+                    continue;
+                }
 
-        // Process params based on type
-        $data['params'] = $this->processParams($data['type'], $request->input('params', []));
-
-        if ($id) {
-            $setting->update($data);
-            $message = 'Настройка обновлена';
-        } else {
-            $order = Setting::where('setting_group_id', $data['setting_group_id'])->max('order') ?? 0;
-            $data['order'] = $order + 1;
-            $setting = Setting::create($data);
-
-            $message = 'Ошибка создания настройки';
-            if ($setting) {
-                $message = 'Настройка создана';
+                $this->processor->apply($setting, $payload[(string) $setting->id], $uploads);
             }
-        }
-
-        Setting::clearCache();
-
-        return redirect()->route('admin.settings.groupItems', $data['setting_group_id'])
-            ->with('success', $message);
-    }
-
-    public function saveSettings(Request $request)
-    {
-        $request->validate(['setting_group_id' => 'required|exists:setting_groups,id']);
-
-        $groupId = $request->input('setting_group_id');
-        $settingsData = $request->input('settings', []);
-
-        $settings = Setting::where('setting_group_id', $groupId)->get();
-
-        foreach ($settings as $setting) {
-            $value = $settingsData[$setting->id] ?? null;
-
-            $this->processSettingValue($setting, $value, $request);
-        }
+        });
 
         Setting::clearCache();
 
         return back()->with('success', 'Изменения сохранены');
     }
 
-    protected function processParams(int $type, array $params): array
+
+    /* Внутренние
+    | -----------------------------------------------------------------
+    */
+
+    /** @return Collection<int, SettingGroup> */
+    private function groups(): Collection
     {
-        if (in_array($type, [4, 6]) && isset($params['fields'])) {
+        return SettingGroup::where('page_id', 0)->orderBy('order')->orderBy('id')->get();
+    }
+
+    /**
+     * Единая точка рендера страницы настроек — исключает рассинхрон пропсов
+     * между index/groupItems/editSetting.
+     *
+     * @param  Collection<int, SettingGroup>  $groups
+     * @param  array<string, mixed>|null      $modalData
+     */
+    private function renderIndex(Collection $groups, ?SettingGroup $activeGroup, ?array $modalData = null): Response
+    {
+        $settings = $activeGroup
+            ? $activeGroup->settings()->ordered()->get()
+            : collect();
+
+        return Inertia::render('Admin/Settings/Index', [
+            'groups'      => $groups,
+            'activeGroup' => $activeGroup,
+            'settings'    => SettingResource::collection($settings)->resolve(),
+            'modalData'   => $modalData,
+        ]);
+    }
+
+    /**
+     * Нормализация params под конкретный тип настройки.
+     * Гарантирует чистую структуру: fields[key] = ['type' => int, 'title' => string].
+     *
+     * @param  array<string, mixed>  $params
+     * @return array<string, mixed>
+     */
+    private function normalizeParams(int $type, array $params): array
+    {
+        $settingType = SettingType::tryFrom($type);
+
+        if ($settingType?->hasFields()) {
             $fields = [];
 
-            // Если fields пришел как объект с ключами (из React)
-            foreach ($params['fields'] as $key => $fieldData) {
-                if (empty($key)) {
+            foreach ((array) ($params['fields'] ?? []) as $key => $field) {
+                $key = is_string($key) ? trim($key) : '';
+
+                if ($key === '' || !is_array($field) || !isset($field['type'])) {
                     continue;
                 }
 
-                // Проверяем, является ли $fieldData массивом с type и title
-                if (is_array($fieldData) && isset($fieldData['type'])) {
-                    $fields[$key] = [
-                        'type' => (int)$fieldData['type'],
-                        'title' => $fieldData['title'] ?? '',
-                    ];
-                }
+                $fields[$key] = [
+                    'type'  => (int) $field['type'],
+                    'title' => (string) ($field['title'] ?? $key),
+                ];
             }
 
             return ['fields' => $fields];
         }
 
-        return $params;
-    }
-
-    /**
-     * Process setting value based on its type
-     */
-    protected function processSettingValue(Setting $setting, mixed $value, Request $request): void
-    {
-        switch ($setting->type) {
-            case 0: // Text
-                $setting->value = $this->sanitizeTextValue($value);
-                $setting->save();
-                break;
-
-            case 1: // Textarea
-                $setting->value = $value !== null ? $value : '';
-                $setting->save();
-                break;
-
-            case 2: // Editor - сохраняем HTML как есть
-                $setting->value = $this->sanitizeHtmlValue($value);
-                $setting->save();
-                break;
-
-            case 3: // File
-                $this->processSingleFile($setting, $value, $request);
-                break;
-
-            case 4: // Data with possible files
-                $this->processStructuredData($setting, $value, $request);
-                break;
-
-            case 5: // Simple list
-                $this->processList($setting, $value);
-                break;
-
-            case 6: // List data with possible files
-                $this->processListData($setting, $value, $request);
-                break;
-
-            case 7: // Gallery
-                if (is_string($value)) {
-                    $value = json_decode($value, true);
-                }
-                $this->processGallery($setting, $value ?? [], $request);
-                break;
-        }
-    }
-
-    /**
-     * Process single file upload (type 3)
-     */
-    protected function processSingleFile(Setting $setting, mixed $value, Request $request): void
-    {
-        $fileInputName = 'settings.' . $setting->id;
-
-        if ($request->hasFile($fileInputName)) {
-            // Delete old file
-            $this->deleteFile($setting->value);
-
-            $file = $request->file($fileInputName);
-            $fileName = $this->generateFileName($setting, $file->getClientOriginalExtension());
-
-            $this->storeFile($file, $fileName);
-
-            $setting->value = $fileName;
-            $setting->save();
-        } elseif ($value === null || $value === '') {
-            // Очищаем файл если значение null или пустая строка
-            if (!empty($setting->value)) {
-                $this->deleteFile($setting->value);
-                $setting->value = null;
-                $setting->save();
-            }
-        }
-    }
-
-    /**
-     * Process structured data that may contain files (type 4)
-     */
-    protected function processStructuredData(Setting $setting, mixed $value, Request $request): void
-    {
-        // Если value пришло как JSON строка
-        if (is_string($value)) {
-            $value = json_decode($value, true) ?? [];
+        if ($settingType === SettingType::Gallery) {
+            return ['thumbs' => trim((string) ($params['thumbs'] ?? ''))];
         }
 
-        if (!is_array($value)) {
-            return;
-        }
-
-        $params = $setting->params ?? [];
-        $fields = $params['fields'] ?? [];
-        $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
-
-        // Получаем все файлы из запроса
-        $allFiles = $request->allFiles();
-
-        // Обрабатываем каждое поле
-        foreach ($fields as $key => $fieldConfig) {
-            $fieldType = $fieldConfig['type'] ?? null;
-
-            // Если это файловое поле (type 3)
-            if ($fieldType === 3) {
-                $currentValue = $value[$key] ?? null;
-                $oldFile = $oldValue[$key] ?? null;
-
-                // Проверяем, является ли значение маркером файла (используем тот же метод, что и в processListData)
-                $isMarker = $this->isFileUploadMarker($currentValue);
-
-                if ($isMarker) {
-                    // Извлекаем файл из структуры Laravel
-                    $file = $this->extractFileFromRequest($currentValue, $allFiles);
-
-                    if ($file instanceof \Illuminate\Http\UploadedFile) {
-                        try {
-                            // Удаляем старый файл если есть
-                            if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
-                                $this->deleteFile($oldFile);
-                            }
-
-                            // Сохраняем новый файл
-                            $extension = $file->getClientOriginalExtension();
-                            $fileName = $this->generateUniqueFileName($setting, $extension);
-                            $this->storeFile($file, $fileName);
-                            $value[$key] = $fileName;
-
-                        } catch (\Exception $e) {
-                            // В случае ошибки сохраняем старый файл
-                            if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
-                                $value[$key] = $oldFile;
-                            } else {
-                                $value[$key] = null;
-                            }
-                        }
-                    } else {
-                        // Файл не найден в запросе - сохраняем старый если есть
-                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
-                            $value[$key] = $oldFile;
-                        } else {
-                            $value[$key] = null;
-                        }
-                    }
-                } else {
-                    // Значение не маркер - проверяем, изменилось ли оно
-                    if ($currentValue === null || $currentValue === '') {
-                        // Файл был удален (значение null или пустая строка)
-                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
-                            $this->deleteFile($oldFile);
-                        }
-                        $value[$key] = null;
-                    } elseif ($currentValue === $oldFile) {
-                        // Значение не изменилось - оставляем как есть
-                    } else {
-                        // Новое значение - обрабатываем как обычно
-                    }
-                }
-            }
-        }
-
-        $setting->value = json_encode($value);
-        $setting->save();
-    }
-
-    /**
-     * Process simple list (type 5)
-     */
-    protected function processList(Setting $setting, mixed $value): void
-    {
-        if (!is_array($value)) {
-            return;
-        }
-
-        // Remove empty elements
-        $value = array_filter($value, function ($item) {
-            return $item !== null && $item !== '';
-        });
-
-        $setting->value = json_encode(array_values($value));
-        $setting->save();
-    }
-
-    /**
-     * Process list data that may contain files (type 6)
-     */
-    protected function processListData(Setting $setting, mixed $value, Request $request): void
-    {
-        if (!is_array($value)) {
-            return;
-        }
-
-        $params = $setting->params ?? [];
-        $oldValue = is_string($setting->value) ? json_decode($setting->value, true) : [];
-
-        // Транспонируем массив для list data
-        if ($this->isAssociativeArray($value) && !empty($value)) {
-            $rows = [];
-            $firstKey = array_key_first($value);
-            if (is_array($value[$firstKey])) {
-                foreach ($value[$firstKey] as $index => $v) {
-                    $row = [];
-                    foreach ($value as $field => $fieldValues) {
-                        $row[$field] = $fieldValues[$index] ?? null;
-                    }
-                    $rows[] = $row;
-                }
-                $value = $rows;
-            }
-        }
-
-        // Remove empty rows
-        $value = array_filter($value, function ($row) {
-            if (!is_array($row)) {
-                return false;
-            }
-            return !empty(
-            array_filter($row, function ($val) {
-                return $val !== null && $val !== '';
-            })
-            );
-        });
-
-        // Process files in each row
-        $processedValue = [];
-        foreach ($value as $index => $row) {
-            // Передаем старые данные для этого индекса
-            $oldRow = $oldValue[$index] ?? [];
-            $processedValue[] = $this->processNestedFiles($row, $params, $request, $setting, $oldRow);
-        }
-
-        $setting->value = json_encode(array_values($processedValue));
-        $setting->save();
-    }
-
-    /**
-     * Process gallery (type 7)
-     */
-    protected function processGallery(Setting $setting, array $value, Request $request): void
-    {
-        // Явно приводим к массиву, если пришла строка
-        if (is_string($value)) {
-            $value = json_decode($value, true) ?? [];
-        }
-
-        // Дополнительная защита: если после декодирования не массив - создаем пустой
-        if (!is_array($value)) {
-            $value = [];
-        }
-
-        $existingFiles = is_string($setting->value)
-            ? json_decode($setting->value, true) ?? []
-            : (is_array($setting->value) ? $setting->value : []);
-
-        $processedFiles = [];
-
-        // Process each item in the value array
-        foreach ($value as $index => $item) {
-            $fileInputName = "settings.{$setting->id}.{$index}";
-
-            // Проверяем, является ли значение маркером файла
-            if ($this->isFileUploadMarker($item)) {
-                // Пробуем найти файл по маркеру
-                if ($request->hasFile($fileInputName)) {
-                    $file = $request->file($fileInputName);
-
-                    $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-
-                    $this->storeFile($file, $fileName);
-
-                    // Delete old file if replacing
-                    if (isset($existingFiles[$index])) {
-                        $this->deleteFile($existingFiles[$index], true);
-                    }
-
-                    $processedFiles[$index] = $fileName;
-                } else {
-                    // Сохраняем старый файл, если он есть
-                    if (isset($existingFiles[$index])) {
-                        $processedFiles[$index] = $existingFiles[$index];
-                    }
-                }
-            } elseif (is_string($item) && !empty($item) && !$this->isFileUploadMarker($item)) {
-                // Это существующий файл (путь к файлу)
-                $processedFiles[$index] = $item;
-            }
-        }
-
-        // Также проверяем файлы напрямую из запроса (на случай если они не связаны с value)
-        $allFiles = $request->allFiles();
-        if (isset($allFiles['settings'][$setting->id])) {
-            $settingFiles = $allFiles['settings'][$setting->id];
-
-            foreach ($settingFiles as $fileKey => $file) {
-                if ($file instanceof \Illuminate\Http\UploadedFile) {
-                    // Проверяем, не обработан ли уже этот индекс
-                    if (!isset($processedFiles[$fileKey])) {
-                        $fileName = $this->generateUniqueFileName($setting, $file->getClientOriginalExtension());
-                        $this->storeFile($file, $fileName);
-
-                        // Delete old file if exists
-                        if (isset($existingFiles[$fileKey])) {
-                            $this->deleteFile($existingFiles[$fileKey], true);
-                        }
-
-                        $processedFiles[$fileKey] = $fileName;
-                    }
-                }
-            }
-        }
-
-        // Сортируем по ключам и убираем пропуски в индексах
-        ksort($processedFiles);
-        $finalFiles = array_values($processedFiles);
-
-        // Delete removed files
-        $existingFlat = array_values($existingFiles);
-        $filesToDelete = array_diff($existingFlat, $finalFiles);
-
-        foreach ($filesToDelete as $deletedFile) {
-            $this->deleteFile($deletedFile, true);
-        }
-
-        $finalValue = json_encode($finalFiles);
-
-        $setting->value = $finalValue;
-        $setting->save();
-
-        // Генерируем thumbs для новых изображений
-        $this->generateSettingsThumbsForSetting($setting);
-    }
-
-    protected function processNestedFiles(
-        array $data,
-        array $params,
-        Request $request,
-        Setting $setting,
-        array $oldData
-    ): array {
-        // Получаем все файлы из запроса
-        $allFiles = $request->allFiles();
-
-        foreach ($data as $key => $value) {
-            // Пропускаем системные ключи
-            if ($key === '_key') {
-                continue;
-            }
-
-            if (is_array($value)) {
-                $data[$key] = $this->processNestedFiles($value, $params, $request, $setting, $oldData[$key] ?? []);
-                continue;
-            }
-
-            // Проверяем, является ли значение маркером файла
-            $isMarker = $this->isFileUploadMarker($value);
-
-            if ($isMarker) {
-                // Извлекаем файл из структуры Laravel
-                $file = $this->extractFileFromRequest($value, $allFiles);
-
-                if ($file instanceof \Illuminate\Http\UploadedFile) {
-                    try {
-                        $extension = $file->getClientOriginalExtension();
-                        $fileName = $this->generateUniqueFileName($setting, $extension);
-                        $this->storeFile($file, $fileName);
-
-                        // Удаляем старый файл если есть
-                        $oldFile = $oldData[$key] ?? null;
-                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
-                            $this->deleteFile($oldFile);
-                        }
-
-                        $data[$key] = $fileName;
-                    } catch (\Exception $e) {
-                        // В случае ошибки сохраняем старый файл
-                        $oldFile = $oldData[$key] ?? null;
-                        if ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile)) {
-                            $data[$key] = $oldFile;
-                        }
-                    }
-                } else {
-                    // Файл не найден - сохраняем старый если есть
-                    $oldFile = $oldData[$key] ?? null;
-                    $data[$key] = ($oldFile && is_string($oldFile) && !$this->isFileUploadMarker($oldFile))
-                        ? $oldFile
-                        : null;
-                }
-            }
-        }
-
-        return $data;
-    }
-
-    /**
-     * Generate thumbnails for setting gallery
-     */
-    protected function generateSettingsThumbsForSetting(Setting $setting): void
-    {
-        if ($setting->type !== 7) {
-            return;
-        }
-
-        $thumbsConfig = SettingsThumb::parseThumbsConfig($setting->params['thumbs'] ?? '');
-
-        if (empty($thumbsConfig)) {
-            return;
-        }
-
-        $images = json_decode($setting->value, true) ?? [];
-
-        foreach ($images as $imagePath) {
-            if (is_string($imagePath) && !empty($imagePath)) {
-                SettingsThumb::make($imagePath, $thumbsConfig);
-            }
-        }
-    }
-
-    /**
-     * Извлекает файл из структуры, созданной Laravel
-     * Пример маркера: settings[7][0][field_1785819796375]
-     * Структура: ['settings' => ['7' => [['field_1785819796375' => UploadedFile]]]]
-     */
-    protected function extractFileFromRequest(string $marker, array $allFiles): ?\Illuminate\Http\UploadedFile
-    {
-        // Удаляем settings[ и разбиваем по ][
-        $path = str_replace(['settings[', ']'], '', $marker);
-        $parts = explode('[', $path);
-
-        // parts = ['7', '0', 'field_1785819796375']
-
-        $current = $allFiles['settings'] ?? null;
-
-        foreach ($parts as $part) {
-            if ($current === null) {
-                return null;
-            }
-
-            if (is_array($current) && array_key_exists($part, $current)) {
-                $current = $current[$part];
-            } elseif (is_array($current) && is_numeric($part) && array_key_exists((int)$part, $current)) {
-                $current = $current[(int)$part];
-            } else {
-                return null;
-            }
-        }
-
-        return $current instanceof \Illuminate\Http\UploadedFile ? $current : null;
-    }
-
-    protected function isFileUploadMarker(mixed $value): bool
-    {
-        if (!is_string($value)) {
-            return false;
-        }
-
-        // Проверяем оба формата: settings. и settings[
-        return str_starts_with($value, 'settings.') || str_starts_with($value, 'settings[');
-    }
-
-    protected function isAssociativeArray(array $arr): bool
-    {
-        if ([] === $arr) {
-            return false;
-        }
-        return array_keys($arr) !== range(0, count($arr) - 1);
-    }
-
-    /**
-     * Delete all files associated with a setting
-     */
-    protected function deleteSettingFiles(Setting $setting): void
-    {
-        switch ($setting->type) {
-            case 3:
-                $this->deleteFile($setting->value);
-                break;
-
-            case 4:
-            case 5:
-            case 6:
-                $values = is_string($setting->value)
-                    ? json_decode($setting->value, true) ?? []
-                    : [];
-                $this->deleteFilesRecursive($values);
-                break;
-            case 7:
-                $values = is_string($setting->value)
-                    ? json_decode($setting->value, true) ?? []
-                    : [];
-                $this->deleteFilesRecursive($values, true);
-                break;
-        }
-    }
-
-    /**
-     * Recursively delete files from array structure
-     */
-    protected function deleteFilesRecursive(array $data, $withThumbs = null): void
-    {
-        foreach ($data as $item) {
-            if (is_array($item)) {
-                $this->deleteFilesRecursive($item, $withThumbs);
-            } elseif (is_string($item) && !empty($item)) {
-                $this->deleteFile($item, $withThumbs);
-            }
-        }
-    }
-
-    /**
-     * Delete file and all its thumbnails
-     */
-    protected function deleteFile(?string $filename, $withThumbs = false): void
-    {
-        if (empty($filename)) {
-            return;
-        }
-
-        $disk = Storage::disk('public');
-        $path = Setting::getFilePath($filename);
-
-        // Delete all thumbnails first
-        if($withThumbs) {
-            SettingsThumb::delete($path);
-        }
-
-        // Delete original file
-        if ($disk->exists($path)) {
-            $disk->delete($path);
-        }
-    }
-
-    /**
-     * Store uploaded file to storage
-     */
-    protected function storeFile(\Illuminate\Http\UploadedFile $file, string $fileName): string
-    {
-        $path = $file->storeAs(
-            Setting::UPLOAD_DIR,
-            $fileName,
-            Setting::UPLOAD_DISK
-        );
-
-        // Optimize image if applicable
-        if ($this->isImage($file->getClientOriginalExtension())) {
-            $this->optimizeImage($fileName);
-        }
-
-        return $path;
-    }
-
-    /**
-     * Optimize image using Intervention Image
-     */
-    protected function optimizeImage(string $fileName): void
-    {
-        if (!class_exists(ImageManager::class)) {
-            return;
-        }
-
-        try {
-            $filePath = Setting::getFilePath($fileName);
-            $fullPath = Storage::disk(Setting::UPLOAD_DISK)->path($filePath);
-
-            if (file_exists($fullPath)) {
-                $quality = 100;
-
-                // Можно также указать драйвер через enum
-                $manager = new ImageManager(new Driver());
-
-                $image = $manager->decode($fullPath);
-
-                // Дополнительная оптимизация для JPEG/PNG
-                $image->save($fullPath, quality: $quality);
-            }
-        } catch (\Exception $e) {
-            \Log::warning('Image optimization failed: ' . $e->getMessage());
-        }
-    }
-
-    /**
-     * Generate filename for single file upload
-     */
-    protected function generateFileName(Setting $setting, string $extension): string
-    {
-        // Special naming for specific codes
-        if (in_array($setting->code, ['bim_library', 'price_list'])) {
-            return $setting->code . '.' . $extension;
-        }
-
-        return 'setting_' . $setting->id . '.' . $extension;
-    }
-
-    /**
-     * Generate unique filename for multiple files
-     */
-    protected function generateUniqueFileName(Setting $setting, string $extension): string
-    {
-        return 'setting_' . $setting->id . '_' . uniqid() . '.' . $extension;
-    }
-
-    /**
-     * Check if file extension is an image
-     */
-    protected function isImage(string $extension): bool
-    {
-        return in_array(strtolower($extension), $this->imageExtensions);
-    }
-
-    /**
-     * Format settings for frontend display
-     */
-    protected function formatSettings($settings): array
-    {
-        return $settings->map(function (Setting $setting) {
-            $data = $setting->toArray();
-
-            // Decode JSON values for complex types
-            if (in_array($setting->type, [4, 5, 6, 7])) {
-                $data['value'] = is_string($setting->value)
-                    ? json_decode($setting->value, true) ?? []
-                    : $setting->value;
-            }
-
-            // Add file URLs for file types
-            if ($setting->type == 3 && !empty($setting->value)) {
-                $data['file_url'] = Storage::disk(Setting::UPLOAD_DISK)
-                    ->url(Setting::getFilePath($setting->value));
-            }
-
-            // Add file URLs for nested files in complex types
-            if (in_array($setting->type, [4, 6, 7])) {
-                $data['file_urls'] = $this->generateFileUrls(
-                    $data['value'],
-                    $setting->params ?? []
-                );
-            }
-
-            // Add thumbs data for gallery type (7)
-            if ($setting->type === 7 && !empty($setting->params['thumbs'])) {
-                $data['thumbs_data'] = $this->generateThumbsData(
-                    $data['value'] ?? [],
-                    $setting->params['thumbs']
-                );
-                $data['thumbs_config'] = SettingsThumb::parseThumbsConfig($setting->params['thumbs']);
-            }
-
-            return $data;
-        })->toArray();
-    }
-
-    /**
-     * Generate thumbs data for gallery images
-     *
-     * @param array $images Array of image paths
-     * @param string $thumbsConfigString Thumbs configuration string (e.g., "200x100, 400x200|cover")
-     * @return array
-     */
-    protected function generateThumbsData(array $images, string $thumbsConfigString): array
-    {
-        $thumbsConfig = SettingsThumb::parseThumbsConfig($thumbsConfigString);
-
-        if (empty($thumbsConfig) || empty($images)) {
-            return [];
-        }
-
-        $thumbsData = [];
-        $storage = Storage::disk(Setting::UPLOAD_DISK);
-
-        foreach ($images as $index => $imagePath) {
-            if (!is_string($imagePath) || empty($imagePath)) {
-                continue;
-            }
-
-            $fullPath = Setting::UPLOAD_DIR . '/' . $imagePath;
-
-            // Check if original file exists
-            if (!$storage->exists($fullPath)) {
-                continue;
-            }
-
-            // Generate thumbs for this image
-            $thumbs = $this->getOrCreateThumbs($fullPath, $thumbsConfig, $storage);
-
-            $thumbsData[$fullPath] = [
-                'original_url' => $storage->url($fullPath),
-                'path' => $fullPath,
-                'filename' => basename($imagePath),
-                'thumbs' => $thumbs,
-            ];
-        }
-
-        return $thumbsData;
-    }
-
-    /**
-     * Get or create thumbs for a single image
-     *
-     * @param string $imagePath Full path to original image
-     * @param array $thumbsConfig Array of thumb configurations
-     * @param \Illuminate\Contracts\Filesystem\Filesystem $storage
-     * @return array
-     */
-    protected function getOrCreateThumbs(string $imagePath, array $thumbsConfig, $storage): array
-    {
-        $thumbs = [];
-
-        foreach ($thumbsConfig as $key => $config) {
-            $thumbPath = SettingsThumb::url($imagePath, $key);
-
-            // If thumb doesn't exist, try to create it
-            if (!$storage->exists($thumbPath)) {
-                SettingsThumb::make($imagePath, $thumbsConfig);
-            }
-
-            if ($storage->exists($thumbPath)) {
-                $thumbs[$key] = [
-                    'url' => $storage->url($thumbPath),
-                    'config' => $config,
-                    'size' => $this->parseThumbSize($config),
-                ];
-            }
-        }
-
-        return $thumbs;
-    }
-
-    /**
-     * Parse thumb size from config string
-     *
-     * @param string $config Thumb config (e.g., "200x100" or "200x100|cover")
-     * @return array
-     */
-    protected function parseThumbSize(string $config): array
-    {
-        $parts = explode('|', $config);
-        $size = $parts[0];
-        $sizes = explode('x', $size);
-
-        return [
-            'width' => (int) ($sizes[0] ?? 0),
-            'height' => (int) ($sizes[1] ?? 0),
-            'mode' => $parts[1] ?? 'cover',
-        ];
-    }
-
-    /**
-     * Generate file URLs for nested structures
-     */
-    protected function generateFileUrls(mixed $data, array $params = []): mixed
-    {
-        if (is_string($data) && !empty($data)) {
-            return Storage::disk(Setting::UPLOAD_DISK)->url(
-                Setting::getFilePath($data)
-            );
-        }
-
-        if (is_array($data)) {
-            // Проверяем, является ли массив списком файлов (для галереи - тип 7)
-            // Если все элементы - строки, это галерея
-            $isListOfStrings = !empty($data) && array_all($data, fn($item) => is_string($item));
-
-            if ($isListOfStrings) {
-                // Это галерея: массив путей к файлам
-                $result = [];
-                foreach ($data as $index => $filePath) {
-                    $result[$index] = !empty($filePath)
-                        ? Storage::disk(Setting::UPLOAD_DISK)->url(Setting::getFilePath($filePath))
-                        : null;
-                }
-                return $result;
-            }
-
-            // Для структурированных данных (тип 4, 6)
-            $result = [];
-            foreach ($data as $key => $value) {
-                if (is_array($value)) {
-                    $result[$key] = $this->generateFileUrls($value, $params);
-                } elseif (is_string($value)) {
-                    // Check if this field is a file type based on params
-                    $isFileField = isset($params['fields'][$key]) &&
-                        $params['fields'][$key]['type'] == 3;
-
-                    $result[$key] = ($isFileField && !empty($value))
-                        ? Storage::disk(Setting::UPLOAD_DISK)->url(Setting::getFilePath($value))
-                        : $value;
-                } else {
-                    $result[$key] = $value;
-                }
-            }
-            return $result;
-        }
-
-        return $data;
-    }
-
-    /**
-     * Санитизация HTML контента (разрешаем безопасные теги)
-     */
-    protected function sanitizeHtmlValue($value): string
-    {
-        if (empty($value)) {
-            return '';
-        }
-
-        // Разрешенные HTML теги
-        $allowedTags = '<p><br><strong><b><em><i><u><s><strike><del><ins><mark><span><div>'
-            . '<h1><h2><h3><h4><h5><h6>'
-            . '<ul><ol><li>'
-            . '<blockquote><pre><code>'
-            . '<a><img><table><thead><tbody><tr><th><td>'
-            . '<hr><sub><sup>';
-
-        // Разрешенные атрибуты
-        $allowedAttributes = [
-            'href',
-            'src',
-            'alt',
-            'title',
-            'target',
-            'rel',
-            'class',
-            'id',
-            'style',
-            'align',
-            'width',
-            'height',
-            'colspan',
-            'rowspan',
-            'data-type',
-            'data-checked',
-            'start',
-            'type',
-            'reversed',
-            'compact'
-        ];
-
-        // Очищаем HTML
-        $value = strip_tags($value, $allowedTags);
-
-        // Дополнительная очистка атрибутов
-        $value = preg_replace_callback(
-            '/<([a-zA-Z][a-zA-Z0-9]*)\s+([^>]*)>/',
-            function ($matches) use ($allowedAttributes) {
-                $tag = $matches[1];
-                $attributes = $matches[2];
-
-                // Оставляем только разрешенные атрибуты
-                $cleanedAttributes = '';
-                preg_match_all('/([a-zA-Z-]+)\s*=\s*["\']([^"\']*)["\']/', $attributes, $attrMatches);
-
-                foreach ($attrMatches[1] as $i => $attrName) {
-                    if (in_array(strtolower($attrName), $allowedAttributes)) {
-                        $attrValue = $attrMatches[2][$i];
-                        // Дополнительная защита от XSS в атрибутах
-                        $attrValue = htmlspecialchars($attrValue, ENT_QUOTES, 'UTF-8');
-                        $cleanedAttributes .= " $attrName=\"$attrValue\"";
-                    }
-                }
-
-                return "<$tag$cleanedAttributes>";
-            },
-            $value
-        );
-
-        return $value;
-    }
-
-    /**
-     * Санитизация текстовых значений
-     */
-    protected function sanitizeTextValue($value): string
-    {
-        if (empty($value)) {
-            return '';
-        }
-
-        // Для текстовых полей убираем все HTML теги
-        return strip_tags($value);
+        return [];
     }
 }

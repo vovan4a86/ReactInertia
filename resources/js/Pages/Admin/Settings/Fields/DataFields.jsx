@@ -1,41 +1,49 @@
-import React, { useEffect } from 'react';
+import React, { memo, useCallback } from 'react';
+import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import {
-    Box,
-    Typography,
-    Chip,
-} from '@mui/material';
+    AttachFile as AttachFileIcon,
+    Edit as EditIcon,
+    Subject as SubjectIcon,
+    TextFields as TextFieldsIcon,
+} from '@mui/icons-material';
+
 import TextFieldInput from './TextFieldInput';
 import TextareaInput from './TextareaInput';
 import EditorInput from './EditorInput';
 import FileInput from './FileInput';
+import { SETTING_TYPE } from '../utils/uploads';
 
-import TextFieldsIcon from '@mui/icons-material/TextFields';
-import SubjectIcon from '@mui/icons-material/Subject';
-import EditIcon from '@mui/icons-material/Edit';
-import AttachFileIcon from '@mui/icons-material/AttachFile';
-
-const FIELD_TYPE_ICONS = {
-    0: TextFieldsIcon,
-    1: SubjectIcon,
-    2: EditIcon,
-    3: AttachFileIcon,
+/** Иконки и подписи типов под-полей. */
+const FIELD_META = {
+    [SETTING_TYPE.TEXT]: { Icon: TextFieldsIcon, label: 'Текст' },
+    [SETTING_TYPE.TEXTAREA]: { Icon: SubjectIcon, label: 'Текстовая область' },
+    [SETTING_TYPE.EDITOR]: { Icon: EditIcon, label: 'Редактор' },
+    [SETTING_TYPE.FILE]: { Icon: AttachFileIcon, label: 'Файл' },
 };
 
-const FIELD_TYPE_LABELS = {
-    0: 'Текст',
-    1: 'Текстовое поле',
-    2: 'Редактор',
-    3: 'Файл',
-};
+/**
+ * Составная настройка «Данные» (тип 4) — объект с фиксированным набором полей.
+ *
+ * @param {object} props
+ * @param {object} props.setting
+ * @param {Record<string, unknown>} props.value
+ * @param {(value: Record<string, unknown>) => void} props.onChange
+ */
+function DataFields({ setting, value = {}, onChange }) {
+    const fields = setting.params?.fields ?? {};
 
-export default function DataFields({ setting, name, value, onChange, onFileChange, getFileUrl }) {
-    const fields = setting.params?.fields || {};
+    const handleChange = useCallback(
+        (field, val) => onChange({ ...(value ?? {}), [field]: val }),
+        [value, onChange],
+    );
 
     if (Object.keys(fields).length === 0) {
         return (
-            <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: 'center' }}>
-                Нет настраиваемых полей
-            </Typography>
+            <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                    Поля не настроены. Откройте настройку и добавьте их.
+                </Typography>
+            </Paper>
         );
     }
 
@@ -64,74 +72,60 @@ export default function DataFields({ setting, name, value, onChange, onFileChang
 
     return (
         <Box>
-            <Typography
-                variant="overline"
-                color="text.secondary"
-                sx={{ mb: 1, display: 'block' }}
-            >
+            <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
                 Поля данных ({Object.keys(fields).length})
             </Typography>
 
-            <Box component="dl" sx={{
-                '& dt': { mb: 0.5 },
-                '& dd': { mb: 3, ml: 0 },
-            }}>
-                {Object.entries(fields).map(([field, params]) => {
-                    const TypeIcon = FIELD_TYPE_ICONS[params.type] || TextFieldsIcon;
-                    const hasValue = value[field] && value[field] !== '';
+            <Stack spacing={2.5}>
+                {Object.entries(fields).map(([field, config]) => {
+                    const type = Number(config.type);
+                    const { Icon, label } = FIELD_META[type] ?? FIELD_META[SETTING_TYPE.TEXT];
+                    const current = value?.[field] ?? (type === SETTING_TYPE.FILE ? null : '');
+                    const filled = current !== null && current !== '';
 
-                    const commonProps = {
-                        name: `${name}[${field}]`,
-                        value: value[field] || '',
-                        onChange: (val) => handleFieldChange(field, val),
-                        placeholder: params.title,
+                    const common = {
+                        value: current ?? '',
+                        onChange: (val) => handleChange(field, val),
+                        placeholder: config.title,
+                        fullWidth: true,
                     };
 
                     return (
-                        <React.Fragment key={field}>
-                            {/* Заголовок */}
-                            <Box component="dt" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <TypeIcon
-                                    color={hasValue ? 'primary' : 'action'}
-                                    fontSize="small"
-                                />
+                        <Box key={field}>
+                            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75 }}>
+                                <Icon color={filled ? 'primary' : 'action'} fontSize="small" />
                                 <Typography variant="subtitle2" sx={{ flex: 1 }}>
-                                    {params.title}
+                                    {config.title || field}
                                 </Typography>
-                                <Chip
-                                    label={FIELD_TYPE_LABELS[params.type]}
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{ height: 20, fontSize: '0.7rem' }}
-                                />
-                                {!hasValue && (
+                                <Chip label={label} size="small" variant="outlined" sx={{ height: 20, fontSize: '.7rem' }} />
+                                {!filled && (
                                     <Chip
                                         label="Пусто"
                                         size="small"
                                         color="warning"
                                         variant="outlined"
-                                        sx={{ height: 20, fontSize: '0.7rem' }}
+                                        sx={{ height: 20, fontSize: '.7rem' }}
                                     />
                                 )}
-                            </Box>
+                            </Stack>
 
-                            {/* Поле ввода */}
-                            <Box component="dd">
-                                {params.type === 0 && <TextFieldInput {...commonProps} />}
-                                {params.type === 1 && <TextareaInput {...commonProps} rows={3} />}
-                                {params.type === 2 && <EditorInput {...commonProps} />}
-                                {params.type === 3 && (
-                                    <FileInput
-                                        {...commonProps}
-                                        fileUrl={getFileUrl(value?.[field], setting.file_urls, field)}
-                                        onFileChange={handleFileChange(field)}
-                                    />
-                                )}
-                            </Box>
-                        </React.Fragment>
+                            {type === SETTING_TYPE.TEXTAREA && <TextareaInput {...common} rows={3} />}
+                            {type === SETTING_TYPE.EDITOR && <EditorInput {...common} />}
+                            {type === SETTING_TYPE.FILE && (
+                                <FileInput
+                                    setting={setting}
+                                    value={current}
+                                    onChange={(val) => handleChange(field, val)}
+                                    hint=""
+                                />
+                            )}
+                            {type === SETTING_TYPE.TEXT && <TextFieldInput {...common} />}
+                        </Box>
                     );
                 })}
-            </Box>
+            </Stack>
         </Box>
     );
 }
+
+export default memo(DataFields);
