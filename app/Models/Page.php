@@ -499,14 +499,25 @@ class Page extends Model
      */
     public static function flatCached(): EloquentCollection
     {
-        return Cache::remember(
+        $result = Cache::remember(
             self::CACHE_KEY,
-            self::CACHE_TTL[0], // или просто TTL в секундах
+            self::CACHE_TTL[0],
             fn() => static::query()
                 ->ordered()
                 ->get(['id', 'parent_id', 'name', 'alias', 'slug', 'published'])
                 ->keyBy('id')
         );
+
+        // Защита от битой десериализации (например после смены драйвера кэша)
+        if (!($result instanceof EloquentCollection)) {
+            static::flushCache();
+            return static::query()
+                ->ordered()
+                ->get(['id', 'parent_id', 'name', 'alias', 'slug', 'published'])
+                ->keyBy('id');
+        }
+
+        return $result;
     }
 
     /** Сбросить кэш дерева/справочника. */
