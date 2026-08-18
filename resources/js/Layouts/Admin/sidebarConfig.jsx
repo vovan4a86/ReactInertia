@@ -21,6 +21,7 @@ import {
     Settings as SettingsIcon,
     Article as ArticleIcon,
     Category as CategoryIcon,
+    HistoryOutlined as HistoryOutlinedIcon,
 } from '@mui/icons-material';
 
 const sidebarConfig = [
@@ -92,6 +93,15 @@ const sidebarConfig = [
         link: '/admin/settings',
         route: 'admin.settings',
         icon: SettingsIcon,
+        // permission: 'manage-settings',
+    },
+
+    {
+        id: 'activity-log',
+        label: 'Журнал активности',
+        link: '/admin/activity-log',
+        route: 'admin.activity-log',
+        icon: HistoryOutlinedIcon,
         // permission: 'manage-settings',
     },
 ];

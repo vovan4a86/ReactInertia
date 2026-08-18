@@ -273,37 +273,50 @@ export default function EditParams({ type, params, fieldTypes, types, onChange }
 
     return (
         <Box>
-            <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                    <TableHead>
-                        <TableRow>
-                            <TableCell width={44} padding="checkbox" />
-                            <TableCell>Название поля</TableCell>
-                            <TableCell width={220}>Ключ *</TableCell>
-                            <TableCell width={200}>Тип</TableCell>
-                            <TableCell width={88} padding="checkbox" />
-                        </TableRow>
-                    </TableHead>
-
-                    <TableBody>
-                        {rows.length === 0 ? (
+            {/*
+              * DndContext обязан находиться СНАРУЖИ <Table>.
+              *
+              * Он не является «невидимым» провайдером: помимо контекста он рендерит
+              * блок доступности (screen-reader instructions + aria-live регион) —
+              * два <div> прямо в месте вызова. Внутри <TableBody> это даёт
+              * «In HTML, <div> cannot be a child of <tbody>»: браузер выкидывает
+              * такие узлы из таблицы при парсинге, DOM расходится с деревом React,
+              * и на следующей гидрации/перерисовке ломается сопоставление узлов.
+              *
+              * SortableContext, напротив, DOM не создаёт (только контекст),
+              * поэтому он спокойно живёт внутри <TableBody> и оборачивает <tr>.
+              */}
+            <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                onDragEnd={handleDragEnd}
+            >
+                <TableContainer component={Paper} variant="outlined">
+                    <Table size="small">
+                        <TableHead>
                             <TableRow>
-                                <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
-                                    <Typography color="text.secondary" gutterBottom>
-                                        Нет настроенных полей
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        Добавьте поля, которые будут отображаться в этой настройке
-                                    </Typography>
-                                </TableCell>
+                                <TableCell width={44} padding="checkbox" />
+                                <TableCell>Название поля</TableCell>
+                                <TableCell width={220}>Ключ *</TableCell>
+                                <TableCell width={200}>Тип</TableCell>
+                                <TableCell width={88} padding="checkbox" />
                             </TableRow>
-                        ) : (
-                            <DndContext
-                                sensors={sensors}
-                                collisionDetection={closestCenter}
-                                modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-                                onDragEnd={handleDragEnd}
-                            >
+                        </TableHead>
+
+                        <TableBody>
+                            {rows.length === 0 ? (
+                                <TableRow>
+                                    <TableCell colSpan={5} align="center" sx={{ py: 3 }}>
+                                        <Typography color="text.secondary" gutterBottom>
+                                            Нет настроенных полей
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            Добавьте поля, которые будут отображаться в этой настройке
+                                        </Typography>
+                                    </TableCell>
+                                </TableRow>
+                            ) : (
                                 <SortableContext items={ids} strategy={verticalListSortingStrategy}>
                                     {rows.map((row) => (
                                         <FieldRow
@@ -317,11 +330,11 @@ export default function EditParams({ type, params, fieldTypes, types, onChange }
                                         />
                                     ))}
                                 </SortableContext>
-                            </DndContext>
-                        )}
-                    </TableBody>
-                </Table>
-            </TableContainer>
+                            )}
+                        </TableBody>
+                    </Table>
+                </TableContainer>
+            </DndContext>
 
             <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 1 }}>
                 <Button size="small" variant="text" startIcon={<AddIcon />} onClick={handleAdd}>

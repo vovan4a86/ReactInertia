@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AdminActivityLogController;
 use App\Http\Controllers\Admin\AdminArticleController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminPageController;
@@ -39,10 +40,13 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
     ->group(function () {
         Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
         Route::get('/dashboard', [AdminDashboardController::class, 'index'])->name('dashboard');
+
+        // Пользователи
         Route::resource('users', AdminUserController::class);
         Route::post('/users/{user}/change-password', [AdminUserController::class, 'changePassword'])
             ->name('admin.users.change-password');
 
+        // Настройки
         Route::prefix('/settings')->name('settings.')->group(function () {
             // Основные страницы
             Route::get('/', [AdminSettingsController::class, 'index'])->name('index');
@@ -85,6 +89,16 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
             Route::delete('/{page}', [AdminPageController::class, 'destroy'])->name('destroy');
         });
         Route::resource('articles', AdminArticleController::class);
+
+        // Журнал активности
+        Route::prefix('activity-log')->name('activity-log.')->group(function () {
+            Route::get('/', [AdminActivityLogController::class, 'index']);
+            Route::get('/export', [AdminActivityLogController::class, 'export'])->name('export');
+            Route::post('/prune', [AdminActivityLogController::class, 'prune'])->name('prune');
+            Route::post('/bulk', [AdminActivityLogController::class, 'bulkDestroy'])->name('bulk-destroy');
+            Route::delete('/{activityLog}', [AdminActivityLogController::class, 'destroy'])->name('destroy');
+        });
+
 
         Route::any('/profile', [AdminProfileController::class, 'edit'])->name('profile.edit');
     });

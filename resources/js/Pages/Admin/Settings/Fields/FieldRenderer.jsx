@@ -21,13 +21,36 @@ import { SETTING_TYPE } from '../utils/uploads';
  * @param {unknown} props.value  текущее значение из формы
  * @param {(value: unknown) => void} props.onChange
  */
-function FieldRenderer({ setting, value, onChange }) {
+function FieldRenderer({ setting, value, onChange, disabled = false }) {
+    // params позволяют настроить поле из админки, не трогая код:
+    // { "placeholder": "...", "rows": 6, "maxlength": 255, "rich": false }
+    const params = setting.params ?? {};
+    const placeholder = params.placeholder ?? undefined;
+
     switch (Number(setting.type)) {
         case SETTING_TYPE.TEXTAREA:
-            return <TextareaInput value={value ?? ''} onChange={onChange} rows={4} fullWidth />;
+            return (
+                <TextareaInput
+                    value={value ?? ''}
+                    onChange={onChange}
+                    placeholder={placeholder}
+                    rows={Number(params.rows) || 4}
+                    maxLength={Number(params.maxlength) || undefined}
+                    disabled={disabled}
+                />
+            );
 
         case SETTING_TYPE.EDITOR:
-            return <EditorInput value={value ?? ''} onChange={onChange} />;
+            return (
+                <EditorInput
+                    value={value ?? ''}
+                    onChange={onChange}
+                    placeholder={placeholder}
+                    // params.rich === false — откатиться на обычную textarea
+                    useRichEditor={params.rich !== false}
+                    disabled={disabled}
+                />
+            );
 
         case SETTING_TYPE.FILE:
             return <FileInput setting={setting} value={value ?? null} onChange={onChange} />;
@@ -64,7 +87,16 @@ function FieldRenderer({ setting, value, onChange }) {
 
         case SETTING_TYPE.TEXT:
         default:
-            return <TextFieldInput value={value ?? ''} onChange={onChange} fullWidth />;
+            return (
+                <TextFieldInput
+                    value={value ?? ''}
+                    onChange={onChange}
+                    placeholder={placeholder}
+                    type={params.input_type ?? 'text'}
+                    maxLength={Number(params.maxlength) || undefined}
+                    disabled={disabled}
+                />
+            );
     }
 }
 

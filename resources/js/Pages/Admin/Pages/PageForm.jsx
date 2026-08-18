@@ -33,7 +33,7 @@ import {
     SwapHoriz as SwapHorizIcon,
     ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
-import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor.jsx";
+import RichTextEditor from "@/Pages/Admin/Settings/Fields/RichTextEditor/RichTextEditor.jsx";
 import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 import {useLocalNotification} from '@/Contexts/Admin/LocalNotificationContext.jsx';
 

@@ -44,7 +44,8 @@ const BreadCrumbs = () => {
         'edit': 'Редактирование',
         'group': 'Группа',
         'items': 'Элементы',
-        'pages': 'Структура сайта'
+        'pages': 'Структура сайта',
+        'activity-log': 'Журнал активности',
     };
 
   const renderBreadCrumbs = () => {

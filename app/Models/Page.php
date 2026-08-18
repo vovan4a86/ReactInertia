@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Traits\HasImages;
+use App\Traits\LogsActivity;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Storage;
 
 class Page extends Model
 {
-    use HasFactory, SoftDeletes, HasImages;
+    use HasFactory, SoftDeletes, HasImages, LogsActivity;
 
     protected $fillable = [
         'name',
@@ -50,6 +51,12 @@ class Page extends Model
     ];
 
     protected $appends = ['url', 'single_image_src', 'single_thumb'];
+
+    protected array $activityHidden = [];
+
+    public function activityTitle(): string {
+        return $this->name ?: $this->slug;
+    }
 
     private bool $_disableEventUpdateSlug = false;
     private bool $_disableEventUpdatePublished = false;
