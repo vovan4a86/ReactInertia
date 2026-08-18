@@ -20,6 +20,7 @@ export const FIELD_TYPES = Object.freeze([
     SETTING_TYPE.TEXTAREA,
     SETTING_TYPE.EDITOR,
     SETTING_TYPE.FILE,
+    SETTING_TYPE.BOOLEAN,
 ]);
 
 const FALLBACK_LABELS = {
@@ -27,6 +28,7 @@ const FALLBACK_LABELS = {
     [SETTING_TYPE.TEXTAREA]: 'Текстовая область',
     [SETTING_TYPE.EDITOR]: 'Редактор',
     [SETTING_TYPE.FILE]: 'Файл',
+    [SETTING_TYPE.BOOLEAN]: 'Флажок',
 };
 
 /**

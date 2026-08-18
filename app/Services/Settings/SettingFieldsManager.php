@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Settings;
 
+use App\Casts\SettingValueCast;
 use App\Enums\SettingType;
 use App\Helpers\SettingsThumb;
 use App\Models\Setting;
@@ -25,6 +26,7 @@ final class SettingFieldsManager
         SettingType::Textarea,
         SettingType::Editor,
         SettingType::File,
+        SettingType::Boolean,
     ];
 
     public function __construct(private readonly SettingFileManager $files)
@@ -158,13 +160,14 @@ final class SettingFieldsManager
                 $oldKey   = $sources[$newKey];
                 $oldValue = $row[$oldKey] ?? null;
 
+                $newType = SettingType::tryFrom((int) $config['type']) ?? SettingType::Text;
                 $wasFile = (int) ($oldFields[$oldKey]['type'] ?? -1) === SettingType::File->value;
-                $isFile  = (int) $config['type'] === SettingType::File->value;
+                $isFile  = $newType === SettingType::File;
 
                 // Тип поля сменился с файлового: значение (имя файла) бессмысленно.
                 if ($wasFile && !$isFile) {
                     $this->files->delete(is_string($oldValue) ? $oldValue : null);
-                    $newRow[$newKey] = '';
+                    $newRow[$newKey] = $newType->isBoolean() ? false : '';
 
                     continue;
                 }
@@ -175,7 +178,7 @@ final class SettingFieldsManager
                     continue;
                 }
 
-                $newRow[$newKey] = $oldValue ?? ($isFile ? null : '');
+                $newRow[$newKey] = $this->castFieldValue($newType, $oldValue);
             }
 
             $migrated[] = $newRow;
@@ -185,6 +188,25 @@ final class SettingFieldsManager
         $this->deleteOrphanFiles($rows, $oldFields, array_values($sources));
 
         $setting->value = $isSingle ? ($migrated[0] ?? []) : $migrated;
+    }
+
+    /**
+     * Привести сохранённое значение под-поля к его новому типу.
+     *
+     * Нужно при смене типа поля в редакторе: например «Текст» → «Флажок»
+     * (строка '1' превратится в true) или «Флажок» → «Текст»
+     * (true превратится в '1', иначе в JSON осталось бы булево значение
+     * и текстовое поле стало бы неуправляемым на фронте).
+     */
+    private function castFieldValue(SettingType $type, mixed $value): mixed
+    {
+        return match (true) {
+            $type === SettingType::File => is_string($value) && $value !== '' ? $value : null,
+            $type->isBoolean()          => SettingValueCast::toBool($value),
+            is_bool($value)             => $value ? '1' : '',
+            is_scalar($value)           => (string) $value,
+            default                     => '',
+        };
     }
 
     /**

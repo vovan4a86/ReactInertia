@@ -37,8 +37,22 @@ import TextFieldInput from './TextFieldInput';
 import TextareaInput from './TextareaInput';
 import EditorInput from './EditorInput';
 import FileInput from './FileInput';
+import BooleanInput from './BooleanInput';
 import { useSettingsForm } from '../SettingsFormContext';
-import { isUploadMarker, SETTING_TYPE, uid } from '../utils/uploads';
+import { isUploadMarker, SETTING_TYPE, toBool, uid } from '../utils/uploads';
+
+/**
+ * Значение поля «по умолчанию» для новой строки повторителя.
+ * У каждого типа свой «пустой» вид: файл — null, флажок — false, остальное — ''.
+ *
+ * @param {number} type
+ * @returns {string|boolean|null}
+ */
+const defaultFieldValue = (type) => {
+    if (type === SETTING_TYPE.FILE) return null;
+    if (type === SETTING_TYPE.BOOLEAN) return false;
+    return '';
+};
 
 /**
  * Одна перетаскиваемая строка повторителя.
@@ -94,7 +108,7 @@ const SortableRow = memo(function SortableRow({ row, index, fields, onRemove, on
                 </Stack>
 
                 <Stack spacing={2}>
-                    {Object.entries(fields).map(([key, config]) => (
+                    {fields.map(([key, config]) => (
                         <Box key={key}>
                             <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
                                 {config.title || key}
@@ -122,7 +136,9 @@ const SortableRow = memo(function SortableRow({ row, index, fields, onRemove, on
 function ListDataInput({ setting, value = [], onChange }) {
     const { releaseUpload } = useSettingsForm();
 
-    const fields = setting.params?.fields ?? {};
+    // Поля берутся в явном порядке (params.fields[key].order), а не в порядке
+    // ключей объекта: JS переставляет числовые ключи в начало.
+    const fields = useMemo(() => sortFields(setting.params?.fields), [setting.params?.fields]);
     const rows = Array.isArray(value) ? value : [];
 
     const sensors = useSensors(
@@ -134,10 +150,7 @@ function ListDataInput({ setting, value = [], onChange }) {
         () => ({
             _key: uid(),
             ...Object.fromEntries(
-                Object.entries(fields).map(([key, config]) => [
-                    key,
-                    Number(config.type) === SETTING_TYPE.FILE ? null : '',
-                ]),
+                fields.map(([key, config]) => [key, defaultFieldValue(Number(config.type))]),
             ),
         }),
         [fields],
@@ -218,6 +231,14 @@ function ListDataInput({ setting, value = [], onChange }) {
                             hint=""
                         />
                     );
+                case SETTING_TYPE.BOOLEAN:
+                    return (
+                        <BooleanInput
+                            value={toBool(row[field])}
+                            onChange={onFieldChange}
+                            size="small"
+                        />
+                    );
                 default:
                     return <TextFieldInput {...common} />;
             }
@@ -227,7 +248,7 @@ function ListDataInput({ setting, value = [], onChange }) {
 
     const sortableIds = useMemo(() => rows.map((row) => row._key), [rows]);
 
-    if (Object.keys(fields).length === 0) {
+    if (fields.length === 0) {
         return (
             <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                 <Typography color="text.secondary" variant="body2">

@@ -1,17 +1,20 @@
-import React, { memo, useCallback } from 'react';
+import React, { memo, useCallback, useMemo } from 'react';
 import { Box, Chip, Paper, Stack, Typography } from '@mui/material';
 import {
     AttachFile as AttachFileIcon,
     Edit as EditIcon,
     Subject as SubjectIcon,
     TextFields as TextFieldsIcon,
+    ToggleOn as ToggleOnIcon,
 } from '@mui/icons-material';
 
 import TextFieldInput from './TextFieldInput';
 import TextareaInput from './TextareaInput';
 import EditorInput from './EditorInput';
 import FileInput from './FileInput';
-import { SETTING_TYPE } from '../utils/uploads';
+import BooleanInput from './BooleanInput';
+import { SETTING_TYPE, toBool } from '../utils/uploads';
+import { sortFields } from '../utils/fields';
 
 /** Иконки и подписи типов под-полей. */
 const FIELD_META = {
@@ -19,6 +22,7 @@ const FIELD_META = {
     [SETTING_TYPE.TEXTAREA]: { Icon: SubjectIcon, label: 'Текстовая область' },
     [SETTING_TYPE.EDITOR]: { Icon: EditIcon, label: 'Редактор' },
     [SETTING_TYPE.FILE]: { Icon: AttachFileIcon, label: 'Файл' },
+    [SETTING_TYPE.BOOLEAN]: { Icon: ToggleOnIcon, label: 'Флажок' },
 };
 
 /**
@@ -30,14 +34,15 @@ const FIELD_META = {
  * @param {(value: Record<string, unknown>) => void} props.onChange
  */
 function DataFields({ setting, value = {}, onChange }) {
-    const fields = setting.params?.fields ?? {};
+    // Явный порядок полей из params.fields[key].order.
+    const fields = useMemo(() => sortFields(setting.params?.fields), [setting.params?.fields]);
 
     const handleChange = useCallback(
         (field, val) => onChange({ ...(value ?? {}), [field]: val }),
         [value, onChange],
     );
 
-    if (Object.keys(fields).length === 0) {
+    if (fields.length === 0) {
         return (
             <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                 <Typography variant="body2" color="text.secondary">
@@ -46,42 +51,24 @@ function DataFields({ setting, value = {}, onChange }) {
             </Paper>
         );
     }
-
-    const handleFieldChange = (field, val) => {
-        const fieldConfig = fields[field];
-        const isFileField = fieldConfig?.type === 3;
-
-        if (!isFileField && typeof val === 'string' && val.startsWith('settings[')) {
-            console.warn('Ignoring marker for non-file field:', field, val);
-            return;
-        }
-
-        const newValue = {
-            ...(value || {}),
-            [field]: val
-        };
-
-        onChange(newValue);
-    };
-
-    const handleFileChange = (field) => (key, file) => {
-        // const fileKey = `${name}[${field}]`;
-        // onFileChange(fileKey, file);
-        onFileChange(key, file);
-    };
-
     return (
         <Box>
             <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Поля данных ({Object.keys(fields).length})
+                Поля данных ({fields.length})
             </Typography>
 
             <Stack spacing={2.5}>
-                {Object.entries(fields).map(([field, config]) => {
+                {fields.map(([field, config]) => {
                     const type = Number(config.type);
+                    const isBool = type === SETTING_TYPE.BOOLEAN;
                     const { Icon, label } = FIELD_META[type] ?? FIELD_META[SETTING_TYPE.TEXT];
-                    const current = value?.[field] ?? (type === SETTING_TYPE.FILE ? null : '');
-                    const filled = current !== null && current !== '';
+                    const current = isBool
+                        ? toBool(value?.[field])
+                        : value?.[field] ?? (type === SETTING_TYPE.FILE ? null : '');
+
+                    // У флажка выключенное состояние — валидное значение,
+                    // поэтому метка «Пусто» к нему не применяется.
+                    const filled = isBool ? current : current !== null && current !== '';
 
                     const common = {
                         value: current ?? '',
@@ -98,7 +85,7 @@ function DataFields({ setting, value = {}, onChange }) {
                                     {config.title || field}
                                 </Typography>
                                 <Chip label={label} size="small" variant="outlined" sx={{ height: 20, fontSize: '.7rem' }} />
-                                {!filled && (
+                                {!filled && !isBool && (
                                     <Chip
                                         label="Пусто"
                                         size="small"
@@ -117,6 +104,13 @@ function DataFields({ setting, value = {}, onChange }) {
                                     value={current}
                                     onChange={(val) => handleChange(field, val)}
                                     hint=""
+                                />
+                            )}
+                            {isBool && (
+                                <BooleanInput
+                                    value={current}
+                                    onChange={(val) => handleChange(field, val)}
+                                    size="small"
                                 />
                             )}
                             {type === SETTING_TYPE.TEXT && <TextFieldInput {...common} />}

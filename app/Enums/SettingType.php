@@ -20,6 +20,7 @@ enum SettingType: int
     case ListSimple = 5; // Простой список строк
     case ListData   = 6; // Список объектов (повторитель)
     case Gallery    = 7; // Галерея изображений
+    case Boolean    = 8; // Флажок (да/нет)
 
     /** Человекочитаемое название типа. */
     public function label(): string
@@ -33,6 +34,7 @@ enum SettingType: int
             self::ListSimple => 'Список',
             self::ListData   => 'Список данных',
             self::Gallery    => 'Галерея',
+            self::Boolean    => 'Флажок',
         };
     }
 
@@ -54,6 +56,18 @@ enum SettingType: int
     public function isJson(): bool
     {
         return in_array($this, [self::Data, self::ListSimple, self::ListData, self::Gallery], true);
+    }
+
+    /** Хранится ли значение как логический флаг ('1' / '0'). */
+    public function isBoolean(): bool
+    {
+        return $this === self::Boolean;
+    }
+
+    /** Статический хелпер: является ли «сырой» тип логическим. */
+    public static function isBooleanType(int|string|null $type): bool
+    {
+        return self::tryFrom((int) $type)?->isBoolean() ?? false;
     }
 
     /** Есть ли у типа настраиваемые под-поля (params.fields). */

@@ -37,6 +37,13 @@ final class SettingValueCast implements CastsAttributes
             return [$key => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)];
         }
 
+        // Логический тип хранится как '1' / '0'.
+        // Без этой ветки (string) false дало бы '' — значение стало бы
+        // «пустым», и Setting::get('flag', true) вернул бы default вместо false.
+        if (is_bool($value)) {
+            return [$key => $value ? '1' : '0'];
+        }
+
         return [$key => $value === null ? null : (string) $value];
     }
 
@@ -66,6 +73,23 @@ final class SettingValueCast implements CastsAttributes
         }
 
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * Привести любое «сырое» представление флага к bool.
+     * Принимаются '1'/'0', 'true'/'false', 'on', 'yes', null.
+     */
+    public static function toBool(mixed $value): bool
+    {
+        if (is_bool($value)) {
+            return $value;
+        }
+
+        if ($value === null || $value === '') {
+            return false;
+        }
+
+        return filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) ?? (bool) $value;
     }
 }
 

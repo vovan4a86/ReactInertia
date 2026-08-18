@@ -7,6 +7,7 @@ import DataFields from './DataFields';
 import ListInput from './ListInput';
 import ListDataInput from './ListDataInput';
 import GalleryInput from './GalleryInput';
+import BooleanInput from './BooleanInput';
 import { SETTING_TYPE } from '../utils/uploads';
 
 /**
@@ -82,6 +83,20 @@ function FieldRenderer({ setting, value, onChange, disabled = false }) {
                     setting={setting}
                     value={Array.isArray(value) ? value : []}
                     onChange={onChange}
+                />
+            );
+
+        case SETTING_TYPE.BOOLEAN:
+            return (
+                <BooleanInput
+                    value={value}
+                    onChange={onChange}
+                    label={params.label}
+                    onLabel={params.on_label}
+                    offLabel={params.off_label}
+                    control={params.control === 'checkbox' ? 'checkbox' : 'switch'}
+                    color={params.color ?? 'primary'}
+                    disabled={disabled}
                 />
             );
 

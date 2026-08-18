@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useForm } from '@inertiajs/react';
 import {
     Alert,
@@ -32,6 +32,7 @@ const TYPE_DESCRIPTIONS = {
     [SETTING_TYPE.LIST]: 'Простой список строковых значений с сортировкой.',
     [SETTING_TYPE.LIST_DATA]: 'Повторитель: список объектов с настраиваемыми полями.',
     [SETTING_TYPE.GALLERY]: 'Галерея изображений с сортировкой и миниатюрами.',
+    [SETTING_TYPE.BOOLEAN]: 'Флажок «да/нет»: переключатель или чекбокс.',
 };
 
 /**
@@ -42,7 +43,6 @@ const TYPE_DESCRIPTIONS = {
  * @param {Array}  props.groups
  * @param {Record<number, string>} props.types
  */
-
 export default function Edit({setting, groups, types}) {
     const {closeModal} = useModal();
     const isNew = !setting?.id;

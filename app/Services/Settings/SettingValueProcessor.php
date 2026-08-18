@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Settings;
 
+use App\Casts\SettingValueCast;
 use App\Enums\SettingType;
 use App\Models\Setting;
 use App\Support\HtmlSanitizer;
@@ -45,6 +46,7 @@ final class SettingValueProcessor
             SettingType::ListSimple => $this->processSimpleList($incoming),
             SettingType::ListData   => $this->processListData($setting, $incoming, $uploads, $oldFiles),
             SettingType::Gallery    => $this->processGallery($setting, $incoming, $uploads, $oldFiles),
+            SettingType::Boolean    => SettingValueCast::toBool($incoming),
         };
 
         $setting->save();
@@ -192,6 +194,7 @@ final class SettingValueProcessor
                 SettingType::File     => $this->resolveFile($setting, $value, $oldFile, $uploads, $known),
                 SettingType::Editor   => HtmlSanitizer::clean($this->toStringOrNull($value)),
                 SettingType::Textarea => $this->toStringOrNull($value) ?? '',
+                SettingType::Boolean  => SettingValueCast::toBool($value),
                 default               => HtmlSanitizer::plain($this->toStringOrNull($value)),
             };
         }
@@ -260,11 +263,25 @@ final class SettingValueProcessor
         return [];
     }
 
-    /** @param array<string, mixed> $row */
+    /**
+     * Считается ли строка повторителя пустой (такие не сохраняются).
+     *
+     * ВАЖНО: false у флажка — это «не заполнено». Без явной проверки строка
+     * с одними лишь выключенными флажками считалась бы заполненной
+     * (false !== null && false !== ''), и повторитель копил бы пустые строки.
+     *
+     * @param array<string, mixed> $row
+     */
     private function isEmptyRow(array $row): bool
     {
         foreach ($row as $value) {
-            if (is_array($value) ? $value !== [] : ($value !== null && $value !== '')) {
+            $filled = match (true) {
+                is_bool($value)  => $value,
+                is_array($value) => $value !== [],
+                default          => $value !== null && $value !== '',
+            };
+
+            if ($filled) {
                 return false;
             }
         }

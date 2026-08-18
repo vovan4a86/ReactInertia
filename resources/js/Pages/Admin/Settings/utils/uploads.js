@@ -20,6 +20,7 @@ export const SETTING_TYPE = Object.freeze({
     LIST: 5,
     LIST_DATA: 6,
     GALLERY: 7,
+    BOOLEAN: 8,
 });
 
 const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'avif', 'svg'];
@@ -53,6 +54,24 @@ export const isImagePath = (path) => {
     if (typeof path !== 'string') return false;
     const ext = path.split('?')[0].split('.').pop()?.toLowerCase();
     return IMAGE_EXTENSIONS.includes(ext ?? '');
+};
+
+/**
+ * Привести значение флажка к настоящему boolean.
+ *
+ * Нужно, потому что значение может прийти из БД строкой ('1' / '0')
+ * — а `Boolean('0')` даёт true, что переключало флажок во «включено».
+ *
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export const toBool = (value) => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'number') return value !== 0;
+    if (typeof value === 'string') {
+        return !['', '0', 'false', 'off', 'no', 'null', 'undefined'].includes(value.trim().toLowerCase());
+    }
+    return Boolean(value);
 };
 
 /** Читаемый размер файла. */
@@ -126,6 +145,9 @@ export const normalizeValue = ({ type, value }) => {
         case SETTING_TYPE.GALLERY:
             return Array.isArray(value) ? [...new Set(value.filter(isStoredFile))] : [];
 
+        case SETTING_TYPE.BOOLEAN:
+            return toBool(value);
+
         default:
             return value ?? '';
     }
@@ -135,6 +157,12 @@ export const normalizeValue = ({ type, value }) => {
  * Подготовка значения к отправке: убираем служебные ключи и File-объекты.
  */
 export const serializeValue = (type, value) => {
+    // Флажок уходит настоящим boolean: payload сериализуется в JSON,
+    // поэтому строковое '0' на бэкенде выглядело бы как «включено».
+    if (type === SETTING_TYPE.BOOLEAN) {
+        return toBool(value);
+    }
+
     if (type === SETTING_TYPE.LIST_DATA && Array.isArray(value)) {
         return value.map(stripInternalKeys);
     }

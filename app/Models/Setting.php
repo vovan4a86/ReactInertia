@@ -123,6 +123,18 @@ class Setting extends Model
         return $value === null || $value === '' ? ($default ?? $value) : $value;
     }
 
+    /**
+     * Получить значение настройки типа «Флажок».
+     *
+     * @example if (Setting::bool('maintenance_mode')) { ... }
+     */
+    public static function bool(string $code, bool $default = false): bool
+    {
+        $value = self::get($code);
+
+        return $value === null ? $default : SettingValueCast::toBool($value);
+    }
+
     /** Сбросить кэш настроек (процесса и Cache-хранилища). */
     public static function clearCache(): void
     {
