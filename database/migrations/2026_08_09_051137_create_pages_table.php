@@ -4,8 +4,7 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
-{
+return new class extends Migration {
     /**
      * Run the migrations.
      */
@@ -13,6 +12,8 @@ return new class extends Migration
     {
         Schema::create('pages', function (Blueprint $table) {
             $table->id();
+            $table->foreignId('parent_id')->nullable()
+                ->constrained('pages')->onDelete('cascade');
             $table->string('name');
             $table->string('h1')->nullable();
             $table->string('alias');
@@ -20,8 +21,6 @@ return new class extends Migration
             $table->string('image')->nullable();
             $table->string('announce')->nullable();
             $table->text('text')->nullable();
-            $table->foreignId('parent_id')->nullable()
-                ->constrained('pages')->onDelete('cascade');
             $table->integer('order')->default(0);
             $table->string('title')->nullable();
             $table->string('keywords')->nullable();
@@ -30,16 +29,15 @@ return new class extends Migration
             $table->string('og_description')->nullable();
             $table->json('images')->nullable();
             $table->boolean('published')->default(true);
-            $table->boolean('on_main')->default(false);
             $table->boolean('on_header_menu')->default(false);
             $table->boolean('on_footer_menu')->default(false);
             $table->boolean('on_mobile_menu')->default(false);
             $table->timestamps();
             $table->softDeletes();
 
-            $table->index('parent_id');
-            $table->index('order');
-            $table->index('alias');
+            $table->index(['parent_id', 'order'], 'pages_parent_order_index');
+            $table->index('slug', 'pages_slug_index');
+            $table->unique(['parent_id', 'alias'], 'pages_parent_alias_unique');
         });
     }
 

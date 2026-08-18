@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 trait LogsActivity
 {
     /** Поля, которые не логируем у конкретной модели */
-    protected array $activityHidden = [];
+//    protected array $activityHidden = [];
 
     public static function bootLogsActivity(): void
     {
@@ -61,7 +61,7 @@ trait LogsActivity
     /** Переопределяется в модели при необходимости */
     public function activityTitle(): string
     {
-        return (string)($this->title ?? $this->name ?? "#{$this->getKey()}");
+        return (string)($this->name ?? $this->slug ?? "#{$this->getKey()}");
     }
 
     public function activities(): MorphMany

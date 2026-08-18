@@ -77,17 +77,23 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
         Route::prefix('pages')->name('pages.')->group(function () {
             Route::get('/', [AdminPageController::class, 'index'])->name('index');
 
-            // Маршруты ДОЛЖНЫ быть перед {page}
+            // Статические сегменты — строго до {page}
             Route::get('/create', [AdminPageController::class, 'create'])->name('create');
             Route::put('/reorder', [AdminPageController::class, 'reorder'])->name('reorder');
-            Route::get('/parents', [AdminPageController::class, 'parents'])->name('parents');
 
-            // CRUD операции
             Route::post('/', [AdminPageController::class, 'store'])->name('store');
-            Route::get('/{page}', [AdminPageController::class, 'show'])->name('show');
-            Route::put('/{page}', [AdminPageController::class, 'update'])->name('update');
-            Route::delete('/{page}', [AdminPageController::class, 'destroy'])->name('destroy');
+
+            // whereNumber — иначе /create перехватится при добавлении новых роутов
+            Route::prefix('{page}')->whereNumber('page')->group(function () {
+                Route::get('/', [AdminPageController::class, 'show'])->name('show');
+                //multipart/form-data c PHP не парсится на PUT — Inertia использует _method=PUT spoofing, и роут должен принимать POST
+                Route::post('/', [AdminPageController::class, 'update'])->name('update'); // POST + _method=PUT для файлов
+                Route::delete('/', [AdminPageController::class, 'destroy'])->name('destroy');
+                Route::put('/toggle', [AdminPageController::class, 'togglePublished'])->name('toggle');
+                Route::post('/duplicate', [AdminPageController::class, 'duplicate'])->name('duplicate');
+            });
         });
+
         Route::resource('articles', AdminArticleController::class);
 
         // Журнал активности

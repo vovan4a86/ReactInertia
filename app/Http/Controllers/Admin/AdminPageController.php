@@ -1,369 +1,200 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\ReorderPageRequest;
+use App\Http\Requests\Admin\StorePageRequest;
+use App\Http\Requests\Admin\UpdatePageRequest;
+use App\Http\Resources\PageResource;
 use App\Models\Page;
+use App\Services\PageService;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
+use Inertia\Response;
+use RuntimeException;
 
-class AdminPageController extends Controller
+/**
+ * Управление страницами сайта.
+ *
+ * Архитектура: одна Inertia-страница `Admin/Pages/Index` = дерево + панель формы.
+ * Все переходы делаются частичными перезагрузками (`only`), поэтому
+ * состояние дерева (раскрытые узлы, скролл) не теряется.
+ */
+final class AdminPageController extends Controller
 {
-    public function index()
+    public function __construct(private readonly PageService $service) {}
+
+    /**
+     * Список/дерево страниц. Форма подгружается лениво.
+     */
+    public function index(Request $request): Response
     {
-        $pages = Page::getTree();
-        $treeData = $pages->map(function ($page) {
-            return $page->toTreeNode();
-        })->values()->toArray(); // Добавляем values() для сброса ключей
+        return Inertia::render('Admin/Pages/Index', [
+            // грузится всегда: нужен для дерева и для списка
+            'tree'    => fn () => Page::tree(),
+            'parents' => Inertia::optional(fn () => $this->parentOptions()),
+            // форма: только когда фронт её реально запрашивает
+            'page'    => Inertia::optional(fn () => null),
+            'mode'    => 'list',
+            'filters' => $request->only('search', 'published'),
+        ]);
+    }
 
-        // Получаем все страницы с родителями для списка
-        $pagesData = Page::with('parent')
-            ->orderBy('order')
-            ->orderBy('created_at', 'desc')
-            ->get();
-
-        // Получаем родителей для формы создания
-        $parents = Page::select('id', 'name')->get();
+    /**
+     * Форма создания. `parent` — предзаполненный родитель из контекстного меню дерева.
+     */
+    public function create(Request $request): Response
+    {
+        $parentId = $request->integer('parent') ?: null;
 
         return Inertia::render('Admin/Pages/Index', [
-            'treeData' => $treeData,
-            'pagesData' => $pagesData,
-            'parents' => $parents,
+            'tree'    => fn () => Page::tree(),
+            'parents' => fn () => $this->parentOptions(),
+            'page'    => fn () => [
+                'id'        => null,
+                'parent_id' => $parentId ? (string) $parentId : '',
+                'published' => true,
+            ],
+            'mode'    => 'create',
         ]);
     }
 
-    public function show(Page $page)
+    /**
+     * Форма редактирования.
+     */
+    public function show(Page $page): Response
     {
-        $page->load('parent');
-        $pageData = $page->toArray();
-        $pageData['images'] = $page->getImagesWithUrls(); // Добавляем URL к изображениям
-
-        $treeData = $this->getTreeData();
-        $pagesData = $this->getPagesData();
-        $parents = Page::where('id', '!=', $page->id)
-            ->select('id', 'name')
-            ->get();
-
         return Inertia::render('Admin/Pages/Index', [
-            'treeData' => $treeData,
-            'pagesData' => $pagesData,
-            'parents' => $parents,
-            'selectedPageData' => [
-                'page' => $pageData,
-                'parents' => $parents,
-            ],
+            'tree'    => fn () => Page::tree(),
+            'parents' => fn () => $this->parentOptions($page),
+            'page'    => fn () => PageResource::make($page)->resolve(),
+            'mode'    => 'edit',
         ]);
     }
 
-    public function create(Request $request)
+    /**
+     * Создать страницу.
+     */
+    public function store(StorePageRequest $request): RedirectResponse
     {
-        $page = new Page();
-        $pageData = $page->toArray();
-        $pageData['images'] = [];
-        $pageData['id'] = null;
+        $page = $this->service->create(
+            $request->pageAttributes(),
+            [
+                'image'      => $request->file('image'),
+                'new_images' => $request->file('new_images', []),
+            ]
+        );
 
-        // Если передан parent_id, устанавливаем его
-        if ($request->has('parent_id')) {
-            $pageData['parent_id'] = $request->input('parent_id');
-        }
-
-        $treeData = $this->getTreeData();
-        $pagesData = $this->getPagesData();
-        $parents = Page::where('id', '!=', $page->id)
-            ->select('id', 'name')
-            ->get();
-
-        return Inertia::render('Admin/Pages/Index', [
-            'treeData' => $treeData,
-            'pagesData' => $pagesData,
-            'parents' => $parents,
-            'selectedPageData' => [
-                'page' => $pageData,
-                'parents' => $parents,
-                'isNew' => true,
-            ],
-        ]);
+        return to_route('admin.pages.show', $page)
+            ->with('success', "Страница «{$page->name}» создана.");
     }
 
-    public function store(Request $request)
+    /**
+     * Обновить страницу.
+     */
+    public function update(UpdatePageRequest $request, Page $page): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'h1' => 'nullable|string|max:255',
-            'alias' => 'nullable|string|max:255',
-            'slug' => 'nullable|string|max:255',
-            'announce' => 'nullable|string',
-            'text' => 'nullable|string',
-            'parent_id' => 'nullable|exists:pages,id',
-            'order' => 'nullable|integer',
-            'published' => 'boolean',
-            'on_main' => 'boolean',
-            'on_header_menu' => 'boolean',
-            'on_footer_menu' => 'boolean',
-            'on_mobile_menu' => 'boolean',
-            'title' => 'nullable|string|max:255',
-            'keywords' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-            'og_title' => 'nullable|string|max:255',
-            'og_description' => 'nullable|string|max:255',
-            'image' => 'nullable|image|max:10240',
-            'image_deleted' => 'nullable|boolean',
-            'images' => 'nullable|array',
-            'deleted_images' => 'nullable|array',
-            'deleted_images.*' => 'string',
-            'new_images' => 'nullable|array',
-            'new_images.*' => 'image|max:10240',
-        ]);
+        $this->service->update(
+            $page,
+            $request->pageAttributes(),
+            [
+                'image'         => $request->file('image'),
+                'image_deleted' => $request->boolean('image_deleted'),
+                'order'         => $request->input('images', []),
+                'deleted'       => $request->input('deleted_images', []),
+                'new_images'    => $request->file('new_images', []),
+            ]
+        );
 
-        if (empty($validated['alias'])) {
-            $validated['alias'] = Str::slug($validated['name']);
-        }
-
-        // Убеждаемся, что slug уникален
-        $originalSlug = $validated['alias'];
-        $counter = 1;
-        while (Page::where('alias', $validated['alias'])->exists()) {
-            $validated['alias'] = $originalSlug . '-' . $counter;
-            $counter++;
-        }
-
-        // Создаем страницу с базовыми данными
-        $pageData = $validated;
-        $pageData['images'] = [];
-        unset($pageData['new_images']);
-
-        $page = Page::create($pageData);
-
-        if ($request->hasFile('image')) {
-            $page->image = $page->uploadSingleImage($request->file('image'));
-        }
-
-        $uploadedImages = [];
-        if ($request->hasFile('new_images')) {
-            foreach ($request->file('new_images') as $file) {
-                $imageData = $page->uploadImages($file);
-                if ($imageData) {
-                    $uploadedImages[] = $imageData;
-                }
-            }
-        }
-
-        $page->images = $uploadedImages;
-        $page->save();
-
-        return redirect()->back()->with('success', 'Страница создана');
-
-//        return redirect()
-//            ->route('admin.pages.show', $page->id)
-//            ->with('success', 'Страница создана');
+        return back()->with('success', 'Изменения сохранены.');
     }
 
-    public function update(Request $request, Page $page)
+    /**
+     * Удалить страницу. `?cascade=1` — вместе с поддеревом.
+     */
+    public function destroy(Request $request, Page $page): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'h1' => 'nullable|string|max:255',
-            'alias' => 'nullable|string|max:255',
-            'slug' => 'nullable|string|max:255',
-            'announce' => 'nullable|string',
-            'text' => 'nullable|string',
-            'parent_id' => [
-                'nullable',
-                'exists:pages,id',
-                function ($attribute, $value, $fail) use ($page) {
-                    if ($value == $page->id) {
-                        $fail('A page cannot be its own parent.');
-                    }
-                    if ($value) {
-                        $parent = Page::find($value);
-                        if ($parent && $parent->isDescendantOf($page->id)) {
-                            $fail('Cannot set a descendant as parent.');
-                        }
-                    }
-                },
-            ],
-            'order' => 'nullable|integer',
-            'published' => 'boolean',
-            'on_main' => 'boolean',
-            'on_header_menu' => 'boolean',
-            'on_footer_menu' => 'boolean',
-            'on_mobile_menu' => 'boolean',
-            'title' => 'nullable|string|max:255',
-            'keywords' => 'nullable|string|max:255',
-            'description' => 'nullable|string',
-            'og_title' => 'nullable|string|max:255',
-            'og_description' => 'nullable|string|max:255',
-            'image' => 'nullable|image|max:10240',
-            'image_deleted' => 'nullable|boolean',
-            'images' => 'nullable|array',
-            'deleted_images' => 'nullable|array',
-            'deleted_images.*' => 'string',
-            'new_images' => 'nullable|array',
-            'new_images.*' => 'image|max:10240',
-        ]);
+        $name = $page->name;
 
-        if (empty($validated['alias'])) {
-            $validated['alias'] = Str::slug($validated['alias']);
-        }
+        $this->service->delete($page, $request->boolean('cascade'));
 
-        $images = $validated['images'] ?? [];
-
-        // Получаем текущие изображения из БД
-        $currentImages = $page->images ?? [];
-
-        $currentImagesMap = [];
-        foreach ($currentImages as $image) {
-            $key = $image['original'] ?? null;
-            if ($key) {
-                $currentImagesMap[$key] = $image;
-            }
-        }
-
-        // Обработка удаления
-        if (!empty($validated['deleted_images'])) {
-            foreach ($validated['deleted_images'] as $deletedId) {
-                if (isset($currentImagesMap[$deletedId])) {
-                    $page->deleteImage($currentImagesMap[$deletedId]);
-                    unset($currentImagesMap[$deletedId]);
-                }
-            }
-        }
-
-        // Применяем новый порядок изображений
-        $orderedImages = [];
-        if (!empty($validated['images'])) {
-            foreach ($validated['images'] as $imageId) {
-                if (isset($currentImagesMap[$imageId])) {
-                    $orderedImages[] = $currentImagesMap[$imageId];
-                    unset($currentImagesMap[$imageId]);
-                }
-            }
-        }
-
-        // Добавляем оставшиеся изображения
-        $currentImages = array_merge($orderedImages, array_values($currentImagesMap));
-
-        // Обработка новых изображений
-        if ($request->hasFile('new_images')) {
-            foreach ($request->file('new_images') as $file) {
-                $imageData = $page->uploadImages($file);
-                if ($imageData) {
-                    $currentImages[] = $imageData;
-                }
-            }
-        }
-
-        // Обработка одиночного изображения
-        if ($request->hasFile('image')) {
-            if ($page->image) {
-                $page->deleteSingleImage($page->image);
-            }
-            $page->image = $page->uploadSingleImage($request->file('image'));
-        } elseif ($request->boolean('image_deleted')) {
-            if ($page->image) {
-                $page->deleteSingleImage($page->image);
-            }
-            $page->image = null;
-        }
-
-        // Обновляем страницу
-        $page->images = $currentImages;
-        $page->save();
-
-        // Обновляем остальные поля
-        unset($validated['images']);
-        unset($validated['deleted_images']);
-        unset($validated['new_images']);
-        unset($validated['image_deleted']);
-        unset($validated['image']);
-
-        $page->update($validated);
-//        $page->refresh();
-
-        return redirect()->back()->with('success', 'Страница обновлена');
+        return to_route('admin.pages.index')
+            ->with('success', "Страница «{$name}» удалена.");
     }
 
-    public function destroy(Page $page)
+    /**
+     * Drag & drop дерева: новый родитель + позиция.
+     */
+    public function reorder(ReorderPageRequest $request): RedirectResponse
     {
-        // Переносим дочерние страницы на уровень выше
-        Page::where('parent_id', $page->id)->update([
-            'parent_id' => $page->parent_id
-        ]);
-        $page->delete();
+        $page = Page::findOrFail($request->integer('id'));
 
-        if (request()->wantsJson()) {
-            return response()->json(['message' => 'Страница удалена']);
+        try {
+            $this->service->move($page, $request->input('parent_id'), $request->integer('index'));
+        } catch (RuntimeException $e) {
+            return back()->withErrors(['tree' => $e->getMessage()]);
         }
 
-        return redirect()->back()->with('success', 'Страница удалена');
+        return back(); // Inertia сам перезагрузит `tree`
     }
 
-    public function reorder(Request $request)
+    /**
+     * Быстрое переключение публикации из контекстного меню.
+     */
+    public function togglePublished(Page $page): RedirectResponse
     {
-        $validated = $request->validate([
-            'id' => 'required|exists:pages,id',
-            'parent_id' => 'nullable|exists:pages,id',
-            'order' => 'required|integer',
-        ]);
+        $page->update(['published' => ! $page->published]);
 
-        $page = Page::findOrFail($validated['id']);
+        return back()->with('success', $page->published ? 'Опубликована.' : 'Снята с публикации.');
+    }
 
-        // Проверка на циклическую зависимость
-        if ($validated['parent_id']) {
-            if ($validated['parent_id'] == $page->id) {
-                return response()->json(['message' => 'Cannot set page as its own parent'], 422);
+    /**
+     * Дублировать страницу.
+     */
+    public function duplicate(Page $page): RedirectResponse
+    {
+        $copy = $this->service->duplicate($page);
+
+        return to_route('admin.pages.show', $copy)->with('success', 'Копия создана.');
+    }
+
+    /**
+     * Плоский список возможных родителей с отступами по уровню.
+     * Исключает саму страницу и её потомков (иначе получим цикл).
+     *
+     * @return list<array{id: string, name: string, depth: int}>
+     */
+    private function parentOptions(?Page $exclude = null): array
+    {
+        $excluded = $exclude
+            ? [(int) $exclude->id, ...$exclude->descendantIds()]
+            : [];
+
+        $grouped = Page::query()
+            ->ordered()
+            ->get(['id', 'parent_id', 'name'])
+            ->reject(fn (Page $p) => in_array((int) $p->id, $excluded, true))
+            ->groupBy(fn (Page $p) => (int) ($p->parent_id ?? 0));
+
+        $options = [];
+
+        $walk = function (int $parentId, int $depth) use (&$walk, $grouped, &$options): void {
+            foreach ($grouped->get($parentId, []) as $page) {
+                $options[] = [
+                    'id'    => (string) $page->id,
+                    'name'  => $page->name,
+                    'depth' => $depth,
+                ];
+                $walk((int) $page->id, $depth + 1);
             }
+        };
 
-            $parent = Page::find($validated['parent_id']);
-            if ($parent && $parent->isDescendantOf($page->id)) {
-                return response()->json(['message' => 'Cannot set descendant as parent'], 422);
-            }
-        }
+        $walk(0, 0);
 
-        $page->parent_id = $validated['parent_id'];
-        $page->order = $validated['order'];
-        $page->save();
-
-        // Пересчитываем порядок для остальных страниц на том же уровне
-        $siblings = Page::where('parent_id', $validated['parent_id'])
-            ->where('id', '!=', $page->id)
-            ->orderBy('order')
-            ->get();
-
-        foreach ($siblings as $index => $sibling) {
-            $newOrder = $index >= $validated['order'] ? $index + 1 : $index;
-            if ($sibling->order != $newOrder) {
-                $sibling->order = $newOrder;
-                $sibling->save();
-            }
-        }
-
-        return redirect()->back()->with('success', 'Порядок изменен');
-    }
-
-    public function parents()
-    {
-        return response()->json([
-            'parents' => Page::select('id', 'name')->get()
-        ]);
-    }
-
-    private function getTreeData()
-    {
-        $pages = Page::getTree();
-        return $pages->map(function ($page) {
-            return $page->toTreeNode();
-        })->values()->toArray();
-    }
-
-    private function getPagesData()
-    {
-        return Page::with('parent')
-            ->orderBy('order')
-            ->orderBy('created_at', 'desc')
-            ->get();
+        return $options;
     }
 }

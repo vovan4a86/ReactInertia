@@ -1,254 +1,128 @@
-import React, {useEffect} from 'react';
-import { Box, IconButton, Typography, Chip, Tooltip } from '@mui/material';
-import {Add, Edit, Delete, ExpandMore, Folder, FolderOpen, Article} from '@mui/icons-material';
+import { memo, useContext } from 'react';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FolderOpenIcon from '@mui/icons-material/FolderOpen';
+import FolderIcon from '@mui/icons-material/Folder';
+import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
+import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import Box from '@mui/material/Box';
+import Tooltip from '@mui/material/Tooltip';
 
-const TreeNode = ({
-                      node,
-                      style,
-                      dragHandle,
-                      onAddChild,
-                      onDelete,
-                      onSelect,
-                      onToggleNode,
-                  }) => {
-    const data = node.data;
+import { TreeContext } from '@/Contexts/Admin/TreeContext.jsx';
 
-    if (!data) {
-        return (
-            <Box style={style}>
-                <Typography color="error">Нет данных</Typography>
-            </Box>
+/** Пунктирные направляющие для уровней вложенности (аналог jsTree connectors). */
+function Guides({ node }) {
+    const lines = [];
+
+    for (let level = 0; level < node.level; level += 1) {
+        lines.push(<span key={level} className="rt-guide rt-guide-line" />);
+    }
+
+    if (node.level > 0) {
+        // последний уровень — «колено»; сквозная линия, если у узла есть следующий сиблинг
+        const hasNextSibling = Boolean(node.nextSibling);
+        lines[node.level - 1] = (
+            <span
+                key="elbow"
+                className={`rt-guide rt-elbow${hasNextSibling ? ' rt-elbow-through' : ''}`}
+            />
         );
     }
 
-    const handleTitleClick = (e) => {
-        e.stopPropagation();
-        node.select();
-        if (onSelect) {
-            onSelect([{ id: data.id }]);
-        }
-    };
+    return lines;
+}
 
-    const handleToggle = (e) => {
-        e.stopPropagation();
-        e.preventDefault();
+/**
+ * Строка дерева страниц.
+ *
+ * Компонент объявлен на уровне модуля и обёрнут в memo — arborist получает
+ * стабильный тип, поэтому строки не размонтируются на каждый рендер.
+ *
+ * @param {object}   props.node       узел arborist (NodeApi)
+ * @param {object}   props.style      позиционирование от virtualizer — обязательно применить
+ * @param {Function} props.dragHandle ref для drag-хендла
+ */
+function TreeNode({ node, style, dragHandle }) {
+    const { onContextMenu, onActivate } = useContext(TreeContext);
+    const { name, published, in_menu: inMenu } = node.data;
 
-        // Вызываем toggle
-        node.toggle();
+    const classes = [
+        'rt-row',
+        node.isSelected && 'rt-selected',
+        node.isFocused && 'rt-focused',
+        node.willReceiveDrop && 'rt-match',
+        node.isDragging && 'rt-dragging',
+        !published && 'rt-unpublished',
+    ]
+        .filter(Boolean)
+        .join(' ');
 
-        // Уведомляем родителя об изменении
-        if (onToggleNode) {
-            onToggleNode(data.id, !node.isOpen);
-        }
-    };
-
-    const hasChildren = node.children && node.children.length > 0;
-
-    const getNodeIcon = () => {
-        if (hasChildren) {
-            return node.isOpen ? (
-                <FolderOpen sx={{ fontSize: 16, color: 'primary.main' }} />
-            ) : (
-                <Folder sx={{ fontSize: 16, color: 'primary.main' }} />
-            );
-        }
-        return <Article sx={{ fontSize: 16, color: 'text.secondary' }} />;
-    };
+    const FolderGlyph = node.isOpen ? FolderOpenIcon : FolderIcon;
+    const LeafGlyph = node.level === 0 ? HomeOutlinedIcon : ArticleOutlinedIcon;
 
     return (
-        <Box
-            style={style}
-            ref={dragHandle}
-            sx={{
-                display: 'flex',
-                alignItems: 'center',
-                px: 0.75,
-                py: 0.25,
-                border: '1px solid transparent',
-                borderRadius: 1,
-                transition: 'all 0.15s ease',
-                cursor: 'pointer',
-                minHeight: 32,
-                '&:hover': {
-                    backgroundColor: 'action.hover',
-                    '& .action-buttons': {
-                        opacity: 1,
-                        transform: 'translateX(0)'
-                    }
-                },
-                ...(node.isSelected && {
-                    backgroundColor: 'primary.50',
-                    border: '1px solid',
-                    borderColor: 'primary.main',
-                    '&:hover': {
-                        backgroundColor: 'primary.100',
-                    },
-                }),
-            }}
-            className="tree-node-row"
-            onClick={handleTitleClick}
-        >
-            {/* Toggle Button for expand/collapse */}
-            {hasChildren ? (
-                <Tooltip title={node.isOpen ? "Свернуть" : "Развернуть"}>
-                    <IconButton
-                        size="small"
-                        onClick={handleToggle}
-                        sx={{
-                            width: 20,
-                            height: 20,
-                            mr: 0.25,
-                            transform: node.isOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
-                            transition: 'transform 0.15s ease',
-                            color: 'text.secondary',
-                            '&:hover': {
-                                color: 'primary.main',
-                            }
-                        }}
-                    >
-                        <ExpandMore sx={{ fontSize: 16 }} />
-                    </IconButton>
-                </Tooltip>
-            ) : (
-                <Box sx={{ width: 20, mr: 0.25 }} />
-            )}
-
-            {/* Node Icon */}
-            <Box sx={{
-                mr: 0.75,
-                display: 'flex',
-                alignItems: 'center',
-                flexShrink: 0
-            }}>
-                {getNodeIcon()}
-            </Box>
-
-            {/* Page Title */}
-            <Box
-                sx={{
-                    flex: 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.75,
-                    cursor: 'pointer',
-                    minWidth: 0,
-                }}
-                onClick={handleTitleClick}
+        <Box style={style} ref={dragHandle} sx={{ position: 'relative' }}>
+            <div
+                className={classes}
+                role="treeitem"
+                aria-selected={node.isSelected}
+                aria-expanded={node.isInternal ? node.isOpen : undefined}
+                onClick={() => onActivate(node)}
+                onContextMenu={(event) => onContextMenu(event, node)}
+                onDoubleClick={() => node.isInternal && node.toggle()}
             >
-                <Typography
-                    variant="body2"
-                    noWrap
-                    sx={{
-                        fontSize: '0.875rem',
-                        '&:hover': {
-                            textDecoration: 'underline'
-                        }
+                <Guides node={node} />
+
+                <span
+                    className="rt-toggle"
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        node.toggle(); // состояние держит arborist — свой useState не нужен
                     }}
                 >
-                    {data.title}
-                </Typography>
+                    {node.isInternal
+                        ? (node.isOpen ? <ExpandMoreIcon sx={{ fontSize: 16 }} /> : <ChevronRightIcon sx={{ fontSize: 16 }} />)
+                        : null}
+                </span>
 
-                {!data.is_active && (
-                    <Chip
-                        label="Черновик"
-                        size="small"
-                        color="warning"
-                        variant="outlined"
-                        sx={{
-                            height: 18,
-                            fontSize: '0.65rem',
-                            '& .MuiChip-label': {
-                                px: 0.5
-                            }
+                {node.isInternal
+                    ? <FolderGlyph sx={{ fontSize: 15, mr: 0.5, color: 'warning.main', flexShrink: 0 }} />
+                    : <LeafGlyph sx={{ fontSize: 15, mr: 0.5, color: 'text.secondary', flexShrink: 0 }} />}
+
+                {node.isEditing ? (
+                    <input
+                        className="rt-input"
+                        autoFocus
+                        defaultValue={name}
+                        onClick={(event) => event.stopPropagation()}
+                        onBlur={() => node.reset()}
+                        onKeyDown={(event) => {
+                            if (event.key === 'Escape') node.reset();
+                            if (event.key === 'Enter') node.submit(event.currentTarget.value.trim());
                         }}
                     />
+                ) : (
+                    <span className="rt-label">{name}</span>
                 )}
-            </Box>
 
-            {/* Action Buttons - компактные и современные */}
-            <Box
-                className="action-buttons"
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.25,
-                    opacity: 0,
-                    transform: 'translateX(-4px)',
-                    transition: 'all 0.15s ease',
-                    flexShrink: 0,
-                    ml: 1,
-                }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <Tooltip title="Добавить подраздел">
-                    <IconButton
-                        size="small"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onAddChild(data.id);
-                        }}
-                        sx={{
-                            width: 24,
-                            height: 24,
-                            color: 'text.secondary',
-                            '&:hover': {
-                                backgroundColor: 'primary.50',
-                                color: 'primary.main',
-                            }
-                        }}
-                    >
-                        <Add sx={{ fontSize: 16 }} />
-                    </IconButton>
-                </Tooltip>
+                {!published && (
+                    <Tooltip title="Не опубликована">
+                        <VisibilityOffOutlinedIcon sx={{ fontSize: 14, color: 'text.disabled', ml: 0.5 }} />
+                    </Tooltip>
+                )}
 
-                <Tooltip title="Редактировать">
-                    <IconButton
-                        size="small"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            node.select();
-                            if (onSelect) {
-                                onSelect([{ id: data.id }]);
-                            }
-                        }}
-                        sx={{
-                            width: 24,
-                            height: 24,
-                            color: 'text.secondary',
-                            '&:hover': {
-                                backgroundColor: 'primary.50',
-                                color: 'primary.main',
-                            }
-                        }}
-                    >
-                        <Edit sx={{ fontSize: 14 }} />
-                    </IconButton>
-                </Tooltip>
-
-                <Tooltip title="Удалить">
-                    <IconButton
-                        size="small"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onDelete(data.id);
-                        }}
-                        sx={{
-                            width: 24,
-                            height: 24,
-                            color: 'text.secondary',
-                            '&:hover': {
-                                backgroundColor: 'error.50',
-                                color: 'error.main',
-                            }
-                        }}
-                    >
-                        <Delete sx={{ fontSize: 14 }} />
-                    </IconButton>
-                </Tooltip>
-            </Box>
+                {inMenu?.length > 0 && (
+                    <Tooltip title={`В меню: ${inMenu.join(', ')}`}>
+                        <Box
+                            component="span"
+                            sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main', ml: 0.75, flexShrink: 0 }}
+                        />
+                    </Tooltip>
+                )}
+            </div>
         </Box>
     );
-};
+}
 
-
-export default TreeNode;
+export default memo(TreeNode);
