@@ -59,7 +59,6 @@ export default function PageForm({ page, parents, mode }) {
         ),
         image_deleted: payload.image_deleted ? 1 : 0,
         parent_id: payload.parent_id === '' ? null : payload.parent_id,
-        ...(isEdit ? { _method: 'put' } : {}),
     }));
 
     /** Освобождаем blob-URL — иначе утечка памяти при каждой смене файла. */
