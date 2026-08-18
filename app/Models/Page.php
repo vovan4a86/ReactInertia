@@ -124,7 +124,7 @@ class Page extends Model
             }
 
             // Позиция в конце списка сиблингов по умолчанию
-            $page->order ??= static::childrenOf($page->parent_id)->max('order') + 1 ?? 0;
+            $page->order ??= (static::query()->childrenOf($page->parent_id)->max('order') ?? -1) + 1;
         });
 
         static::saved(function (self $page): void {
@@ -424,7 +424,7 @@ class Page extends Model
         }
 
         DB::transaction(function () use ($parentId, $index): void {
-            $siblings = static::childrenOf($parentId)
+            $siblings = static::query()->childrenOf($parentId)
                 ->whereKeyNot($this->getKey())
                 ->ordered()
                 ->pluck('id')
@@ -451,7 +451,7 @@ class Page extends Model
     /** Пересчитать `order` = 0..n-1 внутри ветки. */
     public static function normalizeOrder(int|string|null $parentId): void
     {
-        static::childrenOf($parentId === null ? null : (int)$parentId)
+        static::query()->childrenOf($parentId === null ? null : (int)$parentId)
             ->ordered()
             ->pluck('id')
             ->each(fn($id, $position) => static::whereKey($id)->update(['order' => $position]));
