@@ -229,19 +229,14 @@ class Page extends Model
     public static function tree(bool $onlyPublished = false): array
     {
         $pages = static::query()
-            ->when($onlyPublished, fn(Builder $q) => $q->published())
+            ->when($onlyPublished, fn (Builder $q) => $q->published())
             ->ordered()
             ->get([
-                'id',
-                'parent_id',
-                'name',
-                'alias',
-                'slug',
-                'order',
-                'published',
+                'id', 'parent_id', 'name', 'alias', 'slug', 'order',
+                'published', 'image',            // ← добавлено: нужно для image_thumb
                 ...self::MENU_FLAGS,
             ])
-            ->groupBy(fn(self $page) => (int)($page->parent_id ?? 0));
+            ->groupBy(fn (self $page) => (int) ($page->parent_id ?? 0));
 
         return static::buildBranch($pages, 0);
     }
@@ -256,19 +251,23 @@ class Page extends Model
     {
         return $grouped->get($parentId, collect())
             ->map(function (self $page) use ($grouped): array {
-                $children = static::buildBranch($grouped, (int)$page->id);
+                $children = static::buildBranch($grouped, (int) $page->id);
 
                 return [
-                    'id' => (string)$page->id,      // arborist требует string
-                    'parent_id' => $page->parent_id ? (string)$page->parent_id : null,
-                    'name' => $page->name,
-                    'alias' => $page->alias,
-                    'slug' => $page->slug,
-                    'url' => $page->url,
-                    'order' => (int)$page->order,
-                    'published' => (bool)$page->published,
-                    'in_menu' => collect(self::MENU_FLAGS)->filter(fn($f) => (bool)$page->{$f})->values()->all(),
-                    'children' => $children === [] ? null : $children,
+                    'id'          => (string) $page->id,
+                    'parent_id'   => $page->parent_id ? (string) $page->parent_id : null,
+                    'name'        => $page->name,
+                    'alias'       => $page->alias,
+                    'slug'        => $page->slug,
+                    'url'         => $page->url,
+                    'order'       => (int) $page->order,
+                    'published'   => (bool) $page->published,
+                    'image_thumb' => $page->getSingleThumb(),   // ← аватарка для PagesList
+                    'in_menu'     => collect(self::MENU_FLAGS)
+                        ->filter(fn ($f) => (bool) $page->{$f})->values()->all(),
+                    ...collect(self::MENU_FLAGS)
+                        ->mapWithKeys(fn ($f) => [$f => (bool) $page->{$f}])->all(),
+                    'children'    => $children === [] ? null : $children,
                 ];
             })
             ->values()
@@ -410,42 +409,109 @@ class Page extends Model
     }
 
     /**
-     * Переместить страницу: новый родитель + позиция среди сиблингов.
-     * Порядок сиблингов нормализуется (0..n-1), slug пересчитывается событием `saved`.
-     *
-     * @throws RuntimeException при попытке создать цикл
+     * Позиция страницы среди сиблингов (0-based).
+     * Считается по фактическому порядку, а не по «сырому» order —
+     * в БД могут быть дыры после удалений.
      */
-    public function moveTo(int|string|null $parentId, int $index = 0): void
+    public function siblingIndex(): int
     {
-        $parentId = $parentId === null || $parentId === '' ? null : (int)$parentId;
+        return $this->siblingsQuery()
+            ->orderBy('order')
+            ->orderBy('id')
+            ->pluck('id')
+            ->search($this->id) ?: 0;
+    }
 
-        if (!$this->canHaveParent($parentId)) {
-            throw new RuntimeException('Нельзя переместить страницу внутрь себя или своего потомка.');
+    /** @return \Illuminate\Database\Eloquent\Builder<static> */
+    public function siblingsQuery(bool $withSelf = true): Builder
+    {
+        return static::query()
+            ->when(
+                $this->parent_id === null,
+                fn (Builder $q) => $q->whereNull('parent_id'),
+                fn (Builder $q) => $q->where('parent_id', $this->parent_id),
+            )
+            ->unless($withSelf, fn (Builder $q) => $q->whereKeyNot($this->id));
+    }
+
+    /**
+     * Ставит страницу в ветку $parentId на позицию $index
+     * и пересчитывает order всех затронутых сиблингов.
+     */
+    public function moveTo(int|string|null $parentId, int $index): static
+    {
+        $parentId = filled($parentId) ? (int) $parentId : null;
+
+        if ($parentId === $this->id) {
+            throw new \InvalidArgumentException('Страница не может быть своим родителем.');
+        }
+
+        if ($parentId !== null && ! $this->canHaveParent($parentId)) {
+            throw new \InvalidArgumentException('Нельзя переместить страницу в собственного потомка.');
         }
 
         DB::transaction(function () use ($parentId, $index): void {
-            $siblings = static::query()->childrenOf($parentId)
-                ->whereKeyNot($this->getKey())
-                ->ordered()
+            $oldParentId = $this->parent_id;
+            $changedTree = $oldParentId !== $parentId;
+
+            // Список сиблингов новой ветки без самой страницы
+            $siblings = static::query()
+                ->when(
+                    $parentId === null,
+                    fn (Builder $q) => $q->whereNull('parent_id'),
+                    fn (Builder $q) => $q->where('parent_id', $parentId),
+                )
+                ->whereKeyNot($this->id)
+                ->orderBy('order')
+                ->orderBy('id')
                 ->pluck('id')
                 ->all();
 
-            $index = max(0, min($index, count($siblings)));
-            array_splice($siblings, $index, 0, [(int)$this->id]);
+            // Вставляем себя на нужную позицию (clamp защищает от PHP_INT_MAX)
+            $position = max(0, min($index, count($siblings)));
+            array_splice($siblings, $position, 0, [$this->id]);
 
-            foreach ($siblings as $position => $id) {
-                static::whereKey($id)->update(['order' => $position]);
+            // Смена ветки → alias может конфликтовать с новыми сиблингами
+            if ($changedTree) {
+                $this->parent_id = $parentId;
+                $this->alias     = $this->uniqueAlias($this->alias);
+                $this->saveQuietly();
             }
 
-            $this->parent_id = $parentId;
-            $this->order = $index;
-            $this->save();
+            // Один UPDATE ... CASE вместо N запросов
+            $cases    = [];
+            $bindings = [];
 
-            // Порядок в старой ветке тоже нормализуем
-            if ((int)($this->getOriginal('parent_id') ?? 0) !== (int)($parentId ?? 0)) {
-                static::normalizeOrder($this->getOriginal('parent_id'));
+            foreach ($siblings as $order => $id) {
+                $cases[]    = 'WHEN ? THEN ?';
+                $bindings[] = $id;
+                $bindings[] = $order;
             }
+
+            if ($cases !== []) {
+                static::query()
+                    ->whereIn('id', $siblings)
+                    ->update([
+                        'order' => DB::raw('CASE id ' . implode(' ', $cases) . ' END'),
+                    ]);
+
+                // Привязки для raw CASE
+                DB::statement(
+                    'UPDATE pages SET `order` = CASE id ' . implode(' ', $cases) . ' END WHERE id IN ('
+                    . implode(',', array_fill(0, count($siblings), '?')) . ')',
+                    [...$bindings, ...$siblings],
+                );
+            }
+
+            // Старая ветка могла остаться с дырами в order
+            if ($changedTree) {
+                static::normalizeOrder($oldParentId);
+            }
+
+            static::flushCache();
         });
+
+        return $this->refresh();
     }
 
     /** Пересчитать `order` = 0..n-1 внутри ветки. */

@@ -65,30 +65,34 @@ trait HasImages
      */
     public function uploadSingleImage(UploadedFile $file, array $options = []): ?string
     {
-        $config  = $this->getImageConfig();
-        $disk    = $config['disk'] ?? 'public';
-        $path    = $config['single_path'] ?? $config['path'];
+        $config = $this->getImageConfig();
+        $disk = $config['disk'] ?? 'public';
+        $path = $config['single_path'] ?? $config['path'];
         $quality = $config['quality'] ?? 80;
-        $thumbs  = $config['single_thumbs'] ?? $config['thumbs'] ?? [];
+        $thumbs = $config['single_thumbs'] ?? $config['thumbs'] ?? [];
 
-        $name    = $this->generateImageName($file);
-        $manager = $this->makeImageManager();
+        $name = $this->generateImageName($file);
+        $source = $file->getRealPath();
 
-        // Оригинал
-        $this->saveImageFile($disk, "{$path}/original/{$name}", $file->getRealPath(), null, null, $quality, $manager);
-
-        // Превью
-        foreach ($thumbs as $thumbName => $dims) {
-            $this->saveImageThumbs($disk, $path, $name, $thumbName, $dims, $quality, $manager, isSingle: true);
+        if (!$source || !is_file($source)) {
+            return null;
         }
 
+        // Оригинал
+        Storage::disk($disk)->putFileAs("{$path}/original", $file, $name);
+
+        // Превью
+        $manager = $this->makeImageManager();
+        foreach ($thumbs as $thumbName => $dims) {
+            $this->makeThumbPair($disk, $path, $name, $thumbName, $dims, $quality, $manager, $source);
+        }
         return $name;
     }
 
     /**
      * Удалить одиночное изображение и все его превью.
      *
-     * @param  string|null  $filename  Значение поля `image` модели.
+     * @param string|null $filename Значение поля `image` модели.
      */
     public function deleteSingleImage(?string $filename): bool
     {
@@ -97,20 +101,24 @@ trait HasImages
         }
 
         $config = $this->getImageConfig();
-        $disk   = $config['disk'] ?? 'public';
-        $path   = $config['single_path'] ?? $config['path'];
+        $disk = $config['disk'] ?? 'public';
+        $path = $config['single_path'] ?? $config['path'];
         $thumbs = $config['single_thumbs'] ?? $config['thumbs'] ?? [];
 
         $storage = Storage::disk($disk);
+        $stem = pathinfo($filename, PATHINFO_FILENAME);
 
         // Оригинал
-        $this->deleteFileIfExists($storage, "{$path}/original/{$filename}");
+        $storage->delete("{$path}/original/{$filename}");
 
         // Превью (jpg + webp)
-        $stem = pathinfo($filename, PATHINFO_FILENAME);
         foreach (array_keys($thumbs) as $thumbName) {
-            $this->deleteFileIfExists($storage, "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.jpg");
-            $this->deleteFileIfExists($storage, "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.webp");
+            $storage->delete(
+                [
+                    "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.jpg",
+                    "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.webp",
+                ]
+            );
         }
 
         return true;
@@ -133,73 +141,85 @@ trait HasImages
      *  - newFiles[]: File-объекты в том же порядке, что «new_*» в order
      *  - deletedPaths[]: строки "name" удалённых
      *
-     * @param  string[]       $order         Финальный порядок (name | "new_*").
-     * @param  UploadedFile[] $newFiles       Новые файлы (по индексу совпадают с «new_*» в order).
-     * @param  string[]       $deletedPaths  Имена (name) записей для удаления.
+     * @param string[] $order Финальный порядок (name | "new_*").
+     * @param UploadedFile[] $newFiles Новые файлы (по индексу совпадают с «new_*» в order).
+     * @param string[] $deletedPaths Имена (name) записей для удаления.
      */
     public function syncImages(array $order, array $newFiles, array $deletedPaths): bool
     {
-        $config  = $this->getImageConfig();
-        $disk    = $config['disk'] ?? 'public';
-        $quality = $config['quality'] ?? 80;
-        $thumbs  = $config['thumbs'] ?? [];
-        $path    = $config['path'];
+        $c = $this->getImageConfig();
+        $disk = $c['disk'] ?? 'public';
+        $path = $c['path'];
+        $thumbs = $c['thumbs'] ?? [];
+        $quality = (int)($c['quality'] ?? 80);
         $manager = $this->makeImageManager();
 
-        // ── 1. Удаляем помеченные ──────────────────────────────────────
-        $currentImages = collect($this->images ?? [])
-            ->filter(fn ($item) => is_array($item))
-            ->keyBy('name');                          // ключ = name
+        $current = collect($this->images ?? [])
+            ->filter(static fn($i) => is_array($i) && filled($i['name'] ?? null))
+            ->keyBy('name');
 
-        foreach ($deletedPaths as $nameToDelete) {
-            if ($currentImages->has($nameToDelete)) {
-                $this->deleteImageFiles($disk, $path, $currentImages[$nameToDelete], $thumbs);
-                $currentImages->forget($nameToDelete);
+        /* ── 1. Удаляем помеченные ───────────────────────────── */
+        foreach (array_filter(array_unique($deletedPaths)) as $name) {
+            if ($current->has($name)) {
+                $this->deleteImageFiles($disk, $path, $current->get($name), $thumbs);
+                $current->forget($name);
             }
         }
 
-        // ── 2. Загружаем новые ────────────────────────────────────────
-        // newFiles индексированы по порядку появления «new_*» в $order.
-        $newFileIndex = 0;
-        $uploadedNew  = [];   // tempKey => imageData
-
-        foreach ($order as $token) {
-            if (str_starts_with((string) $token, 'new_')) {
-                $file = $newFiles[$newFileIndex] ?? null;
-                $newFileIndex++;
-
-                if ($file instanceof UploadedFile) {
-                    $imageData = $this->uploadGalleryImage($file, $disk, $path, $thumbs, $quality, $manager);
-                    if ($imageData) {
-                        $uploadedNew[$token] = $imageData;
-                    }
-                }
+        /* ── 2. Очередь новых файлов: "new:<tempId>" => File ── */
+        $queue = [];
+        foreach ($newFiles as $key => $file) {
+            if ($file instanceof UploadedFile && $file->isValid()) {
+                $queue[$this->normalizeNewToken((string)$key)] = $file;
             }
         }
 
-        // ── 3. Строим финальный массив в нужном порядке ───────────────
+        /* ── 3. Собираем результат строго по order ───────────── */
         $result = [];
+        $seen = [];
 
         foreach ($order as $token) {
-            if (str_starts_with((string) $token, 'new_')) {
-                if (isset($uploadedNew[$token])) {
-                    $result[] = $uploadedNew[$token];
+            $token = (string)$token;
+
+            if ($this->isNewToken($token)) {
+                $key = $this->resolveQueueKey($queue, $token);
+                if ($key === null) {
+                    continue;
                 }
-            } elseif ($currentImages->has($token)) {
-                $result[] = $currentImages[$token];
+                $file = $queue[$key];
+                unset($queue[$key]);
+
+                if ($data = $this->uploadGalleryImage($file, $disk, $path, $thumbs, $quality, $manager)) {
+                    $result[] = $data;
+                }
+                continue;
+            }
+
+            if ($current->has($token) && !isset($seen[$token])) {
+                $result[] = $current->get($token);
+                $seen[$token] = true;
             }
         }
 
-        // Добавляем записи, которых нет в $order (страховка)
-        foreach ($currentImages as $name => $imageData) {
-            if (!in_array($name, $order, true)) {
-                $result[] = $imageData;
+        /* ── 4. Страховка: ничего не теряем ──────────────────── */
+        foreach ($current as $name => $data) {
+            if (!isset($seen[$name])) {
+                $result[] = $data;
             }
         }
 
-        // ── 4. Сохраняем ──────────────────────────────────────────────
+        // ⚡ Ключевой фикс: файлы без токена (create / нетронутый order) — тоже грузим
+        foreach ($queue as $file) {
+            if ($data = $this->uploadGalleryImage($file, $disk, $path, $thumbs, $quality, $manager)) {
+                $result[] = $data;
+            }
+        }
+
         $this->images = $result ?: null;
-        $this->saveQuietly();
+
+        if ($this->exists) {
+            $this->saveQuietly();
+        }
 
         return true;
     }
@@ -207,7 +227,7 @@ trait HasImages
     /**
      * Удалить одну запись галереи (по массиву записи).
      *
-     * @param  array<string, string|null>|null  $imageData  Запись из поля images.
+     * @param array<string, string|null>|null $imageData Запись из поля images.
      */
     public function deleteImage(?array $imageData): bool
     {
@@ -215,14 +235,22 @@ trait HasImages
             return false;
         }
 
-        $config = $this->getImageConfig();
-        $disk   = $config['disk'] ?? 'public';
-        $path   = $config['path'];
-        $thumbs = $config['thumbs'] ?? [];
-
-        $this->deleteImageFiles($disk, $path, $imageData, $thumbs);
+        $c = $this->getImageConfig();
+        $this->deleteImageFiles($c['disk'] ?? 'public', $c['path'], $imageData, $c['thumbs'] ?? []);
 
         return true;
+    }
+
+    /** Удалить ВСЕ файлы модели (одиночное + галерея). */
+    public function purgeImages(): void
+    {
+        $this->deleteSingleImage($this->image);
+
+        foreach ($this->images ?? [] as $imageData) {
+            if (is_array($imageData)) {
+                $this->deleteImage($imageData);
+            }
+        }
     }
 
     /**
@@ -235,15 +263,36 @@ trait HasImages
             return null;
         }
 
-        $config = $this->getImageConfig();
-        $disk   = $config['disk'] ?? 'public';
-
-        return Storage::disk($disk)->url($relativePath);
+        return Storage::disk($this->getImageConfig()['disk'] ?? 'public')->url($relativePath);
     }
 
     /* ================================================================== */
     /*  ПРИВАТНЫЕ МЕТОДЫ                                                   */
     /* ================================================================== */
+
+    private function isNewToken(string $token): bool
+    {
+        return str_starts_with($token, 'new:') || str_starts_with($token, 'new_');
+    }
+
+    private function normalizeNewToken(string $key): string
+    {
+        return $this->isNewToken($key) ? 'new:' . substr($key, 4) : "new:{$key}";
+    }
+
+    /** Точное совпадение → нормализованное → первый свободный (legacy new_0/new_1). */
+    private function resolveQueueKey(array $queue, string $token): ?string
+    {
+        if ($queue === []) {
+            return null;
+        }
+
+        return match (true) {
+            array_key_exists($token, $queue) => $token,
+            array_key_exists($n = $this->normalizeNewToken($token), $queue) => $n,
+            default => array_key_first($queue),
+        };
+    }
 
     /**
      * Загрузить одно изображение галереи: оригинал + все превью.
@@ -258,35 +307,28 @@ trait HasImages
         int $quality,
         ImageManager $manager,
     ): ?array {
-        $name = $this->generateImageName($file);
+        $source = $file->getRealPath();
 
-        // Оригинал
-        $originalPath = "{$path}/original/{$name}";
-        $this->saveImageFile($disk, $originalPath, $file->getRealPath(), null, null, $quality, $manager);
-
-        $imageData = [
-            'name'     => $name,
-            'original' => $originalPath,
-        ];
-
-        // Превью
-        foreach ($thumbs as $thumbName => $dims) {
-            [$jpgPath, $webpPath] = $this->saveImageThumbs(
-                $disk, $path, $name, $thumbName, $dims, $quality, $manager, isSingle: false,
-            );
-            $imageData[$thumbName]            = $jpgPath;
-            $imageData["{$thumbName}_webp"]   = $webpPath;
+        if (!$source || !is_file($source)) {
+            return null;
         }
 
-        return $imageData;
+        $name = $this->generateImageName($file);
+        Storage::disk($disk)->putFileAs("{$path}/original", $file, $name);
+
+        $data = ['name' => $name, 'original' => "{$path}/original/{$name}"];
+
+        foreach ($thumbs as $thumbName => $dims) {
+            [$jpg, $webp] = $this->makeThumbPair($disk, $path, $name, $thumbName, $dims, $quality, $manager, $source);
+            $data[$thumbName] = $jpg;
+            $data["{$thumbName}_webp"] = $webp;
+        }
+
+        return $data;
     }
 
-    /**
-     * Сохранить превью в jpg + webp для одного размера.
-     *
-     * @return array{0: string, 1: string}  [jpgPath, webpPath]
-     */
-    private function saveImageThumbs(
+    /** @return array{0:string,1:string} [jpgPath, webpPath] */
+    private function makeThumbPair(
         string $disk,
         string $path,
         string $name,
@@ -294,140 +336,68 @@ trait HasImages
         array $dims,
         int $quality,
         ImageManager $manager,
-        bool $isSingle,
+        string $source,
     ): array {
-        $stem     = pathinfo($name, PATHINFO_FILENAME);
-        $w        = $dims['width']  ?? null;
-        $h        = $dims['height'] ?? null;
-        $thumbDir = $isSingle
-            ? "{$path}/thumbs/{$thumbName}"
-            : "{$path}/thumbs/{$thumbName}";
+        $stem = pathinfo($name, PATHINFO_FILENAME);
+        $dir = "{$path}/thumbs/{$thumbName}";
+        $jpg = "{$dir}/{$stem}_{$thumbName}.jpg";
+        $webp = "{$dir}/{$stem}_{$thumbName}.webp";
 
-        $jpgPath  = "{$thumbDir}/{$stem}_{$thumbName}.jpg";
-        $webpPath = "{$thumbDir}/{$stem}_{$thumbName}.webp";
+        $w = $dims['width'] ?? null;
+        $h = $dims['height'] ?? null;
 
-        $this->saveImageFile($disk, $jpgPath,  null, $w, $h, $quality, $manager, format: 'jpg',  source: $this->getTempPath($disk, "{$path}/original/{$name}"));
-        $this->saveImageFile($disk, $webpPath, null, $w, $h, $quality, $manager, format: 'webp', source: $this->getTempPath($disk, "{$path}/original/{$name}"));
-
-        return [$jpgPath, $webpPath];
-    }
-
-    /**
-     * Сохранить изображение на диск (оригинал или превью).
-     *
-     * @param  string|null  $realPath  Путь к исходному файлу (для оригинала).
-     * @param  string|null  $source    Путь к уже загруженному оригиналу (для превью).
-     */
-    private function saveImageFile(
-        string $disk,
-        string $storagePath,
-        ?string $realPath,
-        ?int $w,
-        ?int $h,
-        int $quality,
-        ImageManager $manager,
-        string $format = 'jpg',
-        ?string $source = null,
-    ): void {
-        $srcPath = $realPath ?? $source;
-
-        if (!$srcPath || !file_exists($srcPath)) {
-            return;
-        }
-
-        $image = $manager->decode($srcPath);
+        // Декодируем один раз на пару форматов
+        $image = $manager->decode($source);
 
         if ($w || $h) {
             $image->coverDown($w ?? $h, $h ?? $w);
         }
 
-        $encoded = match ($format) {
-            'webp'  => $image->encodeUsingFormat(Format::WEBP, quality: $quality),
-            default => $image->encodeUsingFormat(Format::JPEG, quality: $quality)
-        };
+        $storage = Storage::disk($disk);
+        $storage->put($jpg, (string)$image->encodeUsingFormat(Format::JPEG, quality: $quality));
+        $storage->put($webp, (string)$image->encodeUsingFormat(Format::WEBP, quality: $quality));
 
-        Storage::disk($disk)->put($storagePath, (string) $encoded);
+        return [$jpg, $webp];
     }
 
-    /** Удалить все файлы записи галереи (оригинал + все превью). */
     private function deleteImageFiles(string $disk, string $path, array $imageData, array $thumbs): void
     {
         $storage = Storage::disk($disk);
-        $name    = $imageData['name'] ?? null;
-        $stem    = $name ? pathinfo($name, PATHINFO_FILENAME) : null;
+        $targets = [];
 
-        // Оригинал
         if (!empty($imageData['original'])) {
-            $this->deleteFileIfExists($storage, $imageData['original']);
+            $targets[] = $imageData['original'];
         }
 
-        // Превью по конфигу
-        if ($stem) {
+        if ($name = $imageData['name'] ?? null) {
+            $stem = pathinfo($name, PATHINFO_FILENAME);
             foreach (array_keys($thumbs) as $thumbName) {
-                $this->deleteFileIfExists($storage, "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.jpg");
-                $this->deleteFileIfExists($storage, "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.webp");
+                $targets[] = "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.jpg";
+                $targets[] = "{$path}/thumbs/{$thumbName}/{$stem}_{$thumbName}.webp";
             }
         }
 
-        // Превью из самой записи (на случай нестандартных путей)
+        // Нестандартные пути прямо из записи
         foreach ($imageData as $key => $filePath) {
-            if (in_array($key, ['name', 'original'], true) || !is_string($filePath)) {
-                continue;
+            if (!in_array($key, ['name', 'original'], true) && is_string($filePath) && $filePath !== '') {
+                $targets[] = $filePath;
             }
-            $this->deleteFileIfExists($storage, $filePath);
         }
+
+        $storage->delete(array_values(array_unique($targets)));
     }
 
-    /** Сгенерировать уникальное имя файла. */
     private function generateImageName(UploadedFile $file): string
     {
-        return Str::uuid() . '.' . ($file->getClientOriginalExtension() ?: 'jpg');
+        $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
+
+        return Str::uuid()->toString() . '.' . $ext;
     }
 
-    /** Создать ImageManager (Intervention Image v3). */
     private function makeImageManager(): ImageManager
     {
         return new ImageManager(new Driver());
     }
 
-    /**
-     * Получить локальный путь к уже загруженному файлу.
-     * Нужен для создания превью после сохранения оригинала.
-     */
-    private function getTempPath(string $disk, string $storagePath): ?string
-    {
-        $storage = Storage::disk($disk);
-
-        if (!$storage->exists($storagePath)) {
-            return null;
-        }
-
-        // Для local/public дисков — абсолютный путь
-        // Для S3 и др. — скачиваем во temp
-        try {
-            return $storage->path($storagePath);
-        } catch (\Throwable) {
-            $tmp = tempnam(sys_get_temp_dir(), 'img_');
-            file_put_contents($tmp, $storage->get($storagePath));
-            return $tmp;
-        }
-    }
-
-    /** Удалить файл если существует. */
-    private function deleteFileIfExists($storage, string $path): void
-    {
-        if ($storage->exists($path)) {
-            $storage->delete($path);
-        }
-    }
-
-    /* ================================================================== */
-    /*  АБСТРАКТНЫЙ МЕТОД — реализовать в модели                          */
-    /* ================================================================== */
-
-    /**
-     * Конфигурация изображений модели.
-     * Должна быть реализована в модели, использующей трейт.
-     */
     abstract protected function getImageConfig(): array;
 }

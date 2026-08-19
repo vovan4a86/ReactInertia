@@ -1,105 +1,97 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { router, useForm } from '@inertiajs/react';
 import {
-    alpha,
-    Box,
-    Button,
-    Chip,
-    Dialog,
-    DialogContent,
-    Divider,
-    FormControl,
-    FormControlLabel,
-    FormHelperText,
-    Grid,
-    IconButton,
-    InputLabel,
-    MenuItem,
-    Select,
-    Stack,
-    Switch,
-    Tab,
-    Tabs,
-    TextField,
-    Tooltip,
-    Typography,
+    alpha, Box, Button, Chip, Dialog, DialogContent, Divider, FormControl,
+    FormControlLabel, FormHelperText, InputLabel, MenuItem, Select, Stack,
+    Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-    Add as AddIcon,
-    Close as CloseIcon,
-    CloudUpload as CloudUploadIcon,
-    Delete as DeleteIcon,
-    OpenInNew as OpenInNewIcon,
-    Save as SaveIcon,
-    SwapHoriz as SwapHorizIcon,
-    ZoomIn as ZoomInIcon,
+    Add as AddIcon, Close as CloseIcon, CloudUpload as CloudUploadIcon,
+    Delete as DeleteIcon, OpenInNew as OpenInNewIcon, Save as SaveIcon,
+    SwapHoriz as SwapHorizIcon, ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 
 import RichTextEditor from '@admin-pages/Settings/Fields/RichTextEditor/RichTextEditor.jsx';
 import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 
-/** Значения формы по умолчанию — единый источник, чтобы useForm не терял поля. */
-const EMPTY = {
-    parent_id: '', name: '', h1: '', alias: '', announce: '', text: '',
-    published: true, on_header_menu: false, on_footer_menu: false, on_mobile_menu: false,
-    title: '', keywords: '', description: '', og_title: '', og_description: '',
-    image: null, image_deleted: false,
-    images: [], deleted_images: [], new_images: [],
-};
-
 const MENU_SWITCHES = [
-    { key: 'on_header_menu', title: 'Показывать в шапке',         active: '✓ Отображается в шапке',          inactive: 'Скрыта из шапки' },
-    { key: 'on_footer_menu', title: 'Показывать в подвале',       active: '✓ Отображается в подвале',         inactive: 'Скрыта из подвала' },
-    { key: 'on_mobile_menu', title: 'Показывать в мобильном меню',active: '✓ Отображается в мобильном меню',  inactive: 'Скрыта из мобильного меню' },
+    { key: 'on_header_menu', title: 'Показывать в шапке',          active: '✓ Отображается в шапке',         inactive: 'Скрыта из шапки' },
+    { key: 'on_footer_menu', title: 'Показывать в подвале',        active: '✓ Отображается в подвале',        inactive: 'Скрыта из подвала' },
+    { key: 'on_mobile_menu', title: 'Показывать в мобильном меню', active: '✓ Отображается в мобильном меню', inactive: 'Скрыта из мобильного меню' },
 ];
 
+const TEXT_FIELDS = ['name', 'h1', 'alias', 'announce', 'text', 'title', 'keywords', 'description', 'og_title', 'og_description'];
+
 /**
- * Форма страницы. Один `useForm` — он же отправляет multipart,
- * поэтому `processing`, `errors` и `isDirty` работают штатно.
+ * ⚡ КЛЮЧЕВОЙ ФИКС: строим data по белому списку.
+ * Раньше делали `{...EMPTY, ...page}` — и в FormData улетали
+ * id / slug / url / breadcrumbs / updated_at, а `image` уходил СТРОКОЙ,
+ * из-за чего правило `image` валило запрос целиком (422).
  */
-export default function PageForm({ page, parents, mode }) {
-    const isEdit = mode === 'edit' && page?.id;
+function buildInitial(page) {
+    const data = {
+        parent_id: page?.parent_id ?? '',
+        published: page?.published ?? true,
+        image: null,            // ← ТОЛЬКО File | null
+        image_deleted: false,
+        images: (page?.images ?? []).map((img) => img.name),   // токены существующих
+        new_images: {},         // { tempId: File }
+        deleted_images: [],
+    };
+
+    TEXT_FIELDS.forEach((key) => { data[key] = page?.[key] ?? ''; });
+    MENU_SWITCHES.forEach(({ key }) => { data[key] = Boolean(page?.[key]); });
+
+    return data;
+}
+
+export default function PageForm({ page, parents = [], mode }) {
+    const isEdit = Boolean(page?.id);
+
+    /** Ключ пересинхронизации: меняется при переходе и после каждого сохранения. */
+    const syncKey = `${page?.id ?? 'new'}:${page?.updated_at ?? ''}`;
+    const initial = useMemo(() => buildInitial(page), [syncKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const {
-        data,
-        setData,
-        post,
-        processing,
-        errors,
-        isDirty,
-        recentlySuccessful,
-        transform
-    } = useForm({
-        ...EMPTY,
-        ...page,
-        // images хранит объекты с бэкенда; ImageUploader сам разберёт их
-        images: page?.images ?? [],
-    });
+        data, setData, setDefaults, post, processing, errors, clearErrors, isDirty, transform,
+    } = useForm(initial);
 
-    const [tab, setTab]           = useState(0);
-    const [preview, setPreview]   = useState(null);   // blob-URL для главного фото
-    const [imgDialog, setImgDialog] = useState(false); // диалог просмотра главного фото
+    const [tab, setTab]             = useState(0);
+    const [preview, setPreview]     = useState(null);
+    const [imgDialog, setImgDialog] = useState(false);
 
-    // Булевы значения в FormData должны стать '1'/'0', иначе `false` придёт как "false"
-    transform((payload) => ({
-        ...payload,
-        ...Object.fromEntries(
-            MENU_SWITCHES.map(({ key }) => [key, payload[key] ? 1 : 0]),
-        ),
-        published:     payload.published     ? 1 : 0,
-        image_deleted: payload.image_deleted ? 1 : 0,
-        parent_id:     payload.parent_id === '' ? null : payload.parent_id,
-    }));
+    /* ── Подтягиваем свежие данные после сохранения / смены страницы ── */
+    useEffect(() => {
+        setData(initial);
+        setDefaults(initial);
+        setPreview((old) => { if (old) URL.revokeObjectURL(old); return null; });
+        clearErrors();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initial]);
 
-    /** Освобождаем blob-URL — иначе утечка памяти при каждой смене файла. */
     useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-    useEffect(() => {
-        if (recentlySuccessful) toast.success('Сохранено');
-    }, [recentlySuccessful]);
+    /* ── Нормализация payload перед отправкой ── */
+    transform((d) => {
+        const payload = {
+            ...d,
+            parent_id:     d.parent_id === '' ? null : d.parent_id,
+            published:     d.published ? 1 : 0,
+            image_deleted: d.image_deleted ? 1 : 0,
+            ...Object.fromEntries(MENU_SWITCHES.map(({ key }) => [key, d[key] ? 1 : 0])),
+        };
 
-    /* ── главное изображение ── */
+        // `image` отправляем ТОЛЬКО если это реальный файл
+        if (!(payload.image instanceof File)) delete payload.image;
+
+        // Спуфинг метода: multipart всегда уходит через POST
+        if (isEdit) payload._method = 'put';
+
+        return payload;
+    });
+
+    /* ── Главное изображение ── */
     const handleImage = useCallback((file) => {
         setPreview((old) => {
             if (old) URL.revokeObjectURL(old);
@@ -108,443 +100,382 @@ export default function PageForm({ page, parents, mode }) {
         setData((cur) => ({ ...cur, image: file ?? null, image_deleted: !file }));
     }, [setData]);
 
-    /* ── галерея (ImageUploader callback) ── */
+    /* ── Галерея ── */
     const handleImagesChange = useCallback((order, files, deleted) => {
-        setData((cur) => ({
-            ...cur,
-            images:         order,
-            new_images:     files,
-            deleted_images: deleted,
-        }));
+        setData((cur) => ({ ...cur, images: order, new_images: files, deleted_images: deleted }));
     }, [setData]);
 
-    /* ── отправка ── */
-    const submit = (e) => {
-        e.preventDefault();
-        post(
-            isEdit ? route('admin.pages.update', page.id) : route('admin.pages.store'),
-            {
-                forceFormData: true,
-                preserveScroll: true,
-                only: ['tree', 'page', 'parents', 'errors', 'flash'],
-                onError: () => toast.error('Проверьте заполнение полей'),
+    /* ── Карта «поле → вкладка» для авто-перехода при ошибке ── */
+    const TAB_OF_FIELD = useMemo(() => ({
+        name: 0, h1: 0, alias: 0, announce: 0, text: 0,
+        parent_id: 1, published: 1, order: 1,
+        on_header_menu: 1, on_footer_menu: 1, on_mobile_menu: 1,
+        title: 1, keywords: 1, description: 1, og_title: 1, og_description: 1,
+        image: 2, image_deleted: 2, images: 2, new_images: 2, deleted_images: 2,
+    }), []);
+
+    /* ── Отправка ── */
+    const submit = useCallback((e) => {
+        e?.preventDefault?.();
+
+        const url = isEdit
+            ? route('admin.pages.update', page.id)
+            : route('admin.pages.store');
+
+        // ⚡ Всегда POST + forceFormData: PUT не умеет multipart в PHP.
+        // Метод подменяется через _method в transform().
+        post(url, {
+            forceFormData: true,
+            preserveScroll: true,
+            preserveState: true,
+            onSuccess: () => toast.success(isEdit ? '✅ Изменения сохранены' : '✅ Страница создана'),
+            onError: (errs) => {
+                const keys = Object.keys(errs);
+
+                // Ошибки вида "new_images.0" / "images.2" → берём корневое поле
+                const tabs = keys
+                    .map((k) => TAB_OF_FIELD[k.split('.')[0]])
+                    .filter((t) => t !== undefined);
+
+                if (tabs.length) setTab(Math.min(...tabs));
+
+                toast.error(errs[keys[0]] ?? 'Проверьте правильность заполнения формы');
             },
-        );
-    };
+        });
+    }, [isEdit, page?.id, post, TAB_OF_FIELD]);
 
-    /* ── опции родителей с отступом ── */
-    const parentOptions = useMemo(
-        () => parents.map((opt) => ({
-            ...opt,
-            label: `${'\u00A0\u00A0'.repeat(opt.depth)}${opt.depth ? '└ ' : ''}${opt.name}`,
-        })),
-        [parents],
-    );
+    /* ── Ctrl/Cmd + S ── */
+    useEffect(() => {
+        const onKey = (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+                e.preventDefault();
+                if (!processing) submit();
+            }
+        };
 
-    /* ── превью главного фото ── */
-    const mainThumbSrc = preview                              // только что выбранный файл
-        ?? (page?.single_thumb ?? null);                      // или уже сохранённый thumb
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [submit, processing]);
 
-    const mainSrc      = preview
-        ?? (page?.single_image_src ?? null);
+    /* ── Защита от потери несохранённых данных ── */
+    useEffect(() => {
+        if (!isDirty) return undefined;
 
-    /* ── helper ── */
-    const field = (name) => ({
-        value:     data[name],
-        onChange:  (e) => setData(name, e.target.value),
-        error:     !!errors[name],
-        helperText: errors[name],
-        size:      'small',
-        fullWidth: true,
-    });
+        const onBeforeUnload = (e) => { e.preventDefault(); e.returnValue = ''; };
+        window.addEventListener('beforeunload', onBeforeUnload);
+
+        const off = router.on('before', (event) => {
+            if (event.detail.visit.method === 'get' && !confirm('Есть несохранённые изменения. Покинуть страницу?')) {
+                return false;
+            }
+            return true;
+        });
+
+        return () => { window.removeEventListener('beforeunload', onBeforeUnload); off(); };
+    }, [isDirty]);
+
+    /* ── Хелперы полей ── */
+    const field = useCallback((key, label, extra = {}) => (
+        <TextField
+            fullWidth
+            size="small"
+            label={label}
+            value={data[key] ?? ''}
+            onChange={(e) => setData(key, e.target.value)}
+            error={Boolean(errors[key])}
+            helperText={errors[key] ?? extra.helperText}
+            {...extra}
+        />
+    ), [data, errors, setData]);
+
+    /* Текущее превью главного фото: blob → серверный thumb → null */
+    const mainSrc = preview
+        ?? (!data.image_deleted && !data.image ? page?.single_thumb ?? page?.single_image_src : null)
+        ?? null;
+
+    const errorCount = Object.keys(errors).length;
+
+    /* ═════════════════════════════ RENDER ═════════════════════════════ */
 
     return (
-        <Box
-            component="form"
-            onSubmit={submit}
-            sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-        >
-            {/* ── шапка ── */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography variant="h6" noWrap>
-                        {isEdit ? (page?.name || 'Редактирование') : 'Новая страница'}
-                    </Typography>
-                    {page?.url && (
-                        <Tooltip title="Открыть на сайте">
-                            <IconButton
-                                component="a"
-                                href={page.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                size="small"
-                                color="primary"
-                            >
-                                <OpenInNewIcon fontSize="small" />
-                            </IconButton>
-                        </Tooltip>
-                    )}
-                </Box>
+        <Box component="form" onSubmit={submit} noValidate>
+            {/* ── Шапка ── */}
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <Typography variant="h6" sx={{ flexGrow: 1 }} noWrap>
+                    {isEdit ? data.name || 'Без названия' : 'Новая страница'}
+                </Typography>
 
-                <FormControlLabel
-                    control={
-                        <Switch
-                            checked={Boolean(data.published)}
-                            onChange={(e) => setData('published', e.target.checked)}
+                {isDirty && <Chip size="small" color="warning" label="Не сохранено" />}
+                {errorCount > 0 && <Chip size="small" color="error" label={`Ошибок: ${errorCount}`} />}
+
+                {isEdit && page?.url && (
+                    <Tooltip title="Открыть на сайте">
+                        <Button
                             size="small"
-                            color="success"
-                        />
-                    }
-                    label={
-                        <Typography variant="body2" color={data.published ? 'success.main' : 'text.secondary'}>
-                            {data.published ? 'Опубликована' : 'Черновик'}
-                        </Typography>
-                    }
-                    labelPlacement="start"
-                />
-            </Box>
-
-            {/* ── табы ── */}
-            <Tabs
-                value={tab}
-                onChange={(_, v) => setTab(v)}
-                sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
-            >
-                <Tab label="Параметры" />
-                <Tab label="Текст" />
-                <Tab label="Изображения" />
-            </Tabs>
-
-            {/* ── содержимое табов ── */}
-            <Box sx={{ flex: 1, overflowY: 'auto', pr: 0.5 }}>
-
-                {/* ══ ТАБ 0: ПАРАМЕТРЫ ══ */}
-                {tab === 0 && (
-                    <Box>
-                        {/* Основные поля + главное фото */}
-                        <Box sx={{ display: 'flex', gap: 3, pt: 1 }}>
-
-                            {/* Левая колонка: текстовые поля */}
-                            <Box sx={{ flex: 3 }}>
-                                <Stack spacing={2}>
-                                    <TextField
-                                        label="Название"
-                                        required
-                                        {...field('name')}
-                                    />
-                                    <TextField label="H1" {...field('h1')} />
-                                    <TextField
-                                        label="Alias"
-                                        {...field('alias')}
-                                        helperText={errors.alias || 'Автоматически из названия'}
-                                    />
-
-                                    {/* Родительская страница */}
-                                    <FormControl fullWidth size="small" error={!!errors.parent_id}>
-                                        <InputLabel>Родительская страница</InputLabel>
-                                        <Select
-                                            value={data.parent_id}
-                                            onChange={(e) => setData('parent_id', e.target.value)}
-                                            label="Родительская страница"
-                                        >
-                                            <MenuItem value="">Нет (Корневая)</MenuItem>
-                                            {parentOptions.map((opt) => (
-                                                <MenuItem key={opt.id} value={opt.id}>
-                                                    {opt.label}
-                                                </MenuItem>
-                                            ))}
-                                        </Select>
-                                        {errors.parent_id && (
-                                            <FormHelperText>{errors.parent_id}</FormHelperText>
-                                        )}
-                                    </FormControl>
-
-                                    <TextField
-                                        label="Анонс"
-                                        multiline
-                                        rows={3}
-                                        {...field('announce')}
-                                    />
-                                </Stack>
-                            </Box>
-
-                            {/* Правая колонка: главное фото */}
-                            <Box sx={{ flex: 1, minWidth: 140 }}>
-                                <Box
-                                    sx={{
-                                        position: 'relative',
-                                        width: '100%',
-                                        aspectRatio: '1/1',
-                                        borderRadius: 2,
-                                        overflow: 'hidden',
-                                        bgcolor: 'grey.100',
-                                        border: '2px dashed',
-                                        borderColor: mainThumbSrc ? 'transparent' : 'grey.300',
-                                        transition: 'all 0.2s',
-                                        '&:hover': {
-                                            borderColor: mainThumbSrc ? 'transparent' : 'primary.main',
-                                        },
-                                    }}
-                                >
-                                    {mainThumbSrc ? (
-                                        <>
-                                            <img
-                                                src={mainThumbSrc}
-                                                alt="Превью"
-                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                                                onClick={() => setImgDialog(true)}
-                                            />
-
-                                            {/* Оверлей при наведении */}
-                                            <Box
-                                                sx={{
-                                                    position: 'absolute', inset: 0,
-                                                    bgcolor: 'rgba(0,0,0,0.4)',
-                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
-                                                    opacity: 0, transition: 'opacity 0.2s',
-                                                    '&:hover': { opacity: 1 },
-                                                }}
-                                            >
-                                                <Tooltip title="Просмотр">
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={(e) => { e.stopPropagation(); setImgDialog(true); }}
-                                                        sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
-                                                    >
-                                                        <ZoomInIcon fontSize="small" sx={{ color: 'grey.800' }} />
-                                                    </IconButton>
-                                                </Tooltip>
-                                                <Tooltip title="Удалить">
-                                                    <IconButton
-                                                        size="small"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            handleImage(null);
-                                                            toast.info('Изображение будет удалено после сохранения');
-                                                        }}
-                                                        sx={{ bgcolor: 'error.main', color: 'white', '&:hover': { bgcolor: 'error.dark' } }}
-                                                    >
-                                                        <DeleteIcon fontSize="small" />
-                                                    </IconButton>
-                                                </Tooltip>
-                                            </Box>
-
-                                            {/* Кнопка «Заменить» */}
-                                            <Button
-                                                component="label"
-                                                size="small"
-                                                sx={{
-                                                    position: 'absolute', bottom: 8, right: 8,
-                                                    bgcolor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)',
-                                                    fontSize: '0.7rem', px: 1.5, py: 0.5, borderRadius: 1,
-                                                    '&:hover': { bgcolor: 'white' },
-                                                }}
-                                            >
-                                                <SwapHorizIcon sx={{ fontSize: 14, mr: 0.5 }} />
-                                                Заменить
-                                                <input type="file" hidden accept="image/*"
-                                                       onChange={(e) => {
-                                                           const f = e.target.files?.[0];
-                                                           if (f) { handleImage(f); toast.info('Будет заменено после сохранения'); }
-                                                       }}
-                                                />
-                                            </Button>
-                                        </>
-                                    ) : (
-                                        /* Зона загрузки */
-                                        <Button
-                                            component="label"
-                                            sx={{
-                                                width: '100%', height: '100%',
-                                                display: 'flex', flexDirection: 'column',
-                                                alignItems: 'center', justifyContent: 'center', gap: 0.5,
-                                                textTransform: 'none',
-                                            }}
-                                        >
-                                            <CloudUploadIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
-                                            <Typography variant="body2" color="text.secondary">
-                                                Загрузить фото
-                                            </Typography>
-                                            <Typography variant="caption" color="text.secondary">
-                                                JPEG, PNG, WebP
-                                            </Typography>
-                                            <input type="file" hidden accept="image/*"
-                                                   onChange={(e) => {
-                                                       const f = e.target.files?.[0];
-                                                       if (f) handleImage(f);
-                                                   }}
-                                            />
-                                        </Button>
-                                    )}
-                                </Box>
-                            </Box>
-                        </Box>
-
-                        {/* ── Meta-данные ── */}
-                        <Divider sx={{ my: 3 }}>
-                            <Chip label="Meta / SEO" size="small" />
-                        </Divider>
-
-                        <Stack spacing={2}>
-                            <TextField label="Title" {...field('title')} slotProps={{ inputLabel: { shrink: true } }} />
-                            <TextField label="Keywords" {...field('keywords')} slotProps={{ inputLabel: { shrink: true } }} />
-                            <TextField
-                                label="Description"
-                                multiline rows={3}
-                                {...field('description')}
-                                slotProps={{ inputLabel: { shrink: true } }}
-                            />
-                            <TextField label="OG Title" {...field('og_title')} slotProps={{ inputLabel: { shrink: true } }} />
-                            <TextField label="OG Description" {...field('og_description')} slotProps={{ inputLabel: { shrink: true } }} />
-                        </Stack>
-
-                        {/* ── Видимость в меню ── */}
-                        <Divider sx={{ my: 3 }}>
-                            <Chip label="Видимость" size="small" />
-                        </Divider>
-
-                        <Box
-                            sx={{
-                                display: 'grid',
-                                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' },
-                                gap: 2,
-                            }}
+                            component="a"
+                            href={page.url}
+                            target="_blank"
+                            rel="noopener"
+                            startIcon={<OpenInNewIcon />}
                         >
-                            {MENU_SWITCHES.map(({ key, title, active, inactive }) => (
-                                <Box
-                                    key={key}
-                                    sx={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'space-between',
-                                        p: '12px 16px',
-                                        borderRadius: 2,
-                                        border: '1px solid',
-                                        borderColor: data[key] ? 'success.main' : 'divider',
-                                        bgcolor: data[key]
-                                            ? (theme) => alpha(theme.palette.success.main, 0.04)
-                                            : 'background.paper',
-                                        transition: 'all 0.2s',
-                                    }}
-                                >
-                                    <Box sx={{ mr: 2, minWidth: 0 }}>
-                                        <Typography variant="body2" fontWeight={500} noWrap>{title}</Typography>
-                                        <Typography
-                                            variant="caption"
-                                            color={data[key] ? 'success.main' : 'text.secondary'}
-                                            fontWeight={data[key] ? 600 : 400}
-                                            noWrap
-                                        >
-                                            {data[key] ? active : inactive}
-                                        </Typography>
-                                    </Box>
-                                    <Switch
-                                        checked={Boolean(data[key])}
-                                        onChange={(e) => setData(key, e.target.checked)}
-                                        size="small"
-                                        color="success"
-                                        sx={{ flexShrink: 0 }}
-                                    />
-                                </Box>
-                            ))}
-                        </Box>
-                    </Box>
-                )}
-
-                {/* ══ ТАБ 1: ТЕКСТ ══ */}
-                {tab === 1 && (
-                    <Box sx={{ pt: 1 }}>
-                        <FormControl fullWidth variant="outlined">
-                            <InputLabel shrink>Содержание</InputLabel>
-                            <Box sx={{ mt: 2 }}>
-                                <RichTextEditor
-                                    value={data.text}
-                                    onChange={(val) => setData('text', val)}
-                                />
-                            </Box>
-                            {errors.text && (
-                                <FormHelperText error>{errors.text}</FormHelperText>
-                            )}
-                        </FormControl>
-                    </Box>
-                )}
-
-                {/* ══ ТАБ 2: ИЗОБРАЖЕНИЯ ══ */}
-                {tab === 2 && (
-                    <Box sx={{ pt: 1 }}>
-                        <Typography variant="subtitle1" gutterBottom>
-                            Изображения страницы
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                            JPEG, PNG, GIF, WebP • Макс. 10 MB • Автоконвертация в WebP
-                        </Typography>
-                        <ImageUploader
-                            images={data.images}
-                            pageId={page?.id}
-                            maxImages={10}
-                            multiple
-                            onChange={handleImagesChange}
-                        />
-                    </Box>
-                )}
-            </Box>
-
-            {/* ── Диалог просмотра главного фото ── */}
-            <Dialog open={imgDialog} onClose={() => setImgDialog(false)} maxWidth="lg" fullWidth>
-                <DialogContent sx={{ p: 0, position: 'relative', bgcolor: 'black' }}>
-                    <IconButton
-                        onClick={() => setImgDialog(false)}
-                        sx={{
-                            position: 'absolute', top: 8, right: 8, zIndex: 1,
-                            bgcolor: 'rgba(0,0,0,0.5)', color: 'white',
-                            '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
-                        }}
-                    >
-                        <CloseIcon />
-                    </IconButton>
-                    {mainSrc && (
-                        <img
-                            src={mainSrc}
-                            alt="Полное изображение"
-                            style={{ width: '100%', maxHeight: '90vh', objectFit: 'contain', display: 'block' }}
-                        />
-                    )}
-                </DialogContent>
-            </Dialog>
-
-            {/* ── Панель действий ── */}
-            <Box
-                sx={{
-                    display: 'flex', gap: 2, justifyContent: 'flex-end',
-                    pt: 2, mt: 'auto',
-                    borderTop: 1, borderColor: 'divider',
-                }}
-            >
-                {isEdit && (
-                    <Button
-                        variant="outlined"
-                        color="error"
-                        size="small"
-                        onClick={() => {
-                            if (window.confirm(`Удалить страницу «${page.name}»?`)) {
-                                router.delete(route('admin.pages.destroy', page.id), { preserveScroll: true });
-                            }
-                        }}
-                    >
-                        Удалить
-                    </Button>
+                            Просмотр
+                        </Button>
+                    </Tooltip>
                 )}
 
                 <Button
                     type="submit"
                     variant="contained"
-                    startIcon={isEdit ? <SaveIcon /> : <AddIcon />}
-                    disabled={processing || !isDirty}
+                    size="small"
+                    startIcon={<SaveIcon />}
                     loading={processing}
+                    loadingPosition="start"
+                    disabled={processing || (isEdit && !isDirty)}
                 >
-                    {processing ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}
+                    Сохранить
                 </Button>
+            </Stack>
+
+            <Tabs
+                value={tab}
+                onChange={(_, v) => setTab(v)}
+                sx={{ borderBottom: 1, borderColor: 'divider', mb: 2, minHeight: 40 }}
+            >
+                <Tab label="Содержимое" sx={{ minHeight: 40 }} />
+                <Tab label="Параметры"  sx={{ minHeight: 40 }} />
+                <Tab
+                    label={`Изображения${data.images.length ? ` (${data.images.length})` : ''}`}
+                    sx={{ minHeight: 40 }}
+                />
+            </Tabs>
+
+            {/* ══════════ TAB 0 — Содержимое ══════════ */}
+            <Box hidden={tab !== 0}>
+                <Stack spacing={2}>
+                    {field('name', 'Название *', { required: true, autoFocus: !isEdit })}
+                    {field('h1', 'Заголовок H1', { helperText: 'Если пусто — используется название' })}
+                    {field('alias', 'Alias (URL)', {
+                        helperText: errors.alias ?? (page?.url || 'Латиница, цифры, дефис. Пусто — сгенерируется автоматически'),
+                        slotProps: { input: { spellCheck: false } },
+                    })}
+
+                    <Box>
+                        <Typography variant="caption" color="text.secondary">Анонс</Typography>
+                        <RichTextEditor
+                            value={data.announce}
+                            onChange={(html) => setData('announce', html)}
+                            minHeight={140}
+                        />
+                        {errors.announce && <FormHelperText error>{errors.announce}</FormHelperText>}
+                    </Box>
+
+                    <Box>
+                        <Typography variant="caption" color="text.secondary">Основной текст</Typography>
+                        <RichTextEditor
+                            value={data.text}
+                            onChange={(html) => setData('text', html)}
+                            minHeight={360}
+                        />
+                        {errors.text && <FormHelperText error>{errors.text}</FormHelperText>}
+                    </Box>
+                </Stack>
             </Box>
+
+            {/* ══════════ TAB 1 — Параметры (+ SEO inline) ══════════ */}
+            <Box hidden={tab !== 1}>
+                <Stack spacing={2}>
+                    <FormControl fullWidth size="small" error={Boolean(errors.parent_id)}>
+                        <InputLabel id="parent-label">Родительская страница</InputLabel>
+                        <Select
+                            labelId="parent-label"
+                            label="Родительская страница"
+                            value={data.parent_id ?? ''}
+                            onChange={(e) => setData('parent_id', e.target.value)}
+                        >
+                            <MenuItem value=""><em>— Корень —</em></MenuItem>
+                            {parents.map((p) => (
+                                <MenuItem key={p.id} value={String(p.id)}>
+                                    {'\u00A0'.repeat((p.depth ?? 0) * 3)}{p.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                        {errors.parent_id && <FormHelperText>{errors.parent_id}</FormHelperText>}
+                    </FormControl>
+
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={Boolean(data.published)}
+                                onChange={(e) => setData('published', e.target.checked)}
+                            />
+                        }
+                        label={data.published ? 'Опубликована' : 'Черновик'}
+                    />
+
+                    <Divider textAlign="left">
+                        <Typography variant="overline" color="text.secondary">Меню</Typography>
+                    </Divider>
+
+                    {MENU_SWITCHES.map(({ key, title, active, inactive }) => (
+                        <Tooltip key={key} title={title} placement="right">
+                            <FormControlLabel
+                                control={
+                                    <Switch
+                                        checked={Boolean(data[key])}
+                                        onChange={(e) => setData(key, e.target.checked)}
+                                    />
+                                }
+                                label={
+                                    <Typography variant="body2" color={data[key] ? 'success.main' : 'text.secondary'}>
+                                        {data[key] ? active : inactive}
+                                    </Typography>
+                                }
+                                sx={{ alignSelf: 'flex-start' }}
+                            />
+                        </Tooltip>
+                    ))}
+
+                    {/* SEO — без отдельной вкладки, как и было */}
+                    <Divider textAlign="left">
+                        <Typography variant="overline" color="text.secondary">SEO</Typography>
+                    </Divider>
+
+                    {field('title', 'Meta Title', {
+                        helperText: errors.title ?? `${(data.title || '').length} / 60 символов`,
+                    })}
+                    {field('keywords', 'Meta Keywords')}
+                    {field('description', 'Meta Description', {
+                        multiline: true,
+                        minRows: 2,
+                        helperText: errors.description ?? `${(data.description || '').length} / 160 символов`,
+                    })}
+                    {field('og_title', 'OG Title')}
+                    {field('og_description', 'OG Description', { multiline: true, minRows: 2 })}
+                </Stack>
+            </Box>
+
+            {/* ══════════ TAB 2 — Изображения ══════════ */}
+            <Box hidden={tab !== 2}>
+                <Stack spacing={3}>
+                    <Box>
+                        <Typography variant="subtitle2" gutterBottom>Главное изображение</Typography>
+
+                        <Stack direction="row" spacing={2} alignItems="flex-start">
+                            <Box
+                                sx={{
+                                    width: 180, height: 135, flexShrink: 0,
+                                    borderRadius: 1, overflow: 'hidden',
+                                    border: '1px dashed', borderColor: 'divider',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    bgcolor: (t) => alpha(t.palette.text.primary, 0.03),
+                                    cursor: mainSrc ? 'zoom-in' : 'default',
+                                    position: 'relative',
+                                }}
+                                onClick={() => mainSrc && setImgDialog(true)}
+                            >
+                                {mainSrc ? (
+                                    <>
+                                        <Box
+                                            component="img"
+                                            src={mainSrc}
+                                            alt="Главное изображение"
+                                            sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                        <ZoomInIcon
+                                            sx={{
+                                                position: 'absolute', right: 4, bottom: 4,
+                                                color: 'common.white', filter: 'drop-shadow(0 0 2px #000)',
+                                            }}
+                                        />
+                                    </>
+                                ) : (
+                                    <Typography variant="caption" color="text.secondary">Нет изображения</Typography>
+                                )}
+                            </Box>
+
+                            <Stack spacing={1}>
+                                <Button
+                                    component="label"
+                                    variant="outlined"
+                                    size="small"
+                                    startIcon={mainSrc ? <SwapHorizIcon /> : <CloudUploadIcon />}
+                                >
+                                    {mainSrc ? 'Заменить' : 'Загрузить'}
+                                    <input
+                                        hidden
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            handleImage(e.target.files?.[0] ?? null);
+                                            e.target.value = '';   // повторный выбор того же файла
+                                        }}
+                                    />
+                                </Button>
+
+                                {mainSrc && (
+                                    <Button
+                                        size="small"
+                                        color="error"
+                                        startIcon={<DeleteIcon />}
+                                        onClick={() => handleImage(null)}
+                                    >
+                                        Удалить
+                                    </Button>
+                                )}
+
+                                <Typography variant="caption" color="text.secondary">
+                                    JPEG, PNG, WebP · до 10 MB
+                                </Typography>
+
+                                {errors.image && <FormHelperText error>{errors.image}</FormHelperText>}
+                            </Stack>
+                        </Stack>
+                    </Box>
+
+                    <Divider textAlign="left">
+                        <Typography variant="overline" color="text.secondary">Галерея</Typography>
+                    </Divider>
+
+                    <Box>
+                        <ImageUploader
+                            images={page?.images ?? []}
+                            resetKey={syncKey}
+                            maxImages={10}
+                            onChange={handleImagesChange}
+                        />
+
+                        {Object.entries(errors)
+                            .filter(([k]) => k.startsWith('images') || k.startsWith('new_images'))
+                            .map(([k, msg]) => <FormHelperText key={k} error>{msg}</FormHelperText>)}
+                    </Box>
+                </Stack>
+            </Box>
+
+            {/* Лайтбокс главного фото */}
+            <Dialog open={imgDialog} onClose={() => setImgDialog(false)} maxWidth="lg">
+                <DialogContent sx={{ p: 0, bgcolor: 'black', position: 'relative' }}>
+                    <Button
+                        onClick={() => setImgDialog(false)}
+                        sx={{ position: 'absolute', top: 8, right: 8, minWidth: 0, color: 'common.white', zIndex: 1 }}
+                    >
+                        <CloseIcon />
+                    </Button>
+                    <Box
+                        component="img"
+                        src={preview ?? page?.single_image_src ?? mainSrc}
+                        alt="Просмотр"
+                        sx={{ display: 'block', maxWidth: '90vw', maxHeight: '85vh' }}
+                    />
+                </DialogContent>
+            </Dialog>
+
+            {!isEdit && (
+                <Stack direction="row" justifyContent="flex-end" sx={{ mt: 3 }}>
+                    <Button type="submit" variant="contained" startIcon={<AddIcon />} loading={processing}>
+                        Создать страницу
+                    </Button>
+                </Stack>
+            )}
         </Box>
     );
 }

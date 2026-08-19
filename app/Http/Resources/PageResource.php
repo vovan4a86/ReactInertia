@@ -18,31 +18,33 @@ final class PageResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'        => (string) $this->id,
-            'parent_id' => $this->parent_id ? (string) $this->parent_id : '',
-            'name'      => (string) $this->name,
-            'h1'        => (string) ($this->h1 ?? ''),
-            'alias'     => (string) $this->alias,
-            'slug'      => (string) $this->slug,
-            'url'       => $this->url,
-            'announce'  => (string) ($this->announce ?? ''),
-            'text'      => (string) ($this->text ?? ''),
-            'order'     => (int) $this->order,
+            'id' => (string)$this->id,
+            'parent_id' => $this->parent_id ? (string)$this->parent_id : '',
+            'name' => (string)$this->name,
+            'h1' => (string)($this->h1 ?? ''),
+            'alias' => (string)$this->alias,
+            'slug' => (string)$this->slug,
+            'url' => $this->url,
+            'announce' => (string)($this->announce ?? ''),
+            'text' => (string)($this->text ?? ''),
+            'order' => (int)$this->order,
 
-            'published'      => (bool) $this->published,
-            'on_header_menu' => (bool) $this->on_header_menu,
-            'on_footer_menu' => (bool) $this->on_footer_menu,
-            'on_mobile_menu' => (bool) $this->on_mobile_menu,
+            'published' => (bool)$this->published,
+            'on_header_menu' => (bool)$this->on_header_menu,
+            'on_footer_menu' => (bool)$this->on_footer_menu,
+            'on_mobile_menu' => (bool)$this->on_mobile_menu,
 
-            'title'          => (string) ($this->title ?? ''),
-            'keywords'       => (string) ($this->keywords ?? ''),
-            'description'    => (string) ($this->description ?? ''),
-            'og_title'       => (string) ($this->og_title ?? ''),
-            'og_description' => (string) ($this->og_description ?? ''),
+            'title' => (string)($this->title ?? ''),
+            'keywords' => (string)($this->keywords ?? ''),
+            'description' => (string)($this->description ?? ''),
+            'og_title' => (string)($this->og_title ?? ''),
+            'og_description' => (string)($this->og_description ?? ''),
 
             // Одиночное изображение
-            'image'      => $this->image,
-            'single_image_src'  => $this->single_image_src,
+            // Имя файла отдаём как image_name, а НЕ как `image`.
+            // Ключ `image` зарезервирован под UploadedFile в форме.
+            'image_name' => $this->image,
+            'single_image_src' => $this->single_image_src,
             'single_thumb' => $this->single_thumb,
 
             // ─────────────────────────────────────────────────────────────
@@ -57,15 +59,15 @@ final class PageResource extends JsonResource
             // large_webp, чтобы ImageUploader мог выбрать лучший формат.
             // ─────────────────────────────────────────────────────────────
             'images' => collect($this->images ?? [])
-                ->filter(fn ($item) => is_array($item))   // защита от битого JSON
-                ->map(fn (array $img) => $this->formatGalleryItem($img))
+                ->filter(static fn($i) => is_array($i) && filled($i['name'] ?? null))
+                ->map(fn(array $img) => $this->formatGalleryItem($img))
                 ->values()
                 ->all(),
 
-            'breadcrumbs' => collect($this->ancestors())->map(fn ($p) => [
-                'id'   => (string) $p->id,
-                'name' => $p->name,
-            ])->values(),
+            'breadcrumbs' => collect($this->ancestors())
+                ->map(static fn($p) => ['id' => (string)$p->id, 'name' => $p->name])
+                ->values()
+                ->all(),
 
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];
@@ -91,7 +93,7 @@ final class PageResource extends JsonResource
      * ImageUploader.getDisplayUrl() ищет плоские ключи thumb_webp, thumb, medium_webp и т.д.
      * Мы отдаём их как absolute URL через Storage::url().
      *
-     * @param  array<string, string|null>  $img
+     * @param array<string, string|null> $img
      * @return array<string, string|null>
      */
     private function formatGalleryItem(array $img): array
@@ -99,29 +101,17 @@ final class PageResource extends JsonResource
         // Метод HasImages для получения публичных URL
         // getImagesWithUrls() возвращает готовые URL, но нам нужна плоская структура.
         // Используем getImageUrl() если он есть, иначе строим вручную.
-        $urlFor = fn (?string $path): ?string =>
-        $path ? $this->resource->getGalleryUrl($path) : null;
+        $url = fn(?string $p): ?string => $p ? $this->resource->getGalleryUrl($p) : null;
 
         return [
-            // Идентификатор записи — путь к оригиналу (то, что хранит БД и что
-            // нужно передавать в order[] и deleted_images[] на бэк)
-            'name'        => $img['name']     ?? null,
-            'original'    => $img['original'] ?? null,
-
-            // Превью для сетки (ImageUploader использует thumb → thumb_webp)
-            'thumb'       => $urlFor($img['thumb']       ?? null),
-            'thumb_webp'  => $urlFor($img['thumb_webp']  ?? $img['thumb'] ?? null),
-
-            // Среднее (используется в DragOverlay)
-            'medium'      => $urlFor($img['medium']      ?? null),
-            'medium_webp' => $urlFor($img['medium_webp'] ?? $img['medium'] ?? null),
-
-            // Полный размер (используется для предпросмотра по клику)
-            'large'       => $urlFor($img['large']       ?? null),
-            'large_webp'  => $urlFor($img['large_webp']  ?? $img['large'] ?? null),
-
-            // Оригинал для скачивания
-            'src'         => $urlFor($img['original']    ?? null),
+            'name' => $img['name'],
+            'thumb' => $url($img['thumb'] ?? null),
+            'thumb_webp' => $url($img['thumb_webp'] ?? $img['thumb'] ?? null),
+            'medium' => $url($img['medium'] ?? null),
+            'medium_webp' => $url($img['medium_webp'] ?? $img['medium'] ?? null),
+            'large' => $url($img['large'] ?? null),
+            'large_webp' => $url($img['large_webp'] ?? $img['large'] ?? null),
+            'src' => $url($img['original'] ?? null),
         ];
     }
 }

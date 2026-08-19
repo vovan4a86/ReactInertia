@@ -87,9 +87,10 @@ Route::middleware(['auth', 'verified', 'admin'])->prefix('admin')->name('admin.'
             Route::prefix('{page}')->whereNumber('page')->group(function () {
                 Route::get('/', [AdminPageController::class, 'show'])->name('show');
                 //multipart/form-data c PHP не парсится на PUT — Inertia использует _method=PUT spoofing, и роут должен принимать POST
-                Route::post('/', [AdminPageController::class, 'update'])->name('update'); // POST + _method=PUT для файлов
+                Route::match(['put', 'post'], '/', [AdminPageController::class, 'update'])->name('update'); // POST + _method=PUT для файлов
                 Route::delete('/', [AdminPageController::class, 'destroy'])->name('destroy');
-                Route::put('/toggle', [AdminPageController::class, 'togglePublished'])->name('toggle');
+                Route::patch('/toggle', [AdminPageController::class, 'togglePublished'])->name('toggle');
+                Route::patch('/move', [AdminPageController::class, 'move'])->name('move');
                 Route::post('/duplicate', [AdminPageController::class, 'duplicate'])->name('duplicate');
             });
         });

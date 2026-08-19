@@ -32,23 +32,22 @@ final readonly class PageService
     public function create(array $attributes, array $files = []): Page
     {
         return DB::transaction(function () use ($attributes, $files): Page {
-            $page = new Page($attributes);
+            $page         = new Page($attributes);
             $page->images = [];
+
+            // Одиночное фото грузим ДО save — один INSERT вместо INSERT+UPDATE
+            if (($file = $files['image'] ?? null) instanceof UploadedFile) {
+                $page->image = $page->uploadSingleImage($file);
+            }
+
             $page->save();
 
-            // ── Одиночное изображение ────────────────────────────────────
-            $this->syncSingleImage($page, $files['image'] ?? null, false);
-
-            // ── Галерея: новые файлы без порядка и без удалений ──────────
+            // ⚡ Передаём order — иначе новые файлы игнорировались
             $page->syncImages(
-                order:        [],
+                order:        $files['order'] ?? [],
                 newFiles:     $files['new_images'] ?? [],
                 deletedPaths: [],
             );
-
-            // syncImages() уже вызывает saveQuietly(), но сохраняем ещё раз,
-            // чтобы зафиксировать изменение поля `image` из syncSingleImage().
-            $page->saveQuietly();
 
             return $page->refresh();
         });
@@ -107,7 +106,10 @@ final readonly class PageService
                 Page::whereKey($page->descendantIds())
                     ->orderByDesc('id')
                     ->get()
-                    ->each(fn(Page $child) => $this->deleteAllFiles($child) || $child->delete());
+                    ->each(function (Page $child): void {
+                        $child->purgeImages();
+                        $child->delete();
+                    });
             } else {
                 $newParentId = $page->parent_id;
 
@@ -120,7 +122,7 @@ final readonly class PageService
 
             $parentId = $page->parent_id;
 
-            $this->deleteAllFiles($page);
+            $page->purgeImages();
             $page->delete();
 
             Page::normalizeOrder($parentId);
@@ -173,45 +175,17 @@ final readonly class PageService
      */
     private function syncSingleImage(Page $page, ?UploadedFile $file, bool $deleted): void
     {
+        $hasNew = $file instanceof UploadedFile;
+
         // Удалить старое изображение
-        if ($deleted && $page->image) {
-            $page->deleteSingleImage($page->image);  // string filename
+        if (($deleted || $hasNew) && filled($page->image)) {
+            $page->deleteSingleImage($page->image);
             $page->image = null;
         }
 
         // Загрузить новое
-        if ($file instanceof UploadedFile) {
-            // Предварительно удаляем старый файл (если ещё не удалили выше)
-            if ($page->image) {
-                $page->deleteSingleImage($page->image);
-            }
-
-            $page->image = $page->uploadSingleImage($file);  // → string filename | null
+        if ($hasNew) {
+            $page->image = $page->uploadSingleImage($file);
         }
-    }
-
-    /**
-     * Удалить ВСЕ файлы страницы: одиночное изображение + всю галерею.
-     *
-     * HasImages::deleteImage() принимает array $imageData (запись галереи), не строку.
-     * HasImages::deleteSingleImage() принимает ?string filename.
-     *
-     * Всегда возвращает false — используется в цепочке `|| $page->delete()`.
-     */
-    private function deleteAllFiles(Page $page): false
-    {
-        // Одиночное изображение
-        if ($page->image) {
-            $page->deleteSingleImage($page->image);
-        }
-
-        // Галерея — $page->images хранит массив записей (array[])
-        foreach ($page->images ?? [] as $imageData) {
-            if (is_array($imageData)) {
-                $page->deleteImage($imageData);   // ← array, не строка
-            }
-        }
-
-        return false;
     }
 }

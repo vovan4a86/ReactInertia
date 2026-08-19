@@ -77,7 +77,7 @@ export default function Index({ tree = [], page = null, parents = [], mode = 'li
             {errors?.tree && <Alert severity="error" sx={{ mb: 2 }}>{errors.tree}</Alert>}
 
             {view === 'table' ? (
-                <PagesList pages={flatPages} />
+                <PagesList tree={tree} selectedId={page?.id} />
             ) : (
                 <Grid container spacing={2} alignItems="stretch">
                     {/* MUI 7: Grid v2 — `size`, без `item` */}
