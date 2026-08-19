@@ -1,26 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
+import { router } from '@inertiajs/react';
 import {
+    Avatar,
     Box,
+    Chip,
+    IconButton,
+    Paper,
     Table,
     TableBody,
     TableCell,
     TableContainer,
     TableHead,
-    TableRow,
     TablePagination,
+    TableRow,
     TableSortLabel,
-    Paper,
-    Typography,
-    IconButton,
-    Chip,
-    Avatar,
-    CircularProgress,
     Tooltip,
+    Typography,
 } from '@mui/material';
 import {
-    Edit as EditIcon,
-    Delete as DeleteIcon,
     Add as AddIcon,
+    Delete as DeleteIcon,
+    Edit as EditIcon,
+    OpenInNew as OpenInNewIcon,
+    VisibilityOff as VisibilityOffIcon,
+    Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { visuallyHidden } from '@mui/utils';
 
@@ -38,278 +41,280 @@ function getComparator(order, orderBy) {
 }
 
 // Заголовки таблицы
-const headCells = [
-    { id: 'image', label: 'Изображение', sortable: false },
-    { id: 'name', label: 'Название', sortable: true },
-    { id: 'parent', label: 'Родитель', sortable: true },
-    { id: 'published', label: 'Статус', sortable: true },
-    { id: 'display', label: 'Отображение', sortable: false },
-    { id: 'created_at', label: 'Создана', sortable: true },
-    { id: 'actions', label: 'Действия', sortable: false },
+const HEAD_CELLS = [
+    { id: 'image',      label: '',              sortable: false, width: 56   },
+    { id: 'name',       label: 'Название',      sortable: true               },
+    { id: 'slug',       label: 'URL',           sortable: true               },
+    { id: 'published',  label: 'Статус',        sortable: true,  width: 110  },
+    { id: 'in_menu',    label: 'Меню',          sortable: false, width: 90   },
+    { id: 'actions',    label: '',              sortable: false, width: 120  },
 ];
 
-const PagesList = ({
-    pages = [],
-    loading = false,
-    error = null,
-    onEdit,
-    onDelete,
-    onCreateChild
-                   }) => {
-    const [order, setOrder] = useState('asc');
-    const [orderBy, setOrderBy] = useState('name');
-    const [page, setPage] = useState(0);
-    const [rowsPerPage, setRowsPerPage] = useState(10);
+const MENU_DOTS = [
+    { key: 'on_header_menu',  title: 'В шапке'         },
+    { key: 'on_footer_menu',  title: 'В подвале'        },
+    { key: 'on_mobile_menu',  title: 'В мобильном меню' },
+];
 
-    const handleRequestSort = (event, property) => {
+function MenuDots({ row }) {
+    return (
+        <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center' }}>
+            {MENU_DOTS.map(({ key, title }) => (
+                <Tooltip key={key} title={row[key] ? title : `Не ${title.toLowerCase()}`}>
+                    <Box
+                        sx={{
+                            width: 10, height: 10, borderRadius: '50%',
+                            bgcolor: row[key] ? 'success.main' : 'divider',
+                            flexShrink: 0,
+                        }}
+                    />
+                </Tooltip>
+            ))}
+        </Box>
+    );
+}
+
+/**
+ * Табличный вид страниц.
+ * Навигация через Inertia (router.visit) без пропсов-колбэков:
+ * все переходы — частичные перезагрузки Index.
+ *
+ * @param {Array}  props.pages   плоский список узлов (из flatten(tree))
+ */
+export default function PagesList({ pages = [] }) {
+    const [order,       setOrder]       = useState('asc');
+    const [orderBy,     setOrderBy]     = useState('name');
+    const [page,        setPage]        = useState(0);
+    const [rowsPerPage, setRowsPerPage] = useState(25);
+
+    /* ── сортировка ── */
+    const sorted = useMemo(
+        () => [...pages].sort(getComparator(order, orderBy)),
+        [pages, order, orderBy],
+    );
+
+    /* ── пагинация ── */
+    const paginated = useMemo(
+        () => sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
+        [sorted, page, rowsPerPage],
+    );
+
+    const handleSort = (property) => {
         const isAsc = orderBy === property && order === 'asc';
         setOrder(isAsc ? 'desc' : 'asc');
         setOrderBy(property);
-    }
-
-    const handleChangePage = (event, newPage) => {
-        setPage(newPage);
-    }
-
-    const handleChangeRowsPerPage = (event) => {
-        setRowsPerPage(parseInt(event.target.value, 10));
         setPage(0);
-    }
+    };
 
-    // Сортировка данных
-    const sortedPages = React.useMemo(
-        () => [...pages].sort(getComparator(order, orderBy)),
-        [pages, order, orderBy],
-    )
+    /* ── Inertia-навигация ── */
+    const openEdit = (id) =>
+        router.visit(route('admin.pages.show', id), {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['page', 'parents', 'mode', 'flash'],
+        });
 
-    // Пагинация
-    const paginatedPages = React.useMemo(
-        () => sortedPages.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage),
-        [...sortedPages, page, rowsPerPage],
-    );
+    const openCreate = (parentId) =>
+        router.get(route('admin.pages.create'), { parent: parentId }, {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['page', 'parents', 'mode'],
+        });
 
-    if (loading) {
+    const togglePublished = (id) =>
+        router.put(route('admin.pages.toggle', id), {}, {
+            preserveState: true,
+            preserveScroll: true,
+            only: ['tree', 'page', 'flash'],
+        });
+
+    const deletePage = (id, name) => {
+        if (!window.confirm(`Удалить страницу «${name}»?`)) return;
+        router.delete(route('admin.pages.destroy', id), { preserveScroll: true });
+    };
+
+    /* ── пустое состояние ── */
+    if (pages.length === 0) {
         return (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
-                <CircularProgress />
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 8, gap: 1 }}>
+                <Typography variant="h6" color="text.secondary">Страниц пока нет</Typography>
+                <Typography variant="body2" color="text.secondary">
+                    Создайте первую страницу, используя кнопку «Добавить»
+                </Typography>
             </Box>
         );
     }
 
-    if (!pages || pages.length === 0) {
-        return (
-            <Box sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                height: 400,
-                flexDirection: 'column',
-                gap: 2
-            }}>
-                <Typography color="text.secondary" variant="h6">
-                    Нет страниц
-                </Typography>
-                <Typography color="text.secondary">
-                    Создайте первую страницу, используя кнопку "Добавить страницу" в панели дерева
-                </Typography>
-            </Box>
-        );
-    }
-
+    /* ══════════════════════════ render ══════════════════════════ */
     return (
-        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 250px)' }}>
+        <Paper variant="outlined" sx={{ width: '100%', overflow: 'hidden' }}>
+            <TableContainer sx={{ maxHeight: 'calc(100vh - 240px)' }}>
                 <Table stickyHeader size="small">
+
+                    {/* ── Шапка ── */}
                     <TableHead>
                         <TableRow>
-                            {headCells.map((headCell) => (
+                            {HEAD_CELLS.map((cell) => (
                                 <TableCell
-                                    key={headCell.id}
-                                    sortDirection={orderBy === headCell.id ? order : false}
-                                    sx={{
-                                        fontWeight: 'bold',
-                                        backgroundColor: 'background.paper',
-                                    }}
+                                    key={cell.id}
+                                    width={cell.width}
+                                    sortDirection={orderBy === cell.id ? order : false}
+                                    sx={{ fontWeight: 600, bgcolor: 'background.paper' }}
                                 >
-                                    {headCell.sortable ? (
+                                    {cell.sortable ? (
                                         <TableSortLabel
-                                            active={orderBy === headCell.id}
-                                            direction={orderBy === headCell.id ? order : 'asc'}
-                                            onClick={(event) => handleRequestSort(event, headCell.id)}
+                                            active={orderBy === cell.id}
+                                            direction={orderBy === cell.id ? order : 'asc'}
+                                            onClick={() => handleSort(cell.id)}
                                         >
-                                            {headCell.label}
-                                            {orderBy === headCell.id ? (
+                                            {cell.label}
+                                            {orderBy === cell.id && (
                                                 <Box component="span" sx={visuallyHidden}>
-                                                    {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+                                                    {order === 'desc' ? 'по убыванию' : 'по возрастанию'}
                                                 </Box>
-                                            ) : null}
+                                            )}
                                         </TableSortLabel>
                                     ) : (
-                                        headCell.label
+                                        cell.label
                                     )}
                                 </TableCell>
                             ))}
                         </TableRow>
                     </TableHead>
+
+                    {/* ── Строки ── */}
                     <TableBody>
-                        {paginatedPages.map((page) => (
+                        {paginated.map((row) => (
                             <TableRow
-                                key={page.id}
-                                sx={{
-                                    cursor: 'pointer',
-                                    '&:last-child td, &:last-child th': { border: 0 }
-                                }}
+                                key={row.id}
+                                hover
+                                sx={{ '&:last-child td': { border: 0 } }}
                             >
-                                {/* Изображение */}
-                                <TableCell sx={{ width: 60 }}>
-                                    {page.image ? (
+                                {/* Аватар / превью */}
+                                <TableCell>
+                                    {row.single_thumb ? (
                                         <Avatar
-                                            src={page.single_thumb}
+                                            src={row.single_thumb}
                                             variant="rounded"
-                                            sx={{ width: 40, height: 40 }}
+                                            sx={{ width: 36, height: 36 }}
                                         />
                                     ) : (
                                         <Avatar
                                             variant="rounded"
                                             sx={{
-                                                width: 40,
-                                                height: 40,
-                                                bgcolor: 'grey.200',
-                                                color: 'grey.500',
-                                                fontSize: '0.875rem'
+                                                width: 36, height: 36,
+                                                bgcolor: 'grey.200', color: 'text.secondary',
+                                                fontSize: '0.8rem', fontWeight: 600,
                                             }}
                                         >
-                                            {page.title?.charAt(0)?.toUpperCase() || 'P'}
+                                            {row.name?.charAt(0)?.toUpperCase() ?? 'P'}
                                         </Avatar>
                                     )}
                                 </TableCell>
 
-                                {/* Название */}
+                                {/* Название + отступ по уровню */}
                                 <TableCell
-                                    onClick={() => onEdit(page)}
-                                    sx={{
-                                        '&:hover': {
-                                            textDecoration: 'underline',
-                                            color: 'primary.main'
-                                        }
-                                    }}
+                                    onClick={() => openEdit(row.id)}
+                                    sx={{ cursor: 'pointer', '&:hover': { color: 'primary.main' } }}
                                 >
-                                    <Typography variant="body2" fontWeight="medium">
-                                        {page.name}
-                                    </Typography>
-                                    {page.alias && (
-                                        <Typography variant="caption" color="text.secondary" display="block">
-                                            /{page.alias === '/' ? '' : page.alias}
+                                    <Box sx={{ pl: row.depth * 2 }}>
+                                        <Typography variant="body2" fontWeight={500} noWrap>
+                                            {row.depth > 0 && (
+                                                <Box component="span" sx={{ color: 'text.disabled', mr: 0.5 }}>
+                                                    {'└ '}
+                                                </Box>
+                                            )}
+                                            {row.name}
                                         </Typography>
-                                    )}
+                                    </Box>
                                 </TableCell>
 
-                                {/* Родитель */}
+                                {/* URL / slug */}
                                 <TableCell>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {page.parent?.name || '—'}
-                                    </Typography>
+                                    {row.url ? (
+                                        <Typography
+                                            variant="caption"
+                                            color="text.secondary"
+                                            component="a"
+                                            href={row.url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            sx={{
+                                                display: 'inline-flex', alignItems: 'center', gap: 0.25,
+                                                color: 'text.secondary', textDecoration: 'none',
+                                                '&:hover': { color: 'primary.main', textDecoration: 'underline' },
+                                            }}
+                                        >
+                                            {row.url}
+                                            <OpenInNewIcon sx={{ fontSize: 11 }} />
+                                        </Typography>
+                                    ) : (
+                                        <Typography variant="caption" color="text.disabled">—</Typography>
+                                    )}
                                 </TableCell>
 
                                 {/* Статус */}
                                 <TableCell>
                                     <Chip
-                                        label={page.published ? 'Активна' : 'Черновик'}
+                                        label={row.published ? 'Активна' : 'Черновик'}
                                         size="small"
-                                        color={page.published ? 'success' : 'warning'}
+                                        color={row.published ? 'success' : 'default'}
                                         variant="outlined"
                                     />
                                 </TableCell>
 
-                                {/* Отображение */}
+                                {/* Индикаторы меню */}
                                 <TableCell>
-                                    <Box sx={{ display: 'flex', gap: 1 }}>
-                                        <Tooltip title={page.on_header_menu ? 'В шапке' : 'Не в шапке'}>
-                                            <Box
-                                                sx={{
-                                                    width: 12,
-                                                    height: 12,
-                                                    borderRadius: '50%',
-                                                    backgroundColor: page.on_header_menu ? 'success.main' : 'error.main',
-                                                }}
-                                            />
-                                        </Tooltip>
-                                        <Tooltip title={page.on_footer_menu ? 'В подвале' : 'Не в подвале'}>
-                                            <Box
-                                                sx={{
-                                                    width: 12,
-                                                    height: 12,
-                                                    borderRadius: '50%',
-                                                    backgroundColor: page.on_footer_menu ? 'success.main' : 'error.main',
-                                                }}
-                                            />
-                                        </Tooltip>
-                                        <Tooltip title={page.on_mobile_menu ? 'В мобильном меню' : 'Не в мобильном меню'}>
-                                            <Box
-                                                sx={{
-                                                    width: 12,
-                                                    height: 12,
-                                                    borderRadius: '50%',
-                                                    backgroundColor: page.on_mobile_menu ? 'success.main' : 'error.main',
-                                                }}
-                                            />
-                                        </Tooltip>
-                                    </Box>
-                                </TableCell>
-
-                                {/* Дата создания */}
-                                <TableCell>
-                                    <Typography variant="body2" color="text.secondary">
-                                        {new Date(page.created_at).toLocaleDateString('ru-RU', {
-                                            year: 'numeric',
-                                            month: 'short',
-                                            day: 'numeric'
-                                        })}
-                                    </Typography>
+                                    <MenuDots row={row} />
                                 </TableCell>
 
                                 {/* Действия */}
                                 <TableCell>
-                                    <Box
-                                        sx={{
-                                            display: 'flex',
-                                            gap: 0.5,
-                                            transition: 'opacity 0.2s ease',
-                                        }}
-                                    >
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onCreateChild(page.id);
-                                            }}
-                                            title="Добавить дочернюю страницу"
-                                        >
-                                            <AddIcon fontSize="small" />
-                                        </IconButton>
+                                    <Box sx={{ display: 'flex', gap: 0.25 }}>
+                                        {/* Создать дочернюю */}
+                                        <Tooltip title="Создать вложенную">
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => openCreate(row.id)}
+                                            >
+                                                <AddIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
 
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onEdit(page);
-                                            }}
-                                            title="Редактировать страницу"
-                                        >
-                                            <EditIcon fontSize="small" />
-                                        </IconButton>
+                                        {/* Редактировать */}
+                                        <Tooltip title="Редактировать">
+                                            <IconButton
+                                                size="small"
+                                                onClick={() => openEdit(row.id)}
+                                            >
+                                                <EditIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
 
-                                        <IconButton
-                                            size="small"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onDelete(page.id);
-                                            }}
-                                            color="error"
-                                            title="Удалить страницу"
-                                        >
-                                            <DeleteIcon fontSize="small" />
-                                        </IconButton>
+                                        {/* Переключить публикацию */}
+                                        <Tooltip title={row.published ? 'Снять с публикации' : 'Опубликовать'}>
+                                            <IconButton
+                                                size="small"
+                                                color={row.published ? 'success' : 'default'}
+                                                onClick={() => togglePublished(row.id)}
+                                            >
+                                                {row.published
+                                                    ? <VisibilityIcon fontSize="small" />
+                                                    : <VisibilityOffIcon fontSize="small" />
+                                                }
+                                            </IconButton>
+                                        </Tooltip>
+
+                                        {/* Удалить */}
+                                        <Tooltip title="Удалить">
+                                            <IconButton
+                                                size="small"
+                                                color="error"
+                                                onClick={() => deletePage(row.id, row.name)}
+                                            >
+                                                <DeleteIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
                                     </Box>
                                 </TableCell>
                             </TableRow>
@@ -317,21 +322,21 @@ const PagesList = ({
                     </TableBody>
                 </Table>
             </TableContainer>
+
+            {/* ── Пагинация ── */}
             <TablePagination
-                rowsPerPageOptions={[5, 10, 25, 50]}
                 component="div"
                 count={pages.length}
                 rowsPerPage={rowsPerPage}
                 page={page}
-                onPageChange={handleChangePage}
-                onRowsPerPageChange={handleChangeRowsPerPage}
-                labelRowsPerPage="Строк на странице:"
+                onPageChange={(_, newPage) => setPage(newPage)}
+                onRowsPerPageChange={(e) => { setRowsPerPage(parseInt(e.target.value, 10)); setPage(0); }}
+                rowsPerPageOptions={[10, 25, 50, 100]}
+                labelRowsPerPage="На странице:"
                 labelDisplayedRows={({ from, to, count }) =>
-                    `${from}-${to} из ${count !== -1 ? count : `более ${to}`}`
+                    `${from}–${to} из ${count !== -1 ? count : `более ${to}`}`
                 }
             />
         </Paper>
     );
 }
-
-export default PagesList;

@@ -469,7 +469,8 @@ class Page extends Model
         $counter = 1;
 
         while (
-        static::withTrashed()
+        static::query()
+            ->withTrashed()
             ->childrenOf($this->parent_id)
             ->where('alias', $alias)
             ->whereKeyNot($this->getKey())

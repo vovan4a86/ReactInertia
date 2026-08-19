@@ -8,14 +8,26 @@ use App\Models\Page;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
-/** Бизнес-логика страниц: создание/обновление/удаление + синхронизация изображений. */
+/**
+ * Бизнес-логика страниц: создание / обновление / удаление + синхронизация изображений.
+ *
+ * Соответствие сигнатурам HasImages:
+ *   uploadSingleImage(UploadedFile $file, array $options = []): ?string
+ *   deleteSingleImage(?string $filename): bool
+ *   syncImages(array $order, array $newFiles, array $deletedPaths): bool
+ *   deleteImage(?array $imageData): bool   ← принимает МАССИВ записи, не строку
+ */
 final readonly class PageService
 {
+    /* ------------------------------------------------------------------ */
+    /*  CRUD                                                               */
+    /* ------------------------------------------------------------------ */
+
     /**
      * Создать страницу вместе с изображениями.
      *
-     * @param  array<string, mixed>  $attributes
-     * @param  array{image?: UploadedFile|null, new_images?: list<UploadedFile>}  $files
+     * @param  array<string, mixed>                                           $attributes
+     * @param  array{image?: UploadedFile|null, new_images?: UploadedFile[]}  $files
      */
     public function create(array $attributes, array $files = []): Page
     {
@@ -24,39 +36,60 @@ final readonly class PageService
             $page->images = [];
             $page->save();
 
+            // ── Одиночное изображение ────────────────────────────────────
             $this->syncSingleImage($page, $files['image'] ?? null, false);
-            $page->images = $this->appendGallery($page, [], $files['new_images'] ?? []);
-            $page->save();
 
-            return $page;
+            // ── Галерея: новые файлы без порядка и без удалений ──────────
+            $page->syncImages(
+                order:        [],
+                newFiles:     $files['new_images'] ?? [],
+                deletedPaths: [],
+            );
+
+            // syncImages() уже вызывает saveQuietly(), но сохраняем ещё раз,
+            // чтобы зафиксировать изменение поля `image` из syncSingleImage().
+            $page->saveQuietly();
+
+            return $page->refresh();
         });
     }
 
     /**
-     * Обновить страницу: поля, одиночное изображение, галерея (порядок/удаление/добавление).
+     * Обновить страницу: поля, одиночное изображение, галерея.
      *
      * @param  array<string, mixed>  $attributes
-     * @param  array{image?: UploadedFile|null, image_deleted?: bool, order?: list<string>, deleted?: list<string>, new_images?: list<UploadedFile>}  $files
+     * @param  array{
+     *     image?: UploadedFile|null,
+     *     image_deleted?: bool,
+     *     order?: string[],
+     *     deleted?: string[],
+     *     new_images?: UploadedFile[],
+     * }  $files
      */
     public function update(Page $page, array $attributes, array $files = []): Page
     {
         return DB::transaction(function () use ($page, $attributes, $files): Page {
-            $gallery = $this->reorderGallery(
+            // ── 1. Атрибуты (без save — один батч в конце) ───────────────
+            $page->fill($attributes);
+
+            // ── 2. Одиночное изображение ─────────────────────────────────
+            $this->syncSingleImage(
                 $page,
-                $files['order'] ?? [],
-                $files['deleted'] ?? []
+                $files['image'] ?? null,
+                (bool) ($files['image_deleted'] ?? false),
             );
 
-            $gallery = $this->appendGallery($page, $gallery, $files['new_images'] ?? []);
-
-            $this->syncSingleImage($page, $files['image'] ?? null, (bool) ($files['image_deleted'] ?? false));
-
-            // Единственный save: одна пачка событий, один пересчёт slug
-            $page->fill($attributes);
-            $page->images = $gallery;
+            // ── 3. Один save для полей + image ────────────────────────────
             $page->save();
 
-            return $page;
+            // ── 4. Галерея (syncImages сам вызывает saveQuietly) ─────────
+            $page->syncImages(
+                order:        $files['order'] ?? [],
+                newFiles:     $files['new_images'] ?? [],
+                deletedPaths: $files['deleted'] ?? [],
+            );
+
+            return $page->refresh();
         });
     }
 
@@ -64,31 +97,30 @@ final readonly class PageService
      * Удалить страницу.
      *
      * @param  bool  $cascade  true — удалить всё поддерево;
-     *                         false — «поднять» детей на уровень выше (slug пересчитается)
+     *                         false — «поднять» детей на уровень родителя.
      */
     public function delete(Page $page, bool $cascade = false): void
     {
         DB::transaction(function () use ($page, $cascade): void {
             if ($cascade) {
-                // Удаляем снизу вверх, через модели → срабатывают события и чистка файлов
+                // Удаляем снизу вверх через модели → срабатывают события и чистка файлов
                 Page::whereKey($page->descendantIds())
                     ->orderByDesc('id')
                     ->get()
-                    ->each(fn (Page $child) => $this->deleteFiles($child) || $child->delete());
+                    ->each(fn(Page $child) => $this->deleteAllFiles($child) || $child->delete());
             } else {
                 $newParentId = $page->parent_id;
 
-                // ВАЖНО: через модели, а не query builder — иначе slug детей останется старым
                 $page->children()->get()->each(function (Page $child) use ($newParentId): void {
                     $child->parent_id = $newParentId;
-                    $child->alias = $child->uniqueAlias($child->alias); // защита от конфликта на новом уровне
+                    $child->alias     = $child->uniqueAlias($child->alias);
                     $child->save();
                 });
             }
 
             $parentId = $page->parent_id;
 
-            $this->deleteFiles($page);
+            $this->deleteAllFiles($page);
             $page->delete();
 
             Page::normalizeOrder($parentId);
@@ -97,15 +129,17 @@ final readonly class PageService
     }
 
     /**
-     * Дублировать страницу (без поддерева) — удобно для контент-менеджера.
+     * Дублировать страницу (без поддерева).
      */
     public function duplicate(Page $page): Page
     {
         return DB::transaction(function () use ($page): Page {
             $copy = $page->replicate(['slug', 'order']);
-            $copy->name = "{$page->name} (копия)";
-            $copy->alias = null;          // сгенерируется в saving()
+            $copy->name      = "{$page->name} (копия)";
+            $copy->alias     = null;   // сгенерируется в saving()
             $copy->published = false;
+            $copy->images    = [];     // галерея не клонируется — файлы не дублируем
+            $copy->image     = null;   // одиночное — тоже
             $copy->save();
 
             return $copy;
@@ -125,88 +159,59 @@ final readonly class PageService
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Изображения                                                        */
+    /*  Приватные хелперы                                                  */
     /* ------------------------------------------------------------------ */
 
     /**
-     * Обновить одиночное изображение (обложку).
+     * Синхронизировать одиночное изображение (поле `image`).
      *
-     * @param  UploadedFile|null  $file     новый файл
-     * @param  bool              $deleted  снять текущее изображение
+     * HasImages::uploadSingleImage() — возвращает filename (строку).
+     * HasImages::deleteSingleImage() — принимает ?string filename.
+     *
+     * Метод мутирует $page->image, но НЕ вызывает save() —
+     * это ответственность вызывающего кода.
      */
     private function syncSingleImage(Page $page, ?UploadedFile $file, bool $deleted): void
     {
+        // Удалить старое изображение
         if ($deleted && $page->image) {
-            $page->deleteSingleImage();   // из трейта HasImages
+            $page->deleteSingleImage($page->image);  // string filename
             $page->image = null;
         }
 
+        // Загрузить новое
         if ($file instanceof UploadedFile) {
+            // Предварительно удаляем старый файл (если ещё не удалили выше)
             if ($page->image) {
-                $page->deleteSingleImage();
+                $page->deleteSingleImage($page->image);
             }
 
-            $page->image = $page->storeSingleImage($file);
+            $page->image = $page->uploadSingleImage($file);  // → string filename | null
         }
     }
 
     /**
-     * Добавить новые файлы в галерею.
+     * Удалить ВСЕ файлы страницы: одиночное изображение + всю галерею.
      *
-     * @param  list<string>        $gallery  текущий список имён файлов
-     * @param  list<UploadedFile>  $files
-     * @return list<string>
-     */
-    private function appendGallery(Page $page, array $gallery, array $files): array
-    {
-        foreach ($files as $file) {
-            if ($file instanceof UploadedFile) {
-                $gallery[] = $page->storeImage($file);
-            }
-        }
-
-        return array_values(array_unique($gallery));
-    }
-
-    /**
-     * Применить новый порядок галереи и удалить помеченные файлы.
+     * HasImages::deleteImage() принимает array $imageData (запись галереи), не строку.
+     * HasImages::deleteSingleImage() принимает ?string filename.
      *
-     * @param  list<string>  $order    желаемый порядок (имена файлов с фронта)
-     * @param  list<string>  $deleted  файлы к удалению
-     * @return list<string>
+     * Всегда возвращает false — используется в цепочке `|| $page->delete()`.
      */
-    private function reorderGallery(Page $page, array $order, array $deleted): array
+    private function deleteAllFiles(Page $page): false
     {
-        $current = collect($page->images ?? []);
-
-        foreach ($deleted as $name) {
-            if ($current->contains($name)) {
-                $page->deleteImage($name);
-            }
-        }
-
-        $kept = $current->reject(fn (string $name) => in_array($name, $deleted, true));
-
-        // Порядок с фронта — источник истины, но только для реально существующих файлов
-        $ordered = collect($order)->filter(fn (string $name) => $kept->contains($name));
-
-        return $ordered
-            ->merge($kept->diff($ordered))   // файлы, которых не было в payload — в конец
-            ->values()
-            ->all();
-    }
-
-    /** Удалить все файлы страницы (обложка + галерея). */
-    private function deleteFiles(Page $page): bool
-    {
+        // Одиночное изображение
         if ($page->image) {
-            $page->deleteSingleImage();
+            $page->deleteSingleImage($page->image);
         }
 
-        foreach ($page->images ?? [] as $name) {
-            $page->deleteImage($name);
+        // Галерея — $page->images хранит массив записей (array[])
+        foreach ($page->images ?? [] as $imageData) {
+            if (is_array($imageData)) {
+                $page->deleteImage($imageData);   // ← array, не строка
+            }
         }
 
-        return false; // чтобы `|| $page->delete()` всегда выполнялся
+        return false;
     }
 }

@@ -1,23 +1,43 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
-import { useForm } from '@inertiajs/react';
-import SaveIcon from '@mui/icons-material/Save';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Card from '@mui/material/Card';
-import CardActions from '@mui/material/CardActions';
-import CardContent from '@mui/material/CardContent';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
-import MenuItem from '@mui/material/MenuItem';
-import Switch from '@mui/material/Switch';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import TextField from '@mui/material/TextField';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { router, useForm } from '@inertiajs/react';
+import {
+    alpha,
+    Box,
+    Button,
+    Chip,
+    Dialog,
+    DialogContent,
+    Divider,
+    FormControl,
+    FormControlLabel,
+    FormHelperText,
+    Grid,
+    IconButton,
+    InputLabel,
+    MenuItem,
+    Select,
+    Stack,
+    Switch,
+    Tab,
+    Tabs,
+    TextField,
+    Tooltip,
+    Typography,
+} from '@mui/material';
+import {
+    Add as AddIcon,
+    Close as CloseIcon,
+    CloudUpload as CloudUploadIcon,
+    Delete as DeleteIcon,
+    OpenInNew as OpenInNewIcon,
+    Save as SaveIcon,
+    SwapHoriz as SwapHorizIcon,
+    ZoomIn as ZoomInIcon,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 
-import Editor from '@admin-pages/Settings/Fields/RichTextEditor/RichTextEditor.jsx';
-import {Typography} from "@mui/material";
-import ImageUploader from "@/Components/Admin/ImageUploader/ImageUploader.jsx";
+import RichTextEditor from '@admin-pages/Settings/Fields/RichTextEditor/RichTextEditor.jsx';
+import ImageUploader from '@admin-components/ImageUploader/ImageUploader.jsx';
 
 /** Значения формы по умолчанию — единый источник, чтобы useForm не терял поля. */
 const EMPTY = {
@@ -29,10 +49,9 @@ const EMPTY = {
 };
 
 const MENU_SWITCHES = [
-    ['published', 'Опубликована'],
-    ['on_header_menu', 'Верхнее меню'],
-    ['on_footer_menu', 'Нижнее меню'],
-    ['on_mobile_menu', 'Мобильное меню'],
+    { key: 'on_header_menu', title: 'Показывать в шапке',         active: '✓ Отображается в шапке',          inactive: 'Скрыта из шапки' },
+    { key: 'on_footer_menu', title: 'Показывать в подвале',       active: '✓ Отображается в подвале',         inactive: 'Скрыта из подвала' },
+    { key: 'on_mobile_menu', title: 'Показывать в мобильном меню',active: '✓ Отображается в мобильном меню',  inactive: 'Скрыта из мобильного меню' },
 ];
 
 /**
@@ -42,23 +61,35 @@ const MENU_SWITCHES = [
 export default function PageForm({ page, parents, mode }) {
     const isEdit = mode === 'edit' && page?.id;
 
-    const { data, setData, post, processing, errors, isDirty, recentlySuccessful, transform } = useForm({
+    const {
+        data,
+        setData,
+        post,
+        processing,
+        errors,
+        isDirty,
+        recentlySuccessful,
+        transform
+    } = useForm({
         ...EMPTY,
         ...page,
-        images: (page?.images ?? []).map((img) => img.name),
+        // images хранит объекты с бэкенда; ImageUploader сам разберёт их
+        images: page?.images ?? [],
     });
 
-    const [tab, setTab] = useState(0);
-    const [preview, setPreview] = useState(null);
+    const [tab, setTab]           = useState(0);
+    const [preview, setPreview]   = useState(null);   // blob-URL для главного фото
+    const [imgDialog, setImgDialog] = useState(false); // диалог просмотра главного фото
 
     // Булевы значения в FormData должны стать '1'/'0', иначе `false` придёт как "false"
     transform((payload) => ({
         ...payload,
         ...Object.fromEntries(
-            MENU_SWITCHES.map(([key]) => [key, payload[key] ? 1 : 0]),
+            MENU_SWITCHES.map(({ key }) => [key, payload[key] ? 1 : 0]),
         ),
+        published:     payload.published     ? 1 : 0,
         image_deleted: payload.image_deleted ? 1 : 0,
-        parent_id: payload.parent_id === '' ? null : payload.parent_id,
+        parent_id:     payload.parent_id === '' ? null : payload.parent_id,
     }));
 
     /** Освобождаем blob-URL — иначе утечка памяти при каждой смене файла. */
@@ -68,34 +99,32 @@ export default function PageForm({ page, parents, mode }) {
         if (recentlySuccessful) toast.success('Сохранено');
     }, [recentlySuccessful]);
 
-    const handleImagesChange = useCallback((
-        newImagesOrder,
-        newFiles,
-        deletedImageIds
-    ) => {
-        setData(prevData => ({
-            ...prevData,
-            images: newImagesOrder,
-            deleted_images: deletedImageIds || [],
-            new_images: newFiles || [],
-        }));
-    }, [setData]);
-
-    const handleImage = (file) => {
+    /* ── главное изображение ── */
+    const handleImage = useCallback((file) => {
         setPreview((old) => {
             if (old) URL.revokeObjectURL(old);
             return file ? URL.createObjectURL(file) : null;
         });
-        setData((current) => ({ ...current, image: file, image_deleted: !file }));
-    };
+        setData((cur) => ({ ...cur, image: file ?? null, image_deleted: !file }));
+    }, [setData]);
 
-    const submit = (event) => {
-        event.preventDefault();
+    /* ── галерея (ImageUploader callback) ── */
+    const handleImagesChange = useCallback((order, files, deleted) => {
+        setData((cur) => ({
+            ...cur,
+            images:         order,
+            new_images:     files,
+            deleted_images: deleted,
+        }));
+    }, [setData]);
 
+    /* ── отправка ── */
+    const submit = (e) => {
+        e.preventDefault();
         post(
             isEdit ? route('admin.pages.update', page.id) : route('admin.pages.store'),
             {
-                forceFormData: true,       // всегда multipart: файлы + вложенные массивы
+                forceFormData: true,
                 preserveScroll: true,
                 only: ['tree', 'page', 'parents', 'errors', 'flash'],
                 onError: () => toast.error('Проверьте заполнение полей'),
@@ -103,176 +132,419 @@ export default function PageForm({ page, parents, mode }) {
         );
     };
 
+    /* ── опции родителей с отступом ── */
     const parentOptions = useMemo(
-        () => parents.map((option) => ({
-            ...option,
-            label: `${'\u00A0\u00A0'.repeat(option.depth)}${option.depth ? '└ ' : ''}${option.name}`,
+        () => parents.map((opt) => ({
+            ...opt,
+            label: `${'\u00A0\u00A0'.repeat(opt.depth)}${opt.depth ? '└ ' : ''}${opt.name}`,
         })),
         [parents],
     );
 
+    /* ── превью главного фото ── */
+    const mainThumbSrc = preview                              // только что выбранный файл
+        ?? (page?.single_thumb ?? null);                      // или уже сохранённый thumb
+
+    const mainSrc      = preview
+        ?? (page?.single_image_src ?? null);
+
+    /* ── helper ── */
+    const field = (name) => ({
+        value:     data[name],
+        onChange:  (e) => setData(name, e.target.value),
+        error:     !!errors[name],
+        helperText: errors[name],
+        size:      'small',
+        fullWidth: true,
+    });
+
     return (
-        <Card component="form" variant="outlined" onSubmit={submit} noValidate>
-            <Tabs value={tab} onChange={(_, next) => setTab(next)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-                <Tab label="Основное" />
-                <Tab label="Контент" />
-                <Tab label="SEO" />
+        <Box
+            component="form"
+            onSubmit={submit}
+            sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+        >
+            {/* ── шапка ── */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <Typography variant="h6" noWrap>
+                        {isEdit ? (page?.name || 'Редактирование') : 'Новая страница'}
+                    </Typography>
+                    {page?.url && (
+                        <Tooltip title="Открыть на сайте">
+                            <IconButton
+                                component="a"
+                                href={page.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                size="small"
+                                color="primary"
+                            >
+                                <OpenInNewIcon fontSize="small" />
+                            </IconButton>
+                        </Tooltip>
+                    )}
+                </Box>
+
+                <FormControlLabel
+                    control={
+                        <Switch
+                            checked={Boolean(data.published)}
+                            onChange={(e) => setData('published', e.target.checked)}
+                            size="small"
+                            color="success"
+                        />
+                    }
+                    label={
+                        <Typography variant="body2" color={data.published ? 'success.main' : 'text.secondary'}>
+                            {data.published ? 'Опубликована' : 'Черновик'}
+                        </Typography>
+                    }
+                    labelPlacement="start"
+                />
+            </Box>
+
+            {/* ── табы ── */}
+            <Tabs
+                value={tab}
+                onChange={(_, v) => setTab(v)}
+                sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+            >
+                <Tab label="Параметры" />
+                <Tab label="Текст" />
                 <Tab label="Изображения" />
             </Tabs>
 
-            <CardContent>
-                <Box hidden={tab !== 0}>
-                    <Grid container spacing={2}>
-                        <Grid size={{ xs: 12, md: 8 }}>
-                            <TextField
-                                fullWidth required label="Название"
-                                value={data.name}
-                                onChange={(e) => setData('name', e.target.value)}
-                                error={Boolean(errors.name)} helperText={errors.name}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 4 }}>
-                            <TextField
-                                fullWidth label="Alias" placeholder="сгенерируется из названия"
-                                value={data.alias}
-                                onChange={(e) => setData('alias', e.target.value)}
-                                error={Boolean(errors.alias)}
-                                helperText={errors.alias ?? (page?.url ? `URL: ${page.url}` : ' ')}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <TextField
-                                fullWidth select label="Родитель"
-                                value={data.parent_id ?? ''}
-                                onChange={(e) => setData('parent_id', e.target.value)}
-                                error={Boolean(errors.parent_id)} helperText={errors.parent_id}
-                            >
-                                <MenuItem value="">— корень —</MenuItem>
-                                {parentOptions.map((option) => (
-                                    <MenuItem key={option.id} value={option.id}>{option.label}</MenuItem>
-                                ))}
-                            </TextField>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <TextField
-                                fullWidth label="H1"
-                                value={data.h1}
-                                onChange={(e) => setData('h1', e.target.value)}
-                            />
-                        </Grid>
-                        <Grid size={12}>
-                            {MENU_SWITCHES.map(([key, label]) => (
-                                <FormControlLabel
-                                    key={key}
-                                    control={(
-                                        <Switch
-                                            checked={Boolean(data[key])}
-                                            onChange={(e) => setData(key, e.target.checked)}
-                                        />
+            {/* ── содержимое табов ── */}
+            <Box sx={{ flex: 1, overflowY: 'auto', pr: 0.5 }}>
+
+                {/* ══ ТАБ 0: ПАРАМЕТРЫ ══ */}
+                {tab === 0 && (
+                    <Box>
+                        {/* Основные поля + главное фото */}
+                        <Box sx={{ display: 'flex', gap: 3, pt: 1 }}>
+
+                            {/* Левая колонка: текстовые поля */}
+                            <Box sx={{ flex: 3 }}>
+                                <Stack spacing={2}>
+                                    <TextField
+                                        label="Название"
+                                        required
+                                        {...field('name')}
+                                    />
+                                    <TextField label="H1" {...field('h1')} />
+                                    <TextField
+                                        label="Alias"
+                                        {...field('alias')}
+                                        helperText={errors.alias || 'Автоматически из названия'}
+                                    />
+
+                                    {/* Родительская страница */}
+                                    <FormControl fullWidth size="small" error={!!errors.parent_id}>
+                                        <InputLabel>Родительская страница</InputLabel>
+                                        <Select
+                                            value={data.parent_id}
+                                            onChange={(e) => setData('parent_id', e.target.value)}
+                                            label="Родительская страница"
+                                        >
+                                            <MenuItem value="">Нет (Корневая)</MenuItem>
+                                            {parentOptions.map((opt) => (
+                                                <MenuItem key={opt.id} value={opt.id}>
+                                                    {opt.label}
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                        {errors.parent_id && (
+                                            <FormHelperText>{errors.parent_id}</FormHelperText>
+                                        )}
+                                    </FormControl>
+
+                                    <TextField
+                                        label="Анонс"
+                                        multiline
+                                        rows={3}
+                                        {...field('announce')}
+                                    />
+                                </Stack>
+                            </Box>
+
+                            {/* Правая колонка: главное фото */}
+                            <Box sx={{ flex: 1, minWidth: 140 }}>
+                                <Box
+                                    sx={{
+                                        position: 'relative',
+                                        width: '100%',
+                                        aspectRatio: '1/1',
+                                        borderRadius: 2,
+                                        overflow: 'hidden',
+                                        bgcolor: 'grey.100',
+                                        border: '2px dashed',
+                                        borderColor: mainThumbSrc ? 'transparent' : 'grey.300',
+                                        transition: 'all 0.2s',
+                                        '&:hover': {
+                                            borderColor: mainThumbSrc ? 'transparent' : 'primary.main',
+                                        },
+                                    }}
+                                >
+                                    {mainThumbSrc ? (
+                                        <>
+                                            <img
+                                                src={mainThumbSrc}
+                                                alt="Превью"
+                                                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                                                onClick={() => setImgDialog(true)}
+                                            />
+
+                                            {/* Оверлей при наведении */}
+                                            <Box
+                                                sx={{
+                                                    position: 'absolute', inset: 0,
+                                                    bgcolor: 'rgba(0,0,0,0.4)',
+                                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
+                                                    opacity: 0, transition: 'opacity 0.2s',
+                                                    '&:hover': { opacity: 1 },
+                                                }}
+                                            >
+                                                <Tooltip title="Просмотр">
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => { e.stopPropagation(); setImgDialog(true); }}
+                                                        sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}
+                                                    >
+                                                        <ZoomInIcon fontSize="small" sx={{ color: 'grey.800' }} />
+                                                    </IconButton>
+                                                </Tooltip>
+                                                <Tooltip title="Удалить">
+                                                    <IconButton
+                                                        size="small"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleImage(null);
+                                                            toast.info('Изображение будет удалено после сохранения');
+                                                        }}
+                                                        sx={{ bgcolor: 'error.main', color: 'white', '&:hover': { bgcolor: 'error.dark' } }}
+                                                    >
+                                                        <DeleteIcon fontSize="small" />
+                                                    </IconButton>
+                                                </Tooltip>
+                                            </Box>
+
+                                            {/* Кнопка «Заменить» */}
+                                            <Button
+                                                component="label"
+                                                size="small"
+                                                sx={{
+                                                    position: 'absolute', bottom: 8, right: 8,
+                                                    bgcolor: 'rgba(255,255,255,0.9)', backdropFilter: 'blur(4px)',
+                                                    fontSize: '0.7rem', px: 1.5, py: 0.5, borderRadius: 1,
+                                                    '&:hover': { bgcolor: 'white' },
+                                                }}
+                                            >
+                                                <SwapHorizIcon sx={{ fontSize: 14, mr: 0.5 }} />
+                                                Заменить
+                                                <input type="file" hidden accept="image/*"
+                                                       onChange={(e) => {
+                                                           const f = e.target.files?.[0];
+                                                           if (f) { handleImage(f); toast.info('Будет заменено после сохранения'); }
+                                                       }}
+                                                />
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        /* Зона загрузки */
+                                        <Button
+                                            component="label"
+                                            sx={{
+                                                width: '100%', height: '100%',
+                                                display: 'flex', flexDirection: 'column',
+                                                alignItems: 'center', justifyContent: 'center', gap: 0.5,
+                                                textTransform: 'none',
+                                            }}
+                                        >
+                                            <CloudUploadIcon sx={{ fontSize: 40, color: 'text.secondary' }} />
+                                            <Typography variant="body2" color="text.secondary">
+                                                Загрузить фото
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                JPEG, PNG, WebP
+                                            </Typography>
+                                            <input type="file" hidden accept="image/*"
+                                                   onChange={(e) => {
+                                                       const f = e.target.files?.[0];
+                                                       if (f) handleImage(f);
+                                                   }}
+                                            />
+                                        </Button>
                                     )}
-                                    label={label}
-                                />
-                            ))}
-                        </Grid>
-                    </Grid>
-                </Box>
+                                </Box>
+                            </Box>
+                        </Box>
 
-                <Box hidden={tab !== 1}>
-                    <TextField
-                        fullWidth multiline minRows={2} label="Анонс" sx={{ mb: 2 }}
-                        value={data.announce}
-                        onChange={(e) => setData('announce', e.target.value)}
-                    />
-                    {/* ВАЖНО: пишем в `text`, а не в `content` — так ждёт бэкенд */}
-                    <Editor value={data.text} onChange={(html) => setData('text', html)} />
-                </Box>
+                        {/* ── Meta-данные ── */}
+                        <Divider sx={{ my: 3 }}>
+                            <Chip label="Meta / SEO" size="small" />
+                        </Divider>
 
-                <Box hidden={tab !== 2}>
-                    <Grid container spacing={2} direction="column">
-                        <Grid size={{ xs: 12, md: 6 }}>
+                        <Stack spacing={2}>
+                            <TextField label="Title" {...field('title')} slotProps={{ inputLabel: { shrink: true } }} />
+                            <TextField label="Keywords" {...field('keywords')} slotProps={{ inputLabel: { shrink: true } }} />
                             <TextField
-                                fullWidth
-                                label="Title"
-                                value={data.title}
-                                onChange={(e) => setData('title', e.target.value)}
-                                size="small"
-                                slotProps={{inputLabel: {shrink: true}}}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <TextField
-                                fullWidth
-                                label="Keywords"
-                                value={data.keywords}
-                                onChange={(e) => setData('keywords', e.target.value)}
-                                size="small"
-                                slotProps={{inputLabel: {shrink: true}}}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <TextField
-                                fullWidth
                                 label="Description"
-                                value={data.description}
-                                onChange={(e) => setData('description', e.target.value)}
-                                multiline
-                                rows={4}
-                                size="small"
-                                slotProps={{inputLabel: {shrink: true}}}
+                                multiline rows={3}
+                                {...field('description')}
+                                slotProps={{ inputLabel: { shrink: true } }}
                             />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <TextField
-                                fullWidth
-                                label="og_title"
-                                value={data.og_title}
-                                onChange={(e) => setData('og_title', e.target.value)}
-                                size="small"
-                                slotProps={{inputLabel: {shrink: true}}}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 6 }}>
-                            <TextField
-                                fullWidth
-                                label="og_description"
-                                value={data.og_description}
-                                onChange={(e) => setData('og_description', e.target.value)}
-                                size="small"
-                                slotProps={{inputLabel: {shrink: true}}}
-                            />
-                        </Grid>
-                    </Grid>
-                </Box>
+                            <TextField label="OG Title" {...field('og_title')} slotProps={{ inputLabel: { shrink: true } }} />
+                            <TextField label="OG Description" {...field('og_description')} slotProps={{ inputLabel: { shrink: true } }} />
+                        </Stack>
 
-                <Box hidden={tab !== 3}>
-                    <Box sx={{pt: 2}}>
-                        <Typography variant="subtitle1" gutterBottom>Изображения страницы</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{mb: 2, display: 'block'}}>
-                            JPEG, PNG, GIF, WebP • Макс. 10MB • Автоконвертация в WebP
-                        </Typography>
-                        {/*<ImageUploader*/}
-                        {/*    key={syncKey}*/}
-                        {/*    images={data.images}*/}
-                        {/*    pageId={page?.id}*/}
-                        {/*    uploadUrl={`/admin/pages/${page?.id || 'new'}/upload-images`}*/}
-                        {/*    maxImages={10}*/}
-                        {/*    multiple={true}*/}
-                        {/*    onChange={handleImagesChange}*/}
-                        {/*/>*/}
+                        {/* ── Видимость в меню ── */}
+                        <Divider sx={{ my: 3 }}>
+                            <Chip label="Видимость" size="small" />
+                        </Divider>
+
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' },
+                                gap: 2,
+                            }}
+                        >
+                            {MENU_SWITCHES.map(({ key, title, active, inactive }) => (
+                                <Box
+                                    key={key}
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        p: '12px 16px',
+                                        borderRadius: 2,
+                                        border: '1px solid',
+                                        borderColor: data[key] ? 'success.main' : 'divider',
+                                        bgcolor: data[key]
+                                            ? (theme) => alpha(theme.palette.success.main, 0.04)
+                                            : 'background.paper',
+                                        transition: 'all 0.2s',
+                                    }}
+                                >
+                                    <Box sx={{ mr: 2, minWidth: 0 }}>
+                                        <Typography variant="body2" fontWeight={500} noWrap>{title}</Typography>
+                                        <Typography
+                                            variant="caption"
+                                            color={data[key] ? 'success.main' : 'text.secondary'}
+                                            fontWeight={data[key] ? 600 : 400}
+                                            noWrap
+                                        >
+                                            {data[key] ? active : inactive}
+                                        </Typography>
+                                    </Box>
+                                    <Switch
+                                        checked={Boolean(data[key])}
+                                        onChange={(e) => setData(key, e.target.checked)}
+                                        size="small"
+                                        color="success"
+                                        sx={{ flexShrink: 0 }}
+                                    />
+                                </Box>
+                            ))}
+                        </Box>
                     </Box>
-                </Box>
+                )}
 
-                {/* SEO / Изображения — без изменений по логике, только Grid size={} */}
-            </CardContent>
+                {/* ══ ТАБ 1: ТЕКСТ ══ */}
+                {tab === 1 && (
+                    <Box sx={{ pt: 1 }}>
+                        <FormControl fullWidth variant="outlined">
+                            <InputLabel shrink>Содержание</InputLabel>
+                            <Box sx={{ mt: 2 }}>
+                                <RichTextEditor
+                                    value={data.text}
+                                    onChange={(val) => setData('text', val)}
+                                />
+                            </Box>
+                            {errors.text && (
+                                <FormHelperText error>{errors.text}</FormHelperText>
+                            )}
+                        </FormControl>
+                    </Box>
+                )}
 
-            <CardActions sx={{ justifyContent: 'flex-end', borderTop: 1, borderColor: 'divider' }}>
+                {/* ══ ТАБ 2: ИЗОБРАЖЕНИЯ ══ */}
+                {tab === 2 && (
+                    <Box sx={{ pt: 1 }}>
+                        <Typography variant="subtitle1" gutterBottom>
+                            Изображения страницы
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                            JPEG, PNG, GIF, WebP • Макс. 10 MB • Автоконвертация в WebP
+                        </Typography>
+                        <ImageUploader
+                            images={data.images}
+                            pageId={page?.id}
+                            maxImages={10}
+                            multiple
+                            onChange={handleImagesChange}
+                        />
+                    </Box>
+                )}
+            </Box>
+
+            {/* ── Диалог просмотра главного фото ── */}
+            <Dialog open={imgDialog} onClose={() => setImgDialog(false)} maxWidth="lg" fullWidth>
+                <DialogContent sx={{ p: 0, position: 'relative', bgcolor: 'black' }}>
+                    <IconButton
+                        onClick={() => setImgDialog(false)}
+                        sx={{
+                            position: 'absolute', top: 8, right: 8, zIndex: 1,
+                            bgcolor: 'rgba(0,0,0,0.5)', color: 'white',
+                            '&:hover': { bgcolor: 'rgba(0,0,0,0.75)' },
+                        }}
+                    >
+                        <CloseIcon />
+                    </IconButton>
+                    {mainSrc && (
+                        <img
+                            src={mainSrc}
+                            alt="Полное изображение"
+                            style={{ width: '100%', maxHeight: '90vh', objectFit: 'contain', display: 'block' }}
+                        />
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Панель действий ── */}
+            <Box
+                sx={{
+                    display: 'flex', gap: 2, justifyContent: 'flex-end',
+                    pt: 2, mt: 'auto',
+                    borderTop: 1, borderColor: 'divider',
+                }}
+            >
+                {isEdit && (
+                    <Button
+                        variant="outlined"
+                        color="error"
+                        size="small"
+                        onClick={() => {
+                            if (window.confirm(`Удалить страницу «${page.name}»?`)) {
+                                router.delete(route('admin.pages.destroy', page.id), { preserveScroll: true });
+                            }
+                        }}
+                    >
+                        Удалить
+                    </Button>
+                )}
+
                 <Button
-                    type="submit" variant="contained" startIcon={<SaveIcon />}
-                    loading={processing} disabled={!isDirty}
+                    type="submit"
+                    variant="contained"
+                    startIcon={isEdit ? <SaveIcon /> : <AddIcon />}
+                    disabled={processing || !isDirty}
+                    loading={processing}
                 >
-                    {isEdit ? 'Сохранить' : 'Создать'}
+                    {processing ? 'Сохранение…' : isEdit ? 'Сохранить' : 'Создать'}
                 </Button>
-            </CardActions>
-        </Card>
+            </Box>
+        </Box>
     );
 }
