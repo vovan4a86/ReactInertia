@@ -2,7 +2,7 @@ import {useCallback, useEffect, useMemo, useState} from 'react';
 import {router, useForm} from '@inertiajs/react';
 import {
     alpha, Box, Button, Chip, Dialog, DialogContent, Divider, Grid, FormControl,
-    FormControlLabel, FormHelperText, InputLabel, MenuItem, Select, Stack,
+    FormControlLabel, FormHelperText, InputLabel, IconButton, MenuItem, Select, Stack,
     Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
@@ -325,83 +325,143 @@ export default function PageForm({page, parents = [], mode}) {
 
                     {/* Правая колонка 25% - Изображение */}
                     <Box sx={{flex: 1}}>
-                        <Stack spacing={2}>
-                            <Box>
-                                <Typography variant="subtitle2" gutterBottom>Главное изображение</Typography>
+                        <Box
+                            sx={{
+                                position: 'relative',
+                                width: '100%',
+                                aspectRatio: '1/1',
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                                bgcolor: 'grey.100',
+                                border: '2px dashed',
+                                borderColor: mainSrc ? 'transparent' : 'grey.300',
+                                transition: 'all 0.3s ease',
+                                '&:hover': {
+                                    borderColor: mainSrc ? 'transparent' : 'primary.main',
+                                    bgcolor: mainSrc ? 'transparent' : 'grey.200',
+                                },
+                            }}
+                        >
+                            {mainSrc ? (
+                                <>
+                                    <img
+                                        src={mainSrc}
+                                        alt="Preview"
+                                        style={{width: '100%', height: '100%', objectFit: 'cover'}}
+                                        onClick={() => setImgDialog(true)}
+                                    />
 
-                                <Stack direction="row" spacing={2} alignItems="flex-start">
+                                    {/* Оверлей с кнопками при наведении */}
                                     <Box
                                         sx={{
-                                            width: 180, height: 135, flexShrink: 0,
-                                            borderRadius: 1, overflow: 'hidden',
-                                            border: '1px dashed', borderColor: 'divider',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                            bgcolor: (t) => alpha(t.palette.text.primary, 0.03),
-                                            cursor: mainSrc ? 'zoom-in' : 'default',
-                                            position: 'relative',
+                                            position: 'absolute',
+                                            top: 0, left: 0, right: 0, bottom: 0,
+                                            bgcolor: 'rgba(0,0,0,0.4)',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: 1,
+                                            opacity: 0,
+                                            transition: 'opacity 0.2s ease',
+                                            '&:hover': {opacity: 1},
                                         }}
-                                        onClick={() => mainSrc && setImgDialog(true)}
                                     >
-                                        {mainSrc ? (
-                                            <>
-                                                <Box
-                                                    component="img"
-                                                    src={mainSrc}
-                                                    alt="Главное изображение"
-                                                    sx={{width: '100%', height: '100%', objectFit: 'cover'}}
-                                                />
-                                                <ZoomInIcon
-                                                    sx={{
-                                                        position: 'absolute', right: 4, bottom: 4,
-                                                        color: 'common.white', filter: 'drop-shadow(0 0 2px #000)',
-                                                    }}
-                                                />
-                                            </>
-                                        ) : (
-                                            <Typography variant="caption" color="text.secondary">Нет
-                                                изображения</Typography>
-                                        )}
+                                        <Tooltip title="Просмотр">
+                                            <IconButton
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setImgDialog(true);
+                                                }}
+                                                sx={{bgcolor: 'white', '&:hover': {bgcolor: 'grey.100'}}}
+                                                size="small"
+                                            >
+                                                <ZoomInIcon fontSize="small" sx={{color: 'grey.800'}}/>
+                                            </IconButton>
+                                        </Tooltip>
+
+                                        <Tooltip title="Удалить">
+                                            <IconButton
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleImage(null);
+                                                }}
+                                                sx={{bgcolor: 'error.main', color: 'white', '&:hover': {bgcolor: 'error.dark'}}}
+                                                size="small"
+                                            >
+                                                <DeleteIcon fontSize="small"/>
+                                            </IconButton>
+                                        </Tooltip>
                                     </Box>
 
-                                    <Stack spacing={1}>
-                                        <Button
-                                            component="label"
-                                            variant="outlined"
-                                            size="small"
-                                            startIcon={mainSrc ? <SwapHorizIcon/> : <CloudUploadIcon/>}
-                                        >
-                                            {mainSrc ? 'Заменить' : 'Загрузить'}
-                                            <input
-                                                hidden
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={(e) => {
-                                                    handleImage(e.target.files?.[0] ?? null);
-                                                    e.target.value = '';   // повторный выбор того же файла
-                                                }}
-                                            />
-                                        </Button>
-
-                                        {mainSrc && (
-                                            <Button
-                                                size="small"
-                                                color="error"
-                                                startIcon={<DeleteIcon/>}
-                                                onClick={() => handleImage(null)}
-                                            >
-                                                Удалить
-                                            </Button>
-                                        )}
-
-                                        <Typography variant="caption" color="text.secondary">
-                                            JPEG, PNG, WebP · до 10 MB
-                                        </Typography>
-
-                                        {errors.image && <FormHelperText error>{errors.image}</FormHelperText>}
-                                    </Stack>
-                                </Stack>
-                            </Box>
-                        </Stack>
+                                    {/* Кнопка замены */}
+                                    <Button
+                                        component="label"
+                                        sx={{
+                                            position: 'absolute',
+                                            bottom: 8, right: 8,
+                                            minWidth: 'auto',
+                                            bgcolor: 'rgba(255,255,255,0.9)',
+                                            backdropFilter: 'blur(4px)',
+                                            '&:hover': {bgcolor: 'white'},
+                                            px: 2, py: 0.5,
+                                            fontSize: '0.75rem',
+                                            borderRadius: 1,
+                                            opacity: 0.9,
+                                            boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                                        }}
+                                    >
+                                        <SwapHorizIcon sx={{fontSize: 16, mr: 0.5}}/>
+                                        Заменить
+                                        <input
+                                            type="file"
+                                            hidden
+                                            accept="image/*"
+                                            onChange={(e) => {
+                                                handleImage(e.target.files?.[0] ?? null);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                    </Button>
+                                </>
+                            ) : (
+                                /* Зона загрузки */
+                                <Button
+                                    component="label"
+                                    sx={{
+                                        width: '100%', height: '100%',
+                                        display: 'flex', flexDirection: 'column',
+                                        alignItems: 'center', justifyContent: 'center',
+                                        gap: 1,
+                                        textTransform: 'none',
+                                        bgcolor: 'background.default',
+                                        border: '2px dashed',
+                                        borderColor: 'divider',
+                                        '&:hover': {
+                                            bgcolor: 'action.hover',
+                                            borderColor: 'primary.main',
+                                        },
+                                    }}
+                                >
+                                    <CloudUploadIcon sx={{fontSize: 48, color: 'text.secondary'}}/>
+                                    <Typography variant="body2" sx={{fontWeight: 500, color: 'text.primary'}}>
+                                        Загрузить фото
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        JPEG, PNG, WebP · Макс. 10MB
+                                    </Typography>
+                                    {errors.image && <FormHelperText error>{errors.image}</FormHelperText>}
+                                    <input
+                                        type="file"
+                                        hidden
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                            handleImage(e.target.files?.[0] ?? null);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                </Button>
+                            )}
+                        </Box>
                     </Box>
                 </Box>
 

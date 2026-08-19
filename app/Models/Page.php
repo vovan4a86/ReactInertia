@@ -605,13 +605,13 @@ class Page extends Model
             'path' => 'uploads/pages/images',
             'formats' => ['original', 'webp'],
             'thumbs' => [
-                'thumb' => ['width' => 100, 'height' => 100],
+                'thumb' => ['width' => 300, 'height' => 300],
                 'small' => ['width' => 300, 'height' => 200],
                 'medium' => ['width' => 600, 'height' => 400],
                 'large' => ['width' => 1200, 'height' => 800],
             ],
             'single_path' => 'uploads/pages/image',
-            'single_thumbs' => ['thumb' => ['width' => 100, 'height' => 100]],
+            'single_thumbs' => ['thumb' => ['width' => 150, 'height' => 150]],
             'quality' => 80,
             'max_file_size' => 10240,
         ];
