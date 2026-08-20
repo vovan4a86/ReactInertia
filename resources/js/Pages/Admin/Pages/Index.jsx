@@ -45,6 +45,24 @@ export default function Index({ tree = [], page = null, parents = [], mode = 'li
         only: ['page', 'parents', 'mode'],
     });
 
+    /* ── Форма редактирования (используется в обоих видах) ── */
+    const formSlot = page ? (
+        <PageForm
+            key={page.id ?? 'new'}
+            page={page}
+            parents={parents}
+            mode={mode}
+        />
+    ) : (
+        <Card variant="outlined" sx={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+            <CardContent>
+                <Typography color="text.secondary">
+                    Выберите страницу в списке или создайте новую.
+                </Typography>
+            </CardContent>
+        </Card>
+    );
+
     return (
         <AdminLayout title="Страницы">
             <Head title="Страницы" />
@@ -76,9 +94,21 @@ export default function Index({ tree = [], page = null, parents = [], mode = 'li
 
             {errors?.tree && <Alert severity="error" sx={{ mb: 2 }}>{errors.tree}</Alert>}
 
+            {/* ══════════ VIEW: table (список сверху + форма снизу) ══════════ */}
             {view === 'table' ? (
-                <PagesList tree={tree} selectedId={page?.id} />
+                <Stack spacing={2}>
+                    <PagesList
+                        tree={tree}
+                        selectedId={page?.id ?? null}
+                    />
+
+                    {/* Форма редактирования — всегда показываем, чтобы юзер видел placeholder */}
+                    <Paper variant="outlined" sx={{ p: 2 }}>
+                        {formSlot}
+                    </Paper>
+                </Stack>
             ) : (
+                /* ══════════ VIEW: tree (дерево слева + форма справа) ══════════ */
                 <Grid container spacing={2} alignItems="stretch">
                     {/* MUI 7: Grid v2 — `size`, без `item` */}
                     <Grid size={{ xs: 12, md: 4, lg: 3 }}>
@@ -88,22 +118,7 @@ export default function Index({ tree = [], page = null, parents = [], mode = 'li
                     </Grid>
 
                     <Grid size={{ xs: 12, md: 8, lg: 9 }}>
-                        {page ? (
-                            <PageForm
-                                key={page.id ?? 'new'}   // сброс формы при смене страницы
-                                page={page}
-                                parents={parents}
-                                mode={mode}
-                            />
-                        ) : (
-                            <Card variant="outlined" sx={{ height: '100%', display: 'grid', placeItems: 'center' }}>
-                                <CardContent>
-                                    <Typography color="text.secondary">
-                                        Выберите страницу в дереве или создайте новую.
-                                    </Typography>
-                                </CardContent>
-                            </Card>
-                        )}
+                        {formSlot}
                     </Grid>
                 </Grid>
             )}
