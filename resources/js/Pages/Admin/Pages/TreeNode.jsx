@@ -8,8 +8,18 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import Box from '@mui/material/Box';
 import Tooltip from '@mui/material/Tooltip';
-
+import Stack from '@mui/material/Stack';
 import { TreeContext } from '@/Contexts/Admin/TreeContext.jsx';
+
+/**
+ * Описание флагов меню — в том же порядке, что Page::MENU_FLAGS.
+ * `short` отображается внутри точки, `title` — в Tooltip.
+ */
+const MENU_FLAGS = [
+    { key: 'on_header_menu',  short: 'H', title: 'В шапке'          },
+    { key: 'on_footer_menu',  short: 'F', title: 'В подвале'         },
+    { key: 'on_mobile_menu',  short: 'M', title: 'В мобильном меню'  },
+];
 
 /** Пунктирные направляющие для уровней вложенности (аналог jsTree connectors). */
 function Guides({ node }) {
@@ -34,6 +44,54 @@ function Guides({ node }) {
 }
 
 /**
+ * Три цветных точки — по одной на каждый флаг меню.
+ *
+ * 🟢 Зелёная  — флаг активен (страница есть в этом меню).
+ * 🔴 Красная  — флаг неактивен (страницы нет в этом меню).
+ *
+ * Размер намеренно маленький (7 px), чтобы не перегружать строку дерева.
+ */
+function MenuDots({ data }) {
+    return (
+        <Stack direction="row" spacing={0.4} alignItems="center" sx={{ ml: 0.75, flexShrink: 0 }}>
+            {MENU_FLAGS.map(({ key, short, title }) => {
+                const active = Boolean(data[key]);
+
+                return (
+                    <Tooltip
+                        key={key}
+                        title={`${title}: ${active ? 'да' : 'нет'}`}
+                        placement="top"
+                        arrow
+                    >
+                        <Box
+                            component="span"
+                            sx={{
+                                width: 14,
+                                height: 14,
+                                borderRadius: '50%',
+                                display: 'grid',
+                                placeItems: 'center',
+                                fontSize: '0.55rem',
+                                fontWeight: 700,
+                                lineHeight: 1,
+                                flexShrink: 0,
+                                userSelect: 'none',
+                                bgcolor: active ? 'success.main' : 'error.main',
+                                color: '#fff',
+                                opacity: active ? 1 : 0.45,
+                            }}
+                        >
+                            {short}
+                        </Box>
+                    </Tooltip>
+                );
+            })}
+        </Stack>
+    );
+}
+
+/**
  * Строка дерева страниц.
  *
  * Компонент объявлен на уровне модуля и обёрнут в memo — arborist получает
@@ -45,7 +103,7 @@ function Guides({ node }) {
  */
 function TreeNode({ node, style, dragHandle }) {
     const { onContextMenu, onActivate } = useContext(TreeContext);
-    const { name, published, in_menu: inMenu } = node.data;
+    const { name, published, parent_id } = node.data;
 
     const classes = [
         'rt-row',
@@ -112,14 +170,10 @@ function TreeNode({ node, style, dragHandle }) {
                     </Tooltip>
                 )}
 
-                {inMenu?.length > 0 && (
-                    <Tooltip title={`В меню: ${inMenu.join(', ')}`}>
-                        <Box
-                            component="span"
-                            sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: 'success.main', ml: 0.75, flexShrink: 0 }}
-                        />
-                    </Tooltip>
-                )}
+                {/* ── 3 точки флагов меню (H / F / M) ── */}
+                {parent_id &&
+                    <MenuDots data={node.data} />
+                }
             </div>
         </Box>
     );

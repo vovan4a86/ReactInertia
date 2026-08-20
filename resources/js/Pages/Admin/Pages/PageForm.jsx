@@ -251,17 +251,19 @@ export default function PageForm({page, parents = [], mode}) {
                     {errorCount > 0 && <Chip size="small" color="error" label={`Ошибок: ${errorCount}`}/>}
                 </Typography>
 
-                <FormControlLabel
-                    control={
-                        <Switch
-                            checked={Boolean(data.published)}
-                            onChange={(e) => setData('published', e.target.checked)}
-                            size="small" color="success"
-                        />
-                    }
-                    label={data.published ? 'Опубликована' : 'Черновик'}
-                    labelPlacement="start"
-                />
+                {data.parent_id &&
+                    <FormControlLabel
+                        control={
+                            <Switch
+                                checked={Boolean(data.published)}
+                                onChange={(e) => setData('published', e.target.checked)}
+                                size="small" color="success"
+                            />
+                        }
+                        label={data.published ? 'Опубликована' : 'Черновик'}
+                        labelPlacement="start"
+                    />
+                }
 
                 <Button
                     type="submit"
@@ -484,64 +486,66 @@ export default function PageForm({page, parents = [], mode}) {
                     </Grid>
                 </Box>
 
-                <Box sx={{my: 2}}>
-                    <Divider sx={{mb: 2}}>
-                        <Chip label="Видимость" size="small"/>
-                    </Divider>
+                {data.parent_id &&
+                    <Box sx={{my: 2}}>
+                        <Divider sx={{mb: 2}}>
+                            <Chip label="Видимость" size="small"/>
+                        </Divider>
 
-                    <Box
-                        sx={{
-                            display: 'grid',
-                            gridTemplateColumns: {
-                                xs: '1fr',
-                                sm: '1fr 1fr',
-                                md: '1fr 1fr 1fr',
-                            },
-                            gap: 2,
-                        }}
-                    >
-                        {MENU_SWITCHES.map((item) => (
-                            <Box
-                                key={item.key}
-                                sx={{
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'space-between',
-                                    padding: '12px 16px',
-                                    borderRadius: 2,
-                                    border: '1px solid',
-                                    borderColor: data[item.key] ? 'success.main' : 'divider',
-                                    backgroundColor: data[item.key]
-                                        ? (theme) => alpha(theme.palette.success.main, 0.04)
-                                        : 'background.paper',
-                                    transition: 'all 0.2s',
-                                }}
-                            >
-                                <Box sx={{mr: 2, minWidth: 0}}>
-                                    <Typography variant="body2" fontWeight={500} noWrap>
-                                        {item.title}
-                                    </Typography>
-                                    <Typography
-                                        variant="caption"
-                                        color={data[item.key] ? 'success.main' : 'text.secondary'}
-                                        fontWeight={data[item.key] ? 600 : 400}
-                                        noWrap
-                                    >
-                                        {data[item.key] ? item.active : item.inactive}
-                                    </Typography>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gridTemplateColumns: {
+                                    xs: '1fr',
+                                    sm: '1fr 1fr',
+                                    md: '1fr 1fr 1fr',
+                                },
+                                gap: 2,
+                            }}
+                        >
+                            {MENU_SWITCHES.map((item) => (
+                                <Box
+                                    key={item.key}
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '12px 16px',
+                                        borderRadius: 2,
+                                        border: '1px solid',
+                                        borderColor: data[item.key] ? 'success.main' : 'divider',
+                                        backgroundColor: data[item.key]
+                                            ? (theme) => alpha(theme.palette.success.main, 0.04)
+                                            : 'background.paper',
+                                        transition: 'all 0.2s',
+                                    }}
+                                >
+                                    <Box sx={{mr: 2, minWidth: 0}}>
+                                        <Typography variant="body2" fontWeight={500} noWrap>
+                                            {item.title}
+                                        </Typography>
+                                        <Typography
+                                            variant="caption"
+                                            color={data[item.key] ? 'success.main' : 'text.secondary'}
+                                            fontWeight={data[item.key] ? 600 : 400}
+                                            noWrap
+                                        >
+                                            {data[item.key] ? item.active : item.inactive}
+                                        </Typography>
+                                    </Box>
+
+                                    <Switch
+                                        checked={data[item.key]}
+                                        onChange={(e) => setData(item.key, e.target.checked)}
+                                        size="small"
+                                        color="success"
+                                        sx={{flexShrink: 0}}
+                                    />
                                 </Box>
-
-                                <Switch
-                                    checked={data[item.key]}
-                                    onChange={(e) => setData(item.key, e.target.checked)}
-                                    size="small"
-                                    color="success"
-                                    sx={{flexShrink: 0}}
-                                />
-                            </Box>
-                        ))}
+                            ))}
+                        </Box>
                     </Box>
-                </Box>
+                }
             </Box>
 
             {/* ══════════ TAB 1 — Содержимое  ══════════ */}

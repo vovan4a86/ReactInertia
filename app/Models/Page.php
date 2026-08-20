@@ -263,10 +263,6 @@ class Page extends Model
                     'order'       => (int) $page->order,
                     'published'   => (bool) $page->published,
                     'image_thumb' => $page->getSingleThumb(),   // ← аватарка для PagesList
-                    'in_menu'     => collect(self::MENU_FLAGS)
-                        ->filter(fn ($f) => (bool) $page->{$f})->values()->all(),
-                    ...collect(self::MENU_FLAGS)
-                        ->mapWithKeys(fn ($f) => [$f => (bool) $page->{$f}])->all(),
                     'children'    => $children === [] ? null : $children,
                 ];
             })
