@@ -226,7 +226,10 @@ const PageRow = memo(function PageRow({
                     {busy && <CircularProgress size={14} sx={{ mr: 0.5, alignSelf: 'center' }} />}
 
                     <Tooltip title="Редактировать">
-                        <IconButton size="small" component={Link} href={route('admin.pages.show', row.id)}>
+                        <IconButton
+                            size="small"
+                            onClick={(e) => { e.stopPropagation(); onSelect(row.id); }}
+                        >
                             <EditIcon fontSize="small" />
                         </IconButton>
                     </Tooltip>
@@ -287,7 +290,6 @@ export default function PagesList({ tree = [], selectedId = null }) {
     const allIds = useMemo(() => collectIds(tree), [tree]);
 
     /* ── Handlers ── */
-
     const handleToggle = useCallback((id) => {
         setExpanded((prev) => {
             const next = new Set(prev);
@@ -297,11 +299,15 @@ export default function PagesList({ tree = [], selectedId = null }) {
     }, []);
 
     const openPage = useCallback((id) => {
-        router.visit(route('admin.pages.show', id), {
-            preserveState: true,   // дерево не размонтируется → раскрытые узлы живы
-            preserveScroll: true,
-            only: ['page', 'parents', 'mode', 'flash'],
-        });
+        router.get(
+            route('admin.pages.show', id),
+            {},
+            {
+                preserveState: true,
+                preserveScroll: true,
+                only: ['page', 'parents', 'mode', 'flash'],
+            },
+        );
     }, []);
 
     const handlePublish = useCallback((row) => {
@@ -334,6 +340,7 @@ export default function PagesList({ tree = [], selectedId = null }) {
     }, []);
 
     const openMenu  = useCallback((e, row) => { setAnchor(e.currentTarget); setTarget(row); }, []);
+
     const closeMenu = useCallback(() => { setAnchor(null); setTarget(null); }, []);
 
     const runAction = useCallback((action) => {
@@ -405,7 +412,7 @@ export default function PagesList({ tree = [], selectedId = null }) {
                 </Tooltip>
             </Stack>
 
-            <TableContainer sx={{ maxHeight: 'calc(100vh - 220px)' }}>
+            <TableContainer sx={{ maxHeight: 'calc(50vh - 80px)' }}>
                 <Table size="small" stickyHeader>
                     <TableHead>
                         <TableRow sx={{ '& th': { fontWeight: 600, fontSize: '.75rem', whiteSpace: 'nowrap' } }}>
