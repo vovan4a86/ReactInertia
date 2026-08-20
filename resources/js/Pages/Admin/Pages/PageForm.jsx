@@ -6,7 +6,7 @@ import {
     Switch, Tab, Tabs, TextField, Tooltip, Typography,
 } from '@mui/material';
 import {
-    Add as AddIcon, Close as CloseIcon, CloudUpload as CloudUploadIcon,
+    Close as CloseIcon, CloudUpload as CloudUploadIcon,
     Delete as DeleteIcon, OpenInNew as OpenInNewIcon, Save as SaveIcon,
     SwapHoriz as SwapHorizIcon, ZoomIn as ZoomInIcon,
 } from '@mui/icons-material';
@@ -201,7 +201,7 @@ export default function PageForm({page, parents = [], mode}) {
 
     /* ── Хелперы полей ── */
     const field = useCallback((key, label, extra = {}) => (
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
             <TextField
                 fullWidth
                 size="small"
@@ -473,16 +473,24 @@ export default function PageForm({page, parents = [], mode}) {
                     </Divider>
                     <Grid container spacing={2} direction="column">
                         {field('title', 'Meta Title', {
-                            helperText: errors.title ?? `${(data.title || '').length} / 60 символов`,
+                            helperText: errors.title ?? `${(data.title || '').length} / 256 символов`,
                         })}
-                        {field('keywords', 'Meta Keywords')}
+                        {field('keywords', 'Meta Keywords', {
+                            helperText: errors.keywords ?? `${(data.keywords || '').length} / 256 символов`,
+                        })}
                         {field('description', 'Meta Description', {
                             multiline: true,
                             minRows: 2,
-                            helperText: errors.description ?? `${(data.description || '').length} / 160 символов`,
+                            helperText: errors.description ?? `${(data.description || '').length} / 515 символов`,
                         })}
-                        {field('og_title', 'OG Title')}
-                        {field('og_description', 'OG Description', {multiline: true, minRows: 2})}
+                        {field('og_title', 'OG Title', {
+                            helperText: errors.og_title ?? `${(data.og_title || '').length} / 256 символов`,
+                        })}
+                        {field('og_description', 'OG Description', {
+                            multiline: true,
+                            minRows: 2,
+                            helperText: errors.og_description ?? `${(data.og_description || '').length} / 256 символов`,
+                        })}
                     </Grid>
                 </Box>
 

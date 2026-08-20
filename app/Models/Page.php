@@ -262,6 +262,9 @@ class Page extends Model
                     'url'         => $page->url,
                     'order'       => (int) $page->order,
                     'published'   => (bool) $page->published,
+                    'on_header_menu'   => (bool) $page->on_header_menu,
+                    'on_footer_menu'   => (bool) $page->on_footer_menu,
+                    'on_mobile_menu'   => (bool) $page->on_mobile_menu,
                     'image_thumb' => $page->getSingleThumb(),   // ← аватарка для PagesList
                     'children'    => $children === [] ? null : $children,
                 ];
